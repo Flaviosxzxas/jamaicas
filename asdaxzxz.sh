@@ -1,10 +1,9 @@
 #!/bin/bash
 #######################################################
-#update 24/06/2021  ËœGordon.
-#cloudflare
-email_cloud="abdelfatah2105@uorak.com"
-token_key="17dd751d22596a99926f06436f0d28194db44"
-zone_id=$4
+ServerName=$1
+CloudflareAPI=$2
+CloudflareEmail=$3
+
 #######################################################
 
 REVERSO=$1
@@ -164,52 +163,54 @@ else
   #  sudo /usr/bin/php config_mail_power.php del $ServerName
   #  sudo /usr/bin/php config_mail_power.php add_record $ServerName $IP $DKIM
     echo -e "----------------------------------------------------------------------"
-    echo -e "Registrando no cloudflare.."
-    sleep 1
-    echo "$ServerName" > /etc/hostname
-    create_dns_a=$(curl -X POST "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records" \
-         -H "X-Auth-Email: $email_cloud" \
-         -H "X-Auth-Key: $token_key" \
-         -H "Content-Type: application/json" \
-         --data '{"type":"A","name":"'$ServerName'","content":"'$IP'","ttl":1,"proxied":false}')
+   echo "==================================================== CLOUDFLARE ===================================================="
 
-    echo $create_dns_a;
-    echo "[+] Registro do rdns adicionado!"
+DKIMCode=$(/etc/mail/dkim.key)
 
-    create_dns_spf=$(curl -X POST "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records" \
-         -H "X-Auth-Email: $email_cloud" \
-         -H "X-Auth-Key: $token_key" \
-         -H "Content-Type: application/json" \
-         --data '{"type":"TXT","name":"'$ServerName'","content":"v=spf1 a mx -all","ttl":1,"proxied":false}')
+sleep 5
 
-    echo "[+] SPF adicionado!"
-    sleep 5;
-    create_dns_mx=$(curl -X POST "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records" \
-         -H "X-Auth-Email: $email_cloud" \
-         -H "X-Auth-Key: $token_key" \
-         -H "Content-Type: application/json" \
-         --data '{"type":"MX","name":"'$ServerName'","content":"'$ServerName'","ttl":1,"priority":0,"proxied":false}')
+echo "  -- Obtendo Zona"
+CloudflareZoneID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$Domain&status=active" \
+  -H "X-Auth-Email: $CloudflareEmail" \
+  -H "X-Auth-Key: $CloudflareAPI" \
+  -H "Content-Type: application/json" | jq -r '{"result"}[] | .[0] | .id')
+  
+  echo "  -- Cadastrando A"
+curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+     -H "X-Auth-Email: $CloudflareEmail" \
+     -H "X-Auth-Key: $CloudflareAPI" \
+     -H "Content-Type: application/json" \
+     --data '{ "type": "A", "name": "'$DKIMSelector'", "content": "'$ServerIP'", "ttl": 60, "proxied": false }'
 
-    echo $create_dns_mx;
-    echo "[+] MX Adicionado"
-    sleep 5;
+echo "  -- Cadastrando SPF"
+curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+     -H "X-Auth-Email: $CloudflareEmail" \
+     -H "X-Auth-Key: $CloudflareAPI" \
+     -H "Content-Type: application/json" \
+     --data '{ "type": "TXT", "name": "'$ServerName'", "content": "v=spf1 a:'$ServerName' ~all", "ttl": 60, "proxied": false }'
 
-    create_dns_dmarc=$(curl -X POST "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records" \
-         -H "X-Auth-Email: $email_cloud" \
-         -H "X-Auth-Key: $token_key" \
-         -H "Content-Type: application/json" \
-         --data '{"type":"TXT","name":"_dmarc.'$ServerName'","content":"v=DMARC1; p=none; rua=mailto:abuse@'$dominio'","ttl":1,"proxied":false}')
+echo "  -- Cadastrando DMARK"
+curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+     -H "X-Auth-Email: $CloudflareEmail" \
+     -H "X-Auth-Key: $CloudflareAPI" \
+     -H "Content-Type: application/json" \
+     --data '{ "type": "TXT", "name": "_dmarc.'$ServerName'", "content": "v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmark@'$ServerName'; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r", "ttl": 60, "proxied": false }'
 
-    echo $create_dns_dmarc;
-    echo "[+] DMARC Adicionado"
+echo "  -- Cadastrando DKIM"
+curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+     -H "X-Auth-Email: $CloudflareEmail" \
+     -H "X-Auth-Key: $CloudflareAPI" \
+     -H "Content-Type: application/json" \
+     --data '{ "type": "TXT", "name": "'$DKIMSelector'._domainkey.'$ServerName'", "content": "v=DKIM1; h=sha256; k=rsa; p='$DKIMCode'", "ttl": 60, "proxied": false }'
 
-    create_dns_dkim=$(curl -X POST "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records" \
-         -H "X-Auth-Email: $email_cloud" \
-         -H "X-Auth-Key: $token_key" \
-         -H "Content-Type: application/json" \
-         --data '{"type":"TXT","name":"mail._domainkey.'$ServerName'","content":"v=DKIM1; k=rsa; p='$DKIM'","ttl":1,"proxied":false}')
+echo "  -- Cadastrando MX"
+curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+     -H "X-Auth-Email: $CloudflareEmail" \
+     -H "X-Auth-Key: $CloudflareAPI" \
+     -H "Content-Type: application/json" \
+     --data '{ "type": "MX", "name": "'$ServerName'", "content": "'$ServerName'", "ttl": 60, "priority": 10, "proxied": false }'
 
-    echo $create_dns_dkim;
+echo "==================================================== CLOUDFLARE ===================================================="
 
     echo -e "DKIM CRIADO COM SUCESSO"
 
