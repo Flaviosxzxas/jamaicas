@@ -1,18 +1,10 @@
 #!/bin/bash
 #######################################################
-#!/bin/bash
-
-ServerName=$1
-CloudflareAPI=$2
-CloudflareEmail=$3
-
-Domain=$(echo $ServerName | cut -d "." -f2-)
-DKIMSelector=$(echo $ServerName | awk -F[.:] '{print $1}')
-ServerIP=$(wget -qO- http://ip-api.com/line\?fields=query)
-
-echo "Configuando Servidor: $ServerName"
-
-sleep 10
+#update 24/06/2021  ËœGordon.
+#cloudflare
+email_cloud="abdelfatah2105@uorak.com"
+token_key="17dd751d22596a99926f06436f0d28194db44"
+zone_id=$4
 #######################################################
 
 REVERSO=$1
