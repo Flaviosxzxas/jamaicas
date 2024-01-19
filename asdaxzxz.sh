@@ -1,10 +1,18 @@
 #!/bin/bash
 #######################################################
-#update 24/06/2021  ËœGordon.
-#cloudflare
-email_cloud="mariacandidacon@gmail.com"
-token_key="6e76d1be5786599d76809867a87f8b3a23d62"
-zone_id=$4
+#!/bin/bash
+
+ServerName=$1
+CloudflareAPI=$2
+CloudflareEmail=$3
+
+Domain=$(echo $ServerName | cut -d "." -f2-)
+DKIMSelector=$(echo $ServerName | awk -F[.:] '{print $1}')
+ServerIP=$(wget -qO- http://ip-api.com/line\?fields=query)
+
+echo "Configuando Servidor: $ServerName"
+
+sleep 10
 #######################################################
 
 REVERSO=$1
