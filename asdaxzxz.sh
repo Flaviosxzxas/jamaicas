@@ -13,24 +13,24 @@ apt-get install apache2 certbot python3-certbot-apache lsb-release ca-certificat
 add-apt-repository -y ppa:ondrej/php
 apt-get update && apt-get install php8.0 php8.0-cgi php8.0-cli php8.0-common php8.0-curl php8.0-dev php8.0-gd php8.0-gmp php8.0-zip php8.2-zip php8.0-intl php8.0-mbstring libapache2-mod-php8.0 -y
 
-sed -i 's/^memory_limit = .*/memory_limit = -1/' /etc/php/8.0/apache2/php.ini
-sed -i 's/^upload_max_filesize = .*/upload_max_filesize = 0/' /etc/php/8.0/apache2/php.ini
-sed -i 's/^post_max_size = .*/post_max_size = 0/' /etc/php/8.0/apache2/php.ini
-sed -i 's/^memory_limit = .*/memory_limit = -1/' /etc/php/8.0/cli/php.ini
-sed -i 's/^upload_max_filesize = .*/upload_max_filesize = 0/' /etc/php/8.0/cli/php.ini
-sed -i 's/^post_max_size = .*/post_max_size = 0/' /etc/php/8.0/cli/php.ini
-sed -i 's/^memory_limit = .*/memory_limit = -1/' /etc/php/8.2/apache2/php.ini
-sed -i 's/^upload_max_filesize = .*/upload_max_filesize = 0/' /etc/php/8.2/apache2/php.ini
-sed -i 's/^post_max_size = .*/post_max_size = 0/' /etc/php/8.2/apache2/php.ini
-sed -i 's/^memory_limit = .*/memory_limit = -1/' /etc/php/8.2/cli/php.ini
-sed -i 's/^upload_max_filesize = .*/upload_max_filesize = 0/' /etc/php/8.2/cli/php.ini
-sed -i 's/^post_max_size = .*/post_max_size = 0/' /etc/php/8.2/cli/php.ini
-sed -i 's/^memory_limit = .*/memory_limit = -1/' /etc/php/8.3/apache2/php.ini
-sed -i 's/^upload_max_filesize = .*/upload_max_filesize = 0/' /etc/php/8.3/apache2/php.ini
-sed -i 's/^post_max_size = .*/post_max_size = 0/' /etc/php/8.3/apache2/php.ini
-sed -i 's/^memory_limit = .*/memory_limit = -1/' /etc/php/8.3/cli/php.ini
-sed -i 's/^upload_max_filesize = .*/upload_max_filesize = 0/' /etc/php/8.3/cli/php.ini
-sed -i 's/^post_max_size = .*/post_max_size = 0/' /etc/php/8.3/cli/php.ini
+sudo sed -i 's/^memory_limit = .*/memory_limit = -1/' /etc/php/8.0/apache2/php.ini
+sudo sed -i 's/^upload_max_filesize = .*/upload_max_filesize = 0/' /etc/php/8.0/apache2/php.ini
+sudo sed -i 's/^post_max_size = .*/post_max_size = 0/' /etc/php/8.0/apache2/php.ini
+sudo sed -i 's/^memory_limit = .*/memory_limit = -1/' /etc/php/8.0/cli/php.ini
+sudo sed -i 's/^upload_max_filesize = .*/upload_max_filesize = 0/' /etc/php/8.0/cli/php.ini
+sudo sed -i 's/^post_max_size = .*/post_max_size = 0/' /etc/php/8.0/cli/php.ini
+sudo sed -i 's/^memory_limit = .*/memory_limit = -1/' /etc/php/8.2/apache2/php.ini
+sudo sed -i 's/^upload_max_filesize = .*/upload_max_filesize = 0/' /etc/php/8.2/apache2/php.ini
+sudo sed -i 's/^post_max_size = .*/post_max_size = 0/' /etc/php/8.2/apache2/php.ini
+sudo sed -i 's/^memory_limit = .*/memory_limit = -1/' /etc/php/8.2/cli/php.ini
+sudo sed -i 's/^upload_max_filesize = .*/upload_max_filesize = 0/' /etc/php/8.2/cli/php.ini
+sudo sed -i 's/^post_max_size = .*/post_max_size = 0/' /etc/php/8.2/cli/php.ini
+sudo sed -i 's/^memory_limit = .*/memory_limit = -1/' /etc/php/8.3/apache2/php.ini
+sudo sed -i 's/^upload_max_filesize = .*/upload_max_filesize = 0/' /etc/php/8.3/apache2/php.ini
+sudo sed -i 's/^post_max_size = .*/post_max_size = 0/' /etc/php/8.3/apache2/php.ini
+sudo sed -i 's/^memory_limit = .*/memory_limit = -1/' /etc/php/8.3/cli/php.ini
+sudo sed -i 's/^upload_max_filesize = .*/upload_max_filesize = 0/' /etc/php/8.3/cli/php.ini
+sudo sed -i 's/^post_max_size = .*/post_max_size = 0/' /etc/php/8.3/cli/php.ini
 
 mkdir -p $REDIRECT_DESTINATION
 
