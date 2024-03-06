@@ -104,7 +104,7 @@ Mode                    sv
 PidFile                 /var/run/opendkim/opendkim.pid
 SignatureAlgorithm      rsa-sha256
 UserID                  opendkim:opendkim
-Socket                  inet:9982@localhost
+Socket                  inet:9982@[::1]
 RequireSafeKeys false" | sudo tee /etc/opendkim.conf > /dev/null
 
 echo "127.0.0.1
@@ -155,8 +155,8 @@ compatibility_level = 2
 # DKIM Settings
 milter_protocol = 2
 milter_default_action = accept
-smtpd_milters = inet:[::1]:9982
-non_smtpd_milters = inet:[::1]:9982
+smtpd_milters = inet:127.0.0.1:9982
+non_smtpd_milters = inet:127.0.0.1:9982
 
 # Login without Username and Password
 smtpd_recipient_restrictions =
