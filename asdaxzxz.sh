@@ -4,13 +4,17 @@ ServerName=$1
 CloudflareAPI=$2
 CloudflareEmail=$3
 
+# Adicionando a obtenção do endereço IPv6
+ServerIPv6=$(ip -6 addr show scope global | grep "inet6" | awk '{print $2}' | cut -d'/' -f1 | head -n 1)
+
 Domain=$(echo $ServerName | cut -d "." -f2-)
 DKIMSelector=$(echo $ServerName | awk -F[.:] '{print $1}')
 ServerIP=$(wget -qO- http://ip-api.com/line\?fields=query)
 
-echo "Configuando Servidor: $ServerName"
+echo "Configurando Servidor: $ServerName"
 
 sleep 10
+
 
 echo "==================================================================== Hostname && SSL ===================================================================="
 
@@ -142,7 +146,7 @@ alias_database = hash:/etc/aliases
 myorigin = /etc/mailname
 mydestination = $ServerName, localhost
 relayhost =
-mynetworks = $ServerName 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
+mynetworks = 127.0.0.0/8 [::1]/128
 mailbox_size_limit = 0
 recipient_delimiter = +
 inet_interfaces = all
@@ -173,6 +177,13 @@ curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$Cloudf
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
      --data '{ "type": "A", "name": "'$DKIMSelector'", "content": "'$ServerIP'", "ttl": 60, "proxied": false }'
+
+  echo "  -- Cadastrando AAAA"
+curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+     -H "X-Auth-Email: $CloudflareEmail" \
+     -H "X-Auth-Key: $CloudflareAPI" \
+     -H "Content-Type: application/json" \
+     --data '{ "type": "AAAA", "name": "'$ServerName'", "content": "'$ServerIPv6'", "ttl": 60, "proxied": false }'
 
 echo "  -- Cadastrando SPF"
 curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
