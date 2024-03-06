@@ -1,4 +1,4 @@
-!/bin/bash
+#!/bin/bash
 
 ServerName=$1
 CloudflareAPI=$2
@@ -16,6 +16,8 @@ DKIMSelector=$(echo $ServerName | awk -F[.:] '{print $1}')
 echo "Configurando Servidor: $ServerName"
 
 sleep 4
+
+echo "==================================================== CLOUDFLARE 1 ===================================================="
 
 echo "  -- Obtendo Zona"
 CloudflareZoneID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$Domain&status=active" \
@@ -38,6 +40,8 @@ curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$Cloudf
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
      --data '{ "type": "AAAA", "name": "'$ServerName'", "content": "'$ServerIPv6'", "ttl": 60, "proxied": false }'
+	 
+echo "==================================================== CLOUDFLARE 1 ===================================================="
 
 sleep 10
 
