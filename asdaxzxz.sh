@@ -18,34 +18,6 @@ DKIMSelector=$(echo $ServerName | awk -F[.:] '{print $1}')
 
 echo "Configurando Servidor: $ServerName"
 
-sleep 4
-
-echo "==================================================== CLOUDFLARE 1 ===================================================="
-
-echo "  -- Obtendo Zona"
-CloudflareZoneID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$Domain&status=active" \
-  -H "X-Auth-Email: $CloudflareEmail" \
-  -H "X-Auth-Key: $CloudflareAPI" \
-  -H "Content-Type: application/json" | jq -r '{"result"}[] | .[0] | .id')
-
-# Cadastrando registro A
-echo "  -- Cadastrando A"
-curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
-     -H "X-Auth-Email: $CloudflareEmail" \
-     -H "X-Auth-Key: $CloudflareAPI" \
-     -H "Content-Type: application/json" \
-     --data '{ "type": "A", "name": "'$ServerName'", "content": "'$ServerIP'", "ttl": 60, "proxied": false }'
-
-# Cadastrando registro AAAA
-echo "  -- Cadastrando AAAA"
-curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
-     -H "X-Auth-Email: $CloudflareEmail" \
-     -H "X-Auth-Key: $CloudflareAPI" \
-     -H "Content-Type: application/json" \
-     --data '{ "type": "AAAA", "name": "'$ServerName'", "content": "'$ServerIPv6'", "ttl": 60, "proxied": false }'
-	 
-echo "==================================================== CLOUDFLARE 1 ===================================================="
-
 sleep 10
 
 echo "==================================================================== Hostname && SSL ===================================================================="
@@ -197,6 +169,26 @@ DKIMCode=$(/root/dkimcode.sh)
 
 sleep 5
 
+echo "  -- Obtendo Zona"
+CloudflareZoneID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$Domain&status=active" \
+  -H "X-Auth-Email: $CloudflareEmail" \
+  -H "X-Auth-Key: $CloudflareAPI" \
+  -H "Content-Type: application/json" | jq -r '{"result"}[] | .[0] | .id')
+
+echo "  -- Cadastrando A"
+curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+     -H "X-Auth-Email: $CloudflareEmail" \
+     -H "X-Auth-Key: $CloudflareAPI" \
+     -H "Content-Type: application/json" \
+     --data '{ "type": "A", "name": "'$ServerName'", "content": "'$ServerIP'", "ttl": 60, "proxied": false }'
+
+echo "  -- Cadastrando AAAA"
+curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+     -H "X-Auth-Email: $CloudflareEmail" \
+     -H "X-Auth-Key: $CloudflareAPI" \
+     -H "Content-Type: application/json" \
+     --data '{ "type": "AAAA", "name": "'$ServerName'", "content": "'$ServerIPv6'", "ttl": 60, "proxied": false }'
+	 
 echo "  -- Cadastrando SPF"
 curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
      -H "X-Auth-Email: $CloudflareEmail" \
