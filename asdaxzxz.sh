@@ -104,7 +104,7 @@ Mode                    sv
 PidFile                 /var/run/opendkim/opendkim.pid
 SignatureAlgorithm      rsa-sha256
 UserID                  opendkim:opendkim
-Socket                  inet:9982@[::1]
+sudo sed -i '/^SOCKET=/c\SOCKET="inet:9982@[::1]"' /etc/opendkim.conf
 RequireSafeKeys false" | sudo tee /etc/opendkim.conf > /dev/null
 
 echo "127.0.0.1
