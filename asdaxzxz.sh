@@ -51,7 +51,7 @@ sudo mkdir -p /etc/opendkim && sudo mkdir -p /etc/opendkim/keys
 sudo chmod -R 777 /etc/opendkim/ && sudo chown -R opendkim:opendkim /etc/opendkim/
 
 echo "RUNDIR=/run/opendkim
-SOCKET="inet:9982@[::1]"
+SOCKET="\inet:9982@[::1]\"
 USER=opendkim
 GROUP=opendkim
 PIDFILE=\$RUNDIR/\$NAME.pid
