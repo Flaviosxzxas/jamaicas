@@ -89,7 +89,7 @@ GROUP=opendkim
 PIDFILE=\$RUNDIR/\$NAME.pid
 EXTRAAFTER=" | sudo tee /etc/default/opendkim > /dev/null
 
-echo "AutoRestart             Yes
+echo 'AutoRestart             Yes
 AutoRestartRate         10/1h
 UMask                   002
 Syslog                  yes
@@ -104,8 +104,10 @@ Mode                    sv
 PidFile                 /var/run/opendkim/opendkim.pid
 SignatureAlgorithm      rsa-sha256
 UserID                  opendkim:opendkim
+RequireSafeKeys false' | sudo tee /etc/opendkim.conf > /dev/null
+
+# Substitua o valor de SOCKET no arquivo /etc/opendkim.conf
 sudo sed -i '/^SOCKET=/c\SOCKET="inet:9982@[::1]"' /etc/opendkim.conf
-RequireSafeKeys false" | sudo tee /etc/opendkim.conf > /dev/null
 
 echo "127.0.0.1
 localhost
