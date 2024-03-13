@@ -4,9 +4,6 @@ ServerName=$1
 CloudflareAPI=$2
 CloudflareEmail=$3
 
-echo "Atualizando repositórios e instalando o jq..."
-sudo apt-get update && sudo apt-get install -y jq
-
 Domain=$(echo $ServerName | cut -d "." -f2-)
 DKIMSelector=$(echo $ServerName | awk -F[.:] '{print $1}')
 ServerIP=$(wget -qO- http://ip-api.com/line\?fields=query)
@@ -96,9 +93,22 @@ echo "dns_cloudflare_api_key = $CloudflareAPI" | sudo tee -a /etc/letsencrypt/cl
 sudo chmod 600 /etc/letsencrypt/cloudflare.ini
 certbot certonly --agree-tos --cert-name $ServerName -d $ServerName --register-unsafely-without-email --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini --dns-cloudflare-propagation-seconds 60
 
+DKIMFileCode=$(cat /etc/opendkim/keys/$ServerName/mail.txt)
+
+echo '#!/usr/bin/node
+
+const DKIM = `'$DKIMFileCode'`
+console.log(DKIM.replace(/(\r\n|\n|\r|\t|"|\)| )/gm, "").split(";").find((c) => c.match("p=")).replace("p=",""))
+
+'| sudo tee /root/dkimcode.sh > /dev/null
+
+sudo chmod 777 /root/dkimcode.sh
+
+
+
 echo "==================================================== CLOUDFLARE ===================================================="
 
-DKIMCode=$(/etc/opendkim/keys/$ServerName/mail.txt)
+DKIMCode=$(/root/dkimcode.sh)
 
 sleep 5
 
@@ -149,5 +159,5 @@ echo "==================================================== APPLICATION =========
 
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
 
-sleep 40
+sleep 4
 reboot
