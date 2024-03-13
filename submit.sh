@@ -69,8 +69,8 @@ sudo echo "localhost" >> /etc/opendkim/TrustedHosts
 sudo echo "192.168.0.1/24" >> /etc/opendkim/TrustedHosts
 sudo echo "" >> /etc/opendkim/TrustedHosts
 sudo echo "*.$ServerName" >> /etc/opendkim/TrustedHosts
-sudo echo "mail._domainkey.$ServerName $ServerName:mail:/etc/opendkim/keys/$ServerName/mail.private" > /etc/opendkim/KeyTable
-sudo echo "*@$ServerName mail._domainkey.$ServerName" > /etc/opendkim/SigningTable
+sudo echo "$ServerName._domainkey.$ServerName $ServerName:mail:/etc/opendkim/keys/$ServerName/mail.private" > /etc/opendkim/KeyTable
+sudo echo "*@$ServerName $ServerName._domainkey.$ServerName" > /etc/opendkim/SigningTable
 sudo mkdir /etc/opendkim/keys/$ServerName
 cd /etc/opendkim/keys/$ServerName; sudo opendkim-genkey -s mail -d $ServerName
 cd /etc/opendkim/keys/$ServerName; sudo chown opendkim:opendkim mail.private
