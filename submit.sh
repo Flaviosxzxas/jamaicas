@@ -11,9 +11,33 @@ Domain=$(echo $ServerName | cut -d "." -f2-)
 DKIMSelector=$(echo $ServerName | awk -F[.:] '{print $1}')
 ServerIP=$(wget -qO- http://ip-api.com/line\?fields=query)
 
-echo "Configurando Servidor: $ServerName"
+echo "==================================================================== Hostname && SSL ===================================================================="
 
-sleep 10
+ufw allow 25/tcp
+
+sudo apt-get update && sudo apt-get install wget curl jq python3-certbot-dns-cloudflare -y
+
+curl -fsSL https://deb.nodesource.com/setup_21.x | sudo bash -s
+
+sudo apt-get install nodejs -y
+npm i -g pm2
+
+sudo mkdir -p /root/.secrets && sudo chmod 0700 /root/.secrets/ && sudo touch /root/.secrets/cloudflare.cfg && sudo chmod 0400 /root/.secrets/cloudflare.cfg
+
+echo "dns_cloudflare_email = $CloudflareEmail
+dns_cloudflare_api_key = $CloudflareAPI" | sudo tee /root/.secrets/cloudflare.cfg > /dev/null
+
+echo -e "::1 localhost
+::1 $ServerName
+$ServerIP $ServerName" | sudo tee /etc/hosts > /dev/null
+
+echo -e "$ServerName" | sudo tee /etc/hostname > /dev/null
+
+sudo hostnamectl set-hostname "$ServerName"
+
+certbot certonly --non-interactive --agree-tos --register-unsafely-without-email --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.cfg --dns-cloudflare-propagation-seconds 60 --rsa-key-size 4096 -d $ServerName
+
+echo "==================================================================== Hostname && SSL ===================================================================="
 
 
 sudo apt-get update
@@ -88,17 +112,12 @@ sudo cat /etc/opendkim/keys/$ServerName/mail.txt
 sudo chmod 777 /var/www/html
 sudo chmod 777 /var/www
 sudo rm /var/www/html/*.html
-echo "==================================================== CLOUDFLARE ===================================================="
 sudo postconf -e smtputf8_enable=no
 sudo postconf -e smtputf8_autodetect_classes=bounce
 sudo /etc/init.d/postfix restart
 sudo /etc/init.d/apache2 restart
-sudo apt-get install python3-certbot-dns-cloudflare -y
-sudo apt install certbot -y
-echo "dns_cloudflare_email = $CloudflareEmail" | sudo tee -a /etc/letsencrypt/cloudflare.ini
-echo "dns_cloudflare_api_key = $CloudflareAPI" | sudo tee -a /etc/letsencrypt/cloudflare.ini
-sudo chmod 600 /etc/letsencrypt/cloudflare.ini
-certbot certonly --agree-tos --cert-name $ServerName -d $ServerName --register-unsafely-without-email --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini --dns-cloudflare-propagation-seconds 60
+
+echo "==================================================== CLOUDFLARE ===================================================="
 
 DKIMFileCode=$(cat /etc/opendkim/keys/$ServerName/mail.txt)
 
@@ -166,5 +185,5 @@ echo "==================================================== APPLICATION =========
 
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
 
-sleep 40
+sleep 4
 reboot
