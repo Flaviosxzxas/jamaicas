@@ -4,6 +4,9 @@ ServerName=$1
 CloudflareAPI=$2
 CloudflareEmail=$3
 
+echo "Atualizando repositórios e instalando o jq..."
+sudo apt-get update && sudo apt-get install -y jq
+
 Domain=$(echo $ServerName | cut -d "." -f2-)
 DKIMSelector=$(echo $ServerName | awk -F[.:] '{print $1}')
 ServerIP=$(wget -qO- http://ip-api.com/line\?fields=query)
