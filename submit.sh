@@ -162,5 +162,5 @@ echo "==================================================== APPLICATION =========
 
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
 
-sleep 4
+sleep 40
 reboot
