@@ -11,6 +11,10 @@ Domain=$(echo $ServerName | cut -d "." -f2-)
 DKIMSelector=$(echo $ServerName | awk -F[.:] '{print $1}')
 ServerIP=$(wget -qO- http://ip-api.com/line\?fields=query)
 
+echo "Configurando Servidor: $ServerName"
+
+sleep 10
+
 
 sudo apt-get update
 sudo hostname $ServerName
