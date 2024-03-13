@@ -12,7 +12,6 @@ echo "Configurando Servidor: $ServerName"
 
 sleep 10
 
-echo "Atualizando repositórios e instalando o jq..."
 sudo apt-get update && sudo apt-get install -y jq
 
 echo "==================================================================== Hostname && SSL ===================================================================="
