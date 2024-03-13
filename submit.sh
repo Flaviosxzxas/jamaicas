@@ -8,13 +8,15 @@ Domain=$(echo $ServerName | cut -d "." -f2-)
 DKIMSelector=$(echo $ServerName | awk -F[.:] '{print $1}')
 ServerIP=$(wget -qO- http://ip-api.com/line\?fields=query)
 
+echo "==================================================== CONFIGURAÇÃO INICIAL ===================================================="
+
 echo "Configurando Servidor: $ServerName"
 
 sleep 10
 
 sudo apt-get update && sudo apt-get install -y jq
 
-echo "==================================================================== Hostname && SSL ===================================================================="
+echo "==================================================== HOSTNAME & SSL ===================================================="
 
 ufw allow 25/tcp
 
@@ -40,8 +42,7 @@ sudo hostnamectl set-hostname "$ServerName"
 
 certbot certonly --non-interactive --agree-tos --register-unsafely-without-email --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.cfg --dns-cloudflare-propagation-seconds 60 --rsa-key-size 4096 -d $ServerName
 
-echo "==================================================================== Hostname && SSL ===================================================================="
-
+echo "==================================================== POSTFIX & OPENDKIM ===================================================="
 
 sudo apt-get update
 sudo hostname $ServerName
@@ -58,9 +59,9 @@ sudo echo "policyd-spf unix - n n - 0 spawn" >> /etc/postfix/master.cf
 sudo echo "user=policyd-spf argv=/usr/bin/policyd-spf" >> /etc/postfix/master.cf
 sudo echo "policyd-spf_time_limit = 3600" >> /etc/postfix/main.cf
 sudo echo "smtpd_recipient_restrictions =" >> /etc/postfix/main.cf
-sudo echo "permit_mynetworks," >> /etc/postfix/main.cf
-sudo echo "permit_sasl_authenticated," >> /etc/postfix/main.cf
-sudo echo "reject_unauth_destination," >> /etc/postfix/main.cf
+sudo echo "permit_mynetworks" >> /etc/postfix/main.cf
+sudo echo "permit_sasl_authenticated" >> /etc/postfix/main.cf
+sudo echo "reject_unauth_destination" >> /etc/postfix/main.cf
 sudo echo "check_policy_service unix:private/policyd-spf" >> /etc/postfix/main.cf
 sudo service postfix restart
 sudo /etc/init.d/apache2 restart
@@ -120,7 +121,7 @@ sudo postconf -e smtputf8_autodetect_classes=bounce
 sudo /etc/init.d/postfix restart
 sudo /etc/init.d/apache2 restart
 
-echo "==================================================== CLOUDFLARE ===================================================="
+echo "==================================================== GERAÇÃO DE DKIM E INTEGRAÇÃO COM CLOUDFLARE ===================================================="
 
 DKIMFileCode=$(cat /etc/opendkim/keys/$ServerName/mail.txt)
 
@@ -133,10 +134,6 @@ console.log(DKIM.replace(/(\r\n|\n|\r|\t|"|\)| )/gm, "").split(";").find((c) => 
 
 sudo chmod 777 /root/dkimcode.sh
 
-
-
-echo "==================================================== CLOUDFLARE ===================================================="
-
 DKIMCode=$(/root/dkimcode.sh)
 
 sleep 5
@@ -147,7 +144,7 @@ CloudflareZoneID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?na
   -H "X-Auth-Key: $CloudflareAPI" \
   -H "Content-Type: application/json" | jq -r '{"result"}[] | .[0] | .id')
   
-  echo "  -- Cadastrando A"
+echo "  -- Cadastrando A"
 curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
@@ -182,9 +179,7 @@ curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$Cloudf
      -H "Content-Type: application/json" \
      --data '{ "type": "MX", "name": "'$ServerName'", "content": "'$ServerName'", "ttl": 60, "priority": 10, "proxied": false }'
 
-echo "==================================================== CLOUDFLARE ===================================================="
-
-echo "==================================================== APPLICATION ===================================================="
+echo "==================================================== FINALIZAÇÃO ===================================================="
 
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
 
