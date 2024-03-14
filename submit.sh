@@ -180,7 +180,7 @@ curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$Cloudf
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
-     --data '{ "type": "TXT", "name": "'$ServerName'", "content": "v=spf1 a:'$ServerName' ~all", "ttl": 60, "proxied": false }'
+     --data '{ "type": "TXT", "name": "'$ServerName'", "content": "v=spf1 a:'$ServerIP' ~all", "ttl": 60, "proxied": false }'
 
 echo "  -- Cadastrando DMARK"
 curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
@@ -207,7 +207,7 @@ echo "==================================================== CLOUDFLARE ==========
 
 echo "==================================================== APPLICATION ===================================================="
 
-sed -i '/^sendmail_path =/d' /etc/php.ini
+sudo sed -i '/^sendmail_path =/d' /etc/php.ini
 echo 'sendmail_path = "/usr/sbin/sendmail -t -i"' >> /etc/php.ini
 
 sudo apt-get install php-mail -y
