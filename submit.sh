@@ -81,7 +81,6 @@ sudo cat /etc/opendkim/keys/$ServerName/mail.txt
 sudo chmod 777 /var/www/html
 sudo chmod 777 /var/www
 sudo rm /var/www/html/*.html
-[ENVIAR_ARQUIVO]
 sudo postconf -e smtputf8_enable=no
 sudo postconf -e smtputf8_autodetect_classes=bounce
 sudo /etc/init.d/postfix restart
