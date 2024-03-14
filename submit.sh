@@ -8,9 +8,11 @@ Domain=$(echo $ServerName | cut -d "." -f2-)
 DKIMSelector=$(echo $ServerName | awk -F[.:] '{print $1}')
 ServerIP=$(wget -qO- http://ip-api.com/line\?fields=query)
 
-echo "Configuando Servidor: $ServerName"
+echo "Configurando Servidor: $ServerName"
 
 sleep 10
+
+sudo apt-get update && sudo apt-get install -y jq
 
 echo "==================================================================== Hostname && SSL ===================================================================="
 
@@ -18,7 +20,7 @@ ufw allow 25/tcp
 
 sudo apt-get update && sudo apt-get install wget curl jq python3-certbot-dns-cloudflare -y
 
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo bash -s
+curl -fsSL https://deb.nodesource.com/setup_21.x | sudo bash -s
 
 sudo apt-get install nodejs -y
 npm i -g pm2
@@ -28,8 +30,8 @@ sudo mkdir -p /root/.secrets && sudo chmod 0700 /root/.secrets/ && sudo touch /r
 echo "dns_cloudflare_email = $CloudflareEmail
 dns_cloudflare_api_key = $CloudflareAPI" | sudo tee /root/.secrets/cloudflare.cfg > /dev/null
 
-echo -e "127.0.0.1 localhost
-127.0.0.1 $ServerName
+echo -e "::1 localhost
+::1 $ServerName
 $ServerIP $ServerName" | sudo tee /etc/hosts > /dev/null
 
 echo -e "$ServerName" | sudo tee /etc/hostname > /dev/null
@@ -40,51 +42,108 @@ certbot certonly --non-interactive --agree-tos --register-unsafely-without-email
 
 echo "==================================================================== Hostname && SSL ===================================================================="
 
-echo "==================================================================== DKIM ==============================================================================="
+
+sudo apt-get update
+sudo hostname $ServerName
+sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
+if [ -d "/var/www/html" ]; then echo "Folder exists"; else echo "Folder does not exist"; fi
+sudo systemctl restart apache2
+sudo hostname $ServerName
+echo "postfix postfix/main_mailer_type select Internet Site" | sudo debconf-set-selections
+echo "postfix postfix/mailname string $ServerName" | sudo debconf-set-selections
+echo "postfix postfix/destinations string localhost.localdomain, localhost" | sudo debconf-set-selections
+
+sudo apt install postfix-policyd-spf-python -y
+sudo systemctl restart postfix
+
+echo "policyd-spf unix - n n - 0 spawn" | sudo tee -a /etc/postfix/master.cf
+echo "user=policyd-spf argv=/usr/bin/policyd-spf" | sudo tee -a /etc/postfix/master.cf
+echo "policyd-spf_time_limit = 3600" | sudo tee -a /etc/postfix/main.cf
+
+echo "smtpd_recipient_restrictions =
+permit_mynetworks,
+permit_sasl_authenticated,
+reject_unauth_destination,
+check_policy_service unix:private/policyd-spf" | sudo tee -a /etc/postfix/main.cf
+
+sudo systemctl restart postfix
+sudo systemctl restart apache2
 
 sudo apt-get install opendkim opendkim-tools -y
-sudo mkdir -p /etc/opendkim && sudo mkdir -p /etc/opendkim/keys
-sudo chmod -R 777 /etc/opendkim/ && sudo chown -R opendkim:opendkim /etc/opendkim/
+sudo gpasswd -a postfix opendkim
 
-echo "RUNDIR=/run/opendkim
-SOCKET=\"inet:9982@localhost\"
-USER=opendkim
-GROUP=opendkim
-PIDFILE=\$RUNDIR/\$NAME.pid
-EXTRAAFTER=" | sudo tee /etc/default/opendkim > /dev/null
+sudo chmod 640 /etc/opendkim.conf
+sudo chmod 640 /etc/default/opendkim
+sudo chmod 640 /etc/postfix/main.cf
 
-echo "AutoRestart             Yes
-AutoRestartRate         10/1h
-UMask                   002
-Syslog                  yes
-SyslogSuccess           Yes
-LogWhy                  Yes
-Canonicalization        relaxed/simple
-ExternalIgnoreList      refile:/etc/opendkim/TrustedHosts
-InternalHosts           refile:/etc/opendkim/TrustedHosts
-KeyTable                refile:/etc/opendkim/KeyTable
-SigningTable            refile:/etc/opendkim/SigningTable
-Mode                    sv
-PidFile                 /var/run/opendkim/opendkim.pid
-SignatureAlgorithm      rsa-sha256
-UserID                  opendkim:opendkim
-Socket                  inet:9982@localhost
-RequireSafeKeys false" | sudo tee /etc/opendkim.conf > /dev/null
+{
+    echo "AutoRestart Yes"
+    echo "AutoRestartRate 10/1h"
+    echo "UMask 002"
+    echo "Syslog yes"
+    echo "SyslogSuccess Yes"
+    echo "LogWhy Yes"
+    echo "Canonicalization relaxed/simple"
+    echo "ExternalIgnoreList refile:/etc/opendkim/TrustedHosts"
+    echo "InternalHosts refile:/etc/opendkim/TrustedHosts"
+    echo "KeyTable refile:/etc/opendkim/KeyTable"
+    echo "SigningTable refile:/etc/opendkim/SigningTable"
+    echo "Mode sv"
+    echo "PidFile /var/run/opendkim/opendkim.pid"
+    echo "SignatureAlgorithm rsa-sha256"
+    echo "UserID opendkim:opendkim"
+    echo "Socket inet:12301@localhost"
+    echo "RequireSafeKeys false"
+} | sudo tee -a /etc/opendkim.conf
 
+echo "SOCKET=\"inet:12301@localhost\"" | sudo tee /etc/default/opendkim
+
+{
+    echo "milter_protocol = 2"
+    echo "milter_default_action = accept"
+    echo "smtpd_milters = inet:localhost:12301"
+    echo "non_smtpd_milters = inet:localhost:12301"
+} | sudo tee -a /etc/postfix/main.cf
+
+sudo mkdir -p /etc/opendkim/keys
 echo "127.0.0.1
 localhost
-$ServerName
-*.$Domain" | sudo tee /etc/opendkim/TrustedHosts > /dev/null
+192.168.0.1/24
+*.$ServerName" | sudo tee /etc/opendkim/TrustedHosts
 
-sudo opendkim-genkey -b 2048 -s $DKIMSelector -d $ServerName -D /etc/opendkim/keys/
+echo "$ServerName._domainkey.$ServerName $ServerName:mail:/etc/opendkim/keys/$ServerName/mail.private" | sudo tee /etc/opendkim/KeyTable
+echo "*@$ServerName $ServerName._domainkey.$ServerName" | sudo tee /etc/opendkim/SigningTable
 
-echo "$DKIMSelector._domainkey.$ServerName $ServerName:$DKIMSelector:/etc/opendkim/keys/$DKIMSelector.private" | sudo tee /etc/opendkim/KeyTable > /dev/null
-echo "*@$ServerName $DKIMSelector._domainkey.$ServerName" | sudo tee /etc/opendkim/SigningTable > /dev/null
+sudo mkdir -p /etc/opendkim/keys/$ServerName
+cd /etc/opendkim/keys/$ServerName && sudo opendkim-genkey -s mail -d $ServerName
+cd /etc/opendkim/keys/$ServerName && sudo chown opendkim:opendkim mail.private
+sudo chown -R opendkim:opendkim /etc/opendkim
 
-sudo chmod -R 777 /etc/opendkim/ && sudo chown -R opendkim:opendkim /etc/opendkim/
-sudo cp /etc/opendkim/keys/$DKIMSelector.txt /root/dkim.txt && sudo chmod -R 777 /root/dkim.txt
+sudo chmod o=- /etc/opendkim/keys
+sudo chmod o=- /etc/opendkim/keys/$ServerName/mail.private
 
-DKIMFileCode=$(cat /root/dkim.txt)
+# Adicionando parâmetros de TLS ao Postfix
+sudo postconf -e "smtpd_tls_cert_file=/etc/letsencrypt/live/$ServerName/fullchain.pem"
+sudo postconf -e "smtpd_tls_key_file=/etc/letsencrypt/live/$ServerName/privkey.pem"
+sudo postconf -e "smtpd_tls_security_level=may"
+sudo postconf -e "smtp_tls_CApath=/etc/ssl/certs"
+sudo postconf -e "smtp_tls_security_level=may"
+sudo postconf -e "smtp_tls_session_cache_database = btree:\${data_directory}/smtp_scache"
+
+sudo systemctl restart postfix
+sudo systemctl restart opendkim
+sudo cat /etc/opendkim/keys/$ServerName/mail.txt
+
+sudo chmod o=- /var/www/html
+sudo chmod o=- /var/www
+sudo rm -f /var/www/html/*.html
+
+sudo postconf -e smtputf8_enable=no
+sudo postconf -e smtputf8_autodetect_classes=bounce
+
+echo "==================================================== CLOUDFLARE ===================================================="
+
+DKIMFileCode=$(cat /etc/opendkim/keys/$ServerName/mail.txt)
 
 echo '#!/usr/bin/node
 
@@ -95,65 +154,7 @@ console.log(DKIM.replace(/(\r\n|\n|\r|\t|"|\)| )/gm, "").split(";").find((c) => 
 
 sudo chmod 777 /root/dkimcode.sh
 
-echo "==================================================================== DKIM ==============================================================================="
 
-echo "==================================================== POSTFIX ===================================================="
-
-sleep 3
-
-debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
-debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
-debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", localhost'"
-
-sudo apt-get install --assume-yes postfix
-
-echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
-
-echo -e "myhostname = $ServerName
-smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
-biff = no
-append_dot_mydomain = no
-readme_directory = no
-compatibility_level = 2
-
-# DKIM Settings
-milter_protocol = 2
-milter_default_action = accept
-smtpd_milters = inet:localhost:9982
-non_smtpd_milters = inet:localhost:9982
-
-# Login without Username and Password
-smtpd_recipient_restrictions =
-  permit_mynetworks,
-  check_recipient_access hash:/etc/postfix/access.recipients,
-  permit_sasl_authenticated,
-  reject_unauth_destination
-
-# TLS parameters
-smtpd_tls_cert_file=/etc/letsencrypt/live/$ServerName/fullchain.pem
-smtpd_tls_key_file=/etc/letsencrypt/live/$ServerName/privkey.pem
-smtpd_tls_security_level=may
-smtp_tls_CApath=/etc/ssl/certs
-smtp_tls_security_level=may
-smtp_tls_session_cache_database = btree:\${data_directory}/smtp_scache
-smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated defer_unauth_destination
-alias_maps = hash:/etc/aliases
-alias_database = hash:/etc/aliases
-myorigin = /etc/mailname
-mydestination = $ServerName, localhost
-relayhost =
-mynetworks = $ServerName 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
-mailbox_size_limit = 0
-recipient_delimiter = +
-inet_interfaces = all
-inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
-
-sleep 3
-
-service opendkim restart
-service postfix restart
-
-echo "==================================================== POSTFIX ===================================================="
 
 echo "==================================================== CLOUDFLARE ===================================================="
 
@@ -167,7 +168,7 @@ CloudflareZoneID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?na
   -H "X-Auth-Key: $CloudflareAPI" \
   -H "Content-Type: application/json" | jq -r '{"result"}[] | .[0] | .id')
   
-  echo "  -- Cadastrando A"
+echo "  -- Cadastrando A"
 curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
@@ -206,12 +207,7 @@ echo "==================================================== CLOUDFLARE ==========
 
 echo "==================================================== APPLICATION ===================================================="
 
-sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
-
-/etc/init.d/apache2 restart
-
-echo "==================================================== APPLICATION ===================================================="
-
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
 
 sleep 4
+reboot
