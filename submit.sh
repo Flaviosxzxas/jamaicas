@@ -49,9 +49,13 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-d
 if [ -d "/var/www/html" ]; then echo "Folder exists"; else echo "Folder does not exist"; fi
 sudo systemctl restart apache2
 sudo hostname $ServerName
-echo "postfix postfix/main_mailer_type select Internet Site" | sudo debconf-set-selections
-echo "postfix postfix/mailname string $ServerName" | sudo debconf-set-selections
-echo "postfix postfix/destinations string localhost.localdomain, localhost" | sudo debconf-set-selections
+debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
+debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
+debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", localhost'"
+
+sudo apt-get install --assume-yes postfix
+
+echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
 
 sudo apt install postfix-policyd-spf-python -y
 sudo systemctl restart postfix
@@ -88,17 +92,17 @@ sudo chmod 640 /etc/postfix/main.cf
     echo "PidFile /var/run/opendkim/opendkim.pid"
     echo "SignatureAlgorithm rsa-sha256"
     echo "UserID opendkim:opendkim"
-    echo "Socket inet:12301@localhost"
+    echo "Socket inet:9982@localhost"
     echo "RequireSafeKeys false"
 } | sudo tee -a /etc/opendkim.conf
 
-echo "SOCKET=\"inet:12301@localhost\"" | sudo tee /etc/default/opendkim
+echo "SOCKET=\"inet:9982@localhost\"" | sudo tee /etc/default/opendkim
 
 {
     echo "milter_protocol = 2"
     echo "milter_default_action = accept"
-    echo "smtpd_milters = inet:localhost:12301"
-    echo "non_smtpd_milters = inet:localhost:12301"
+    echo "smtpd_milters = inet:localhost:9982"
+    echo "non_smtpd_milters = inet:localhost:9982"
 } | sudo tee -a /etc/postfix/main.cf
 
 sudo mkdir -p /etc/opendkim/keys
@@ -202,6 +206,10 @@ curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$Cloudf
 echo "==================================================== CLOUDFLARE ===================================================="
 
 echo "==================================================== APPLICATION ===================================================="
+
+sed -i '/^sendmail_path =/d' /etc/php.ini
+echo 'sendmail_path = "/usr/sbin/sendmail -t -i"' >> /etc/php.ini
+
 
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
 
