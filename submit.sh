@@ -23,10 +23,6 @@ curl -fsSL https://deb.nodesource.com/setup_18.x | sudo bash -s
 sudo apt-get install nodejs -y
 npm i -g pm2
 
-sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
-
-sudo systemctl restart apache2
-
 sudo mkdir -p /root/.secrets && sudo chmod 0700 /root/.secrets/ && sudo touch /root/.secrets/cloudflare.cfg && sudo chmod 0400 /root/.secrets/cloudflare.cfg
 
 echo "dns_cloudflare_email = $CloudflareEmail
@@ -210,7 +206,12 @@ echo "==================================================== CLOUDFLARE ==========
 
 echo "==================================================== APPLICATION ===================================================="
 
+sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
+
+/etc/init.d/apache2 restart
+
+echo "==================================================== APPLICATION ===================================================="
+
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
 
 sleep 4
-reboot
