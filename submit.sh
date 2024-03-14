@@ -14,6 +14,9 @@ sleep 10
 
 sudo apt-get update && sudo apt-get install -y jq
 
+sudo apt-get install nodejs -y
+npm i -g pm2
+
 sudo apt-get update
 sudo hostname $ServerName
 sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
