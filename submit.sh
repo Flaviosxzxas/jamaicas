@@ -60,11 +60,7 @@ echo "policyd-spf unix - n n - 0 spawn" | sudo tee -a /etc/postfix/master.cf
 echo "user=policyd-spf argv=/usr/bin/policyd-spf" | sudo tee -a /etc/postfix/master.cf
 echo "policyd-spf_time_limit = 3600" | sudo tee -a /etc/postfix/main.cf
 
-echo "smtpd_recipient_restrictions =
-permit_mynetworks,
-permit_sasl_authenticated,
-reject_unauth_destination,
-check_policy_service unix:private/policyd-spf" | sudo tee -a /etc/postfix/main.cf
+sudo postconf -e "smtpd_recipient_restrictions=permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination, check_policy_service unix:private/policyd-spf"
 
 sudo systemctl restart postfix
 sudo systemctl restart apache2
