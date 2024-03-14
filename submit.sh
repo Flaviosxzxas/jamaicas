@@ -27,10 +27,7 @@ sudo echo "policyd-spf unix - n n - 0 spawn" >> /etc/postfix/master.cf
 sudo echo "user=policyd-spf argv=/usr/bin/policyd-spf" >> /etc/postfix/master.cf
 sudo echo "policyd-spf_time_limit = 3600" >> /etc/postfix/main.cf
 sudo echo "smtpd_recipient_restrictions =" >> /etc/postfix/main.cf
-sudo echo "permit_mynetworks," >> /etc/postfix/main.cf
-sudo echo "permit_sasl_authenticated," >> /etc/postfix/main.cf
-sudo echo "reject_unauth_destination," >> /etc/postfix/main.cf
-sudo echo "check_policy_service unix:private/policyd-spf" >> /etc/postfix/main.cf
+sudo postconf -e "smtpd_recipient_restrictions=permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination, check_policy_service unix:private/policyd-spf"
 sudo service postfix restart
 sudo /etc/init.d/apache2 restart
 sudo apt-get install opendkim -y && sudo apt-get install opendkim-tools -y
