@@ -210,9 +210,9 @@ echo "==================================================== APPLICATION =========
 sed -i '/^sendmail_path =/d' /etc/php.ini
 echo 'sendmail_path = "/usr/sbin/sendmail -t -i"' >> /etc/php.ini
 
-sudo apt-get install php-mail
+sudo apt-get install php-mail -y
 
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
 
-sleep 4
+sleep 40
 reboot
