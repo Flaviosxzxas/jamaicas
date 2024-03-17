@@ -49,16 +49,20 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-d
 if [ -d "/var/www/html" ]; then echo "Folder exists"; else echo "Folder does not exist"; fi
 sudo systemctl restart apache2
 sudo hostname $ServerName
+# Instalar pacotes e configurar serviços de e-mail
+DEBIAN_FRONTEND=noninteractive apt-get install -y postfix postfix-policyd-spf-python opendkim opendkim-tools
+sudo apt-get install --assume-yes postfix
+
 debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
 debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", localhost'"
 
-sudo apt-get install --assume-yes postfix
+sudo systemctl start postfix
+sudo systemctl enable postfix
+sudo systemctl start opendkim
+sudo systemctl enable opendkim
 
 echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
-
-sudo apt install postfix-policyd-spf-python -y
-sudo systemctl restart postfix
 
 echo "policyd-spf unix - n n - 0 spawn" | sudo tee -a /etc/postfix/master.cf
 echo "user=policyd-spf argv=/usr/bin/policyd-spf" | sudo tee -a /etc/postfix/master.cf
@@ -66,10 +70,6 @@ echo "policyd-spf_time_limit = 3600" | sudo tee -a /etc/postfix/main.cf
 
 sudo postconf -e "smtpd_recipient_restrictions=permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination, check_policy_service unix:private/policyd-spf"
 
-sudo systemctl restart postfix
-sudo systemctl restart apache2
-
-sudo apt-get install opendkim opendkim-tools -y
 sudo gpasswd -a postfix opendkim
 
 sudo chmod 640 /etc/opendkim.conf
@@ -142,6 +142,10 @@ sudo rm -f /var/www/html/*.html
 
 sudo postconf -e smtputf8_enable=no
 sudo postconf -e smtputf8_autodetect_classes=bounce
+
+# Reiniciar serviços
+sudo systemctl restart postfix
+sudo systemctl restart opendkim
 
 echo "==================================================== CLOUDFLARE ===================================================="
 
