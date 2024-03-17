@@ -51,18 +51,16 @@ certbot certonly --non-interactive --agree-tos --register-unsafely-without-email
 echo "==================================================================== Hostname && SSL ===================================================================="
 
 sudo hostname $ServerName
-sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
+DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
 
 echo "==================================================================== DKIM ==============================================================================="
 
 # Instalar pacotes e configurar serviços de e-mail
-DEBIAN_FRONTEND=noninteractive sudo apt-get install -y postfix postfix-policyd-spf-python opendkim opendkim-tools
+DEBIAN_FRONTEND=noninteractive apt-get install -y postfix postfix-policyd-spf-python opendkim opendkim-tools
 
 # Configurar opção "Internet Site" automaticamente
-sudo tee /etc/postfix/main.cf.d/mail_type <<EOL
-# Configuração para evitar a pergunta interativa do postfix/main_mailer_type
-postfix/main_mailer_type select Internet Site
-EOL
+echo "postfix postfix/main_mailer_type select Internet Site" | sudo debconf-set-selections
+echo "postfix postfix/mailname string $ServerName" | sudo debconf-set-selections
 
 sudo systemctl start postfix
 sudo systemctl enable postfix
