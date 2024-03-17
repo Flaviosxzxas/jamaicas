@@ -51,7 +51,6 @@ sudo systemctl restart apache2
 sudo hostname $ServerName
 # Instalar pacotes e configurar serviços de e-mail
 DEBIAN_FRONTEND=noninteractive apt-get install -y postfix postfix-policyd-spf-python opendkim opendkim-tools
-sudo apt-get install --assume-yes postfix
 
 debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
