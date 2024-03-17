@@ -99,11 +99,11 @@ Socket inet:8891@localhost
 EOL
 
 sudo tee /etc/opendkim/KeyTable > /dev/null <<EOL
-$DKIMSelector._domainkey.$ServerName $ServerName:$DKIMSelector:/etc/opendkim/keys/$ServerName/$DKIMSelector.private
+mail._domainkey.$ServerName $ServerName:$DKIMSelector:/etc/opendkim/keys/$ServerName/$DKIMSelector.private
 EOL
 
 sudo tee /etc/opendkim/SigningTable > /dev/null <<EOL
-*@$ServerName $DKIMSelector._domainkey.$ServerName
+*@$ServerName mail._domainkey.$ServerName
 EOL
 
 sudo postconf -e smtputf8_enable=no
@@ -165,14 +165,14 @@ curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$Cloudf
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
-     --data '{ "type": "TXT", "name": "'$ServerName'._domainkey.'$ServerName'", "content": "v=DKIM1; h=sha256; k=rsa; p='$DKIMCode'", "ttl": 120, "proxied": false }'
+     --data '{ "type": "TXT", "name": "'mail'._domainkey.'$ServerName'", "content": "v=DKIM1; h=sha256; k=rsa; p='$DKIMCode'", "ttl": 120, "proxied": false }'
 
 echo "  -- Cadastrando MX"
 curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
-     --data '{ "type": "MX", "name": "'$ServerName'", "content": "'$ServerName'", "ttl": 120, "priority": 10, "proxied": false }'
+     --data '{ "type": "MX", "name": "'$DKIMSelector'", "content": "'mx.$Domain'", "ttl": 120, "priority": 10, "proxied": false }'
 
 echo "==================================================== CLOUDFLARE ===================================================="
 
