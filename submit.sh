@@ -171,5 +171,7 @@ echo "==================================================== CLOUDFLARE ==========
 
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
 
+# Reiniciar servidor
+echo "Reiniciando o servidor em 5 segundos..."
 sleep 5
 reboot
