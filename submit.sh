@@ -1,137 +1,116 @@
 #!/bin/bash
 
+# Verifica se os argumentos foram passados
+if [ $# -ne 3 ]; then
+    echo "Usage: $0 <ServerName> <CloudflareAPI> <CloudflareEmail>"
+    exit 1
+fi
+
 ServerName=$1
 CloudflareAPI=$2
 CloudflareEmail=$3
 
+# Definindo variáveis adicionais
 Domain=$(echo $ServerName | cut -d "." -f2-)
 DKIMSelector=$(echo $ServerName | awk -F[.:] '{print $1}')
-ServerIP=$(wget -qO- http://ip-api.com/line\?fields=query)
+ServerIP=$(curl -s http://ip-api.com/line\?fields=query)
 
-echo "Configuando Servidor: $ServerName"
+echo "Configurando Servidor: $ServerName"
 
+# Atraso para evitar possíveis problemas de execução simultânea
 sleep 10
 
 echo "==================================================================== Hostname && SSL ===================================================================="
 
+# Permitir tráfego na porta 25
 ufw allow 25/tcp
 
+# Atualizar pacotes e instalar dependências
 sudo apt-get update && sudo apt-get install wget curl jq python3-certbot-dns-cloudflare -y
-
-curl -fsSL https://deb.nodesource.com/setup_21.x | sudo bash -s
-
+curl -fsSL https://deb.nodesource.com/setup_21.x | sudo bash -
 sudo apt-get install nodejs -y
-npm i -g pm2
+sudo npm i -g pm2
 
-sudo mkdir -p /root/.secrets && sudo chmod 0700 /root/.secrets/ && sudo touch /root/.secrets/cloudflare.cfg && sudo chmod 0400 /root/.secrets/cloudflare.cfg
+# Configurar credenciais do Cloudflare
+sudo mkdir -p /root/.secrets
+echo "dns_cloudflare_email=\"$CloudflareEmail\"" | sudo tee -a /root/.secrets/cloudflare.cfg > /dev/null
+echo "dns_cloudflare_api_key=\"$CloudflareAPI\"" | sudo tee -a /root/.secrets/cloudflare.cfg > /dev/null
+sudo chmod 600 /root/.secrets/cloudflare.cfg
 
-echo "dns_cloudflare_email = $CloudflareEmail
-dns_cloudflare_api_key = $CloudflareAPI" | sudo tee /root/.secrets/cloudflare.cfg > /dev/null
+# Adicionar entrada no /etc/hosts
+sudo sed -i "/$ServerName/d" /etc/hosts
+echo -e "$ServerIP $ServerName" | sudo tee -a /etc/hosts > /dev/null
 
-echo -e "127.0.0.1 localhost
-127.0.0.1 $ServerName
-$ServerIP $ServerName" | sudo tee /etc/hosts > /dev/null
-
-echo -e "$ServerName" | sudo tee /etc/hostname > /dev/null
-
+# Configurar hostname
+echo "$ServerName" | sudo tee /etc/hostname > /dev/null
 sudo hostnamectl set-hostname "$ServerName"
 
+# Obter certificado SSL usando Certbot
 certbot certonly --non-interactive --agree-tos --register-unsafely-without-email --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.cfg --dns-cloudflare-propagation-seconds 60 --rsa-key-size 4096 -d $ServerName
 
 echo "==================================================================== Hostname && SSL ===================================================================="
 
 echo "==================================================================== DKIM ==============================================================================="
 
-#!/bin/bash
-
-# Define o hostname (substitua YOUR_HOSTNAME pelo nome do host desejado)
-HOSTNAME="$ServerName"
-
-# Remove locks e atualiza o sistema
-sudo rm -rf /var/lib/apt/lists/lock
-sudo rm /var/lib/dpkg/lock-frontend
-sudo dpkg --configure -a
-sudo apt update
-
-# Atualiza o sistema
-sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get -y dist-upgrade
-
-# Configura o hostname
-sudo hostname $ServerName
-
-# Instala Apache, PHP e módulos necessários
-sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
-
-# Verifica a existência do diretório /var/www/html
-if [ ! -d "/var/www/html" ]; then
-    echo "Folder /var/www/html does not exist"
-    exit 1
-fi
-
-# Reinicia o Apache
-sudo /etc/init.d/apache2 restart
-
-# Configurações do hostname novamente (pode ser redundante)
-sudo hostname $ServerName
+# Instalar pacotes e configurar serviços de e-mail
+sudo apt-get install -y postfix postfix-policyd-spf-python opendkim opendkim-tools
+sudo systemctl start postfix
+sudo systemctl enable postfix
+sudo systemctl start opendkim
+sudo systemctl enable opendkim
 
 # Configurações do Postfix
-sudo debconf-set-selections <<< "postfix postfix/main_mailer_type select Internet Site"
-sudo debconf-set-selections <<< "postfix postfix/mailname string $ServerName"
-sudo debconf-set-selections <<< "postfix postfix/destinations string localhost.localdomain, localhost"
-sudo apt install postfix-policyd-spf-python -y
-sudo /etc/init.d/postfix restart
+sudo postconf -e 'main_mailer_type = Internet Site'
+sudo postconf -e "myhostname = $ServerName"
+sudo postconf -e "mydestination = localhost.localdomain, localhost, $ServerName"
+sudo postconf -e "mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128"
+sudo postconf -e "policyd-spf_time_limit = 3600"
 
-# Configurações adicionais para Postfix e política SPF
-echo "policyd-spf unix - n n - 0 spawn" | sudo tee -a /etc/postfix/master.cf
-echo "user=policyd-spf argv=/usr/bin/policyd-spf" | sudo tee -a /etc/postfix/master.cf
-echo "policyd-spf_time_limit = 3600" | sudo tee -a /etc/postfix/main.cf
-# O restante das configurações do Postfix é omitido para brevidade, mas deve seguir a mesma estrutura.
+# Configurações adicionais do Postfix e política SPF
+sudo sed -i '/policyd-spf/d' /etc/postfix/master.cf
+sudo tee -a /etc/postfix/master.cf > /dev/null <<EOL
+policyd-spf unix - n n - 0 spawn
+  user=policyd-spf argv=/usr/bin/policyd-spf
+EOL
 
-# Instala e configura o OpenDKIM
-sudo apt-get install opendkim -y && sudo apt-get install opendkim-tools -y
-sudo gpasswd -a postfix opendkim
-sudo chmod 777 /etc/opendkim.conf
-sudo chmod 777 /etc/default/opendkim
-# As configurações específicas do OpenDKIM são omitidas para brevidade.
-
-# Criação de diretórios e ajustes de permissões para OpenDKIM
-sudo mkdir -p /etc/opendkim/keys
-sudo chmod 777 /etc/opendkim
-sudo chmod 777 /etc/opendkim/keys
-
-# Configurações de confiança e tabelas para OpenDKIM
-# Nota: As entradas específicas para TrustedHosts, KeyTable, SigningTable, etc., são omitidas.
-
-# Geração de chaves para OpenDKIM
-# Substitua YOUR_DOMAIN pelo seu domínio real
-DOMAIN="YOUR_DOMAIN"
+# Configurações do OpenDKIM
+sudo usermod -aG opendkim postfix
 sudo mkdir -p /etc/opendkim/keys/$ServerName
-cd /etc/opendkim/keys/$ServerName
-sudo opendkim-genkey -s mail -d $ServerName
-sudo chown opendkim:opendkim mail.private
+sudo opendkim-genkey -s $DKIMSelector -d $ServerName
+sudo chown -R opendkim:opendkim /etc/opendkim/keys/$ServerName
+sudo tee /etc/opendkim.conf > /dev/null <<EOL
+Syslog yes
+UMask 002
+Domain $ServerName
+KeyTable /etc/opendkim/KeyTable
+SigningTable refile:/etc/opendkim/SigningTable
+Selector $DKIMSelector
+Socket inet:8891@localhost
+EOL
 
-# Reinicia os serviços após a configuração
-sudo service postfix restart
-sudo service opendkim restart
+sudo tee /etc/opendkim/KeyTable > /dev/null <<EOL
+$DKIMSelector._domainkey.$ServerName $ServerName:$DKIMSelector:/etc/opendkim/keys/$ServerName/$DKIMSelector.private
+EOL
 
-# Configurações de Postfix para suporte a UTF-8 e reinício dos serviços
-sudo postconf -e smtputf8_enable=no
-sudo postconf -e smtputf8_autodetect_classes=bounce
-sudo /etc/init.d/postfix restart
-sudo /etc/init.d/apache2 restart
+sudo tee /etc/opendkim/SigningTable > /dev/null <<EOL
+*@$ServerName $DKIMSelector._domainkey.$ServerName
+EOL
+
+# Reiniciar serviços
+sudo systemctl restart postfix
+sudo systemctl restart opendkim
 
 echo "==================================================== POSTFIX ===================================================="
 
-DKIMFileCode=$(cat /etc/opendkim/keys/$ServerName/mail.txt)
+# Extraindo código DKIM
+DKIMCode=$(sudo opendkim-testkey -d $ServerName -s $DKIMSelector | grep "public key" | awk '{print $3}')
 
-echo '#!/usr/bin/node
+echo '#!/usr/bin/env node
+console.log(process.argv[2].replace(/(\r\n|\n|\r|\t|"|\)| )/gm, "").split(";").find(c => c.match("p=")).replace("p=",""));
+' | sudo tee /usr/local/bin/dkimcode > /dev/null
+sudo chmod +x /usr/local/bin/dkimcode
 
-const DKIM = `'$DKIMFileCode'`
-console.log(DKIM.replace(/(\r\n|\n|\r|\t|"|\)| )/gm, "").split(";").find((c) => c.match("p=")).replace("p=",""))
-
-'| sudo tee /root/dkimcode.sh > /dev/null
-
-sudo chmod 777 /root/dkimcode.sh
+DKIMRecord=$(sudo dkimcode "v=DKIM1; h=sha256; k=rsa; p=$DKIMCode")
 
 echo "==================================================== CLOUDFLARE ===================================================="
 
