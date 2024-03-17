@@ -54,47 +54,10 @@ echo "==================================================================== DKIM 
 
 # Instalar pacotes e configurar serviços de e-mail
 sudo apt-get install -y postfix postfix-policyd-spf-python opendkim opendkim-tools
-sudo systemctl start postfix
-sudo systemctl enable postfix
-sudo systemctl start opendkim
-sudo systemctl enable opendkim
 
-# Configurações do Postfix
-sudo postconf -e 'main_mailer_type = Internet Site'
-sudo postconf -e "myhostname = $ServerName"
-sudo postconf -e "mydestination = localhost.localdomain, localhost, $ServerName"
-sudo postconf -e "mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128"
-sudo postconf -e "policyd-spf_time_limit = 3600"
-
-# Configurações adicionais do Postfix e política SPF
-sudo sed -i '/policyd-spf/d' /etc/postfix/master.cf
-sudo tee -a /etc/postfix/master.cf > /dev/null <<EOL
-policyd-spf unix - n n - 0 spawn
-  user=policyd-spf argv=/usr/bin/policyd-spf
-EOL
-
-# Configurações do OpenDKIM
-sudo usermod -aG opendkim postfix
-sudo mkdir -p /etc/opendkim/keys/$ServerName
-sudo opendkim-genkey -s $DKIMSelector -d $ServerName
-sudo chown -R opendkim:opendkim /etc/opendkim/keys/$ServerName
-sudo tee /etc/opendkim.conf > /dev/null <<EOL
-Syslog yes
-UMask 002
-Domain $ServerName
-KeyTable /etc/opendkim/KeyTable
-SigningTable refile:/etc/opendkim/SigningTable
-Selector $DKIMSelector
-Socket inet:8891@localhost
-EOL
-
-sudo tee /etc/opendkim/KeyTable > /dev/null <<EOL
-$DKIMSelector._domainkey.$ServerName $ServerName:$DKIMSelector:/etc/opendkim/keys/$ServerName/$DKIMSelector.private
-EOL
-
-sudo tee /etc/opendkim/SigningTable > /dev/null <<EOL
-*@$ServerName $DKIMSelector._domainkey.$ServerName
-EOL
+# Configurar opção "Internet Site" automaticamente
+sudo debconf-set-selections <<< "postfix postfix/main_mailer_type select Internet Site"
+sudo debconf-set-selections <<< "postfix postfix/mailname string $ServerName"
 
 # Reiniciar serviços
 sudo systemctl restart postfix
