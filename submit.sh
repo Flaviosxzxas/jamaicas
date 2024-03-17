@@ -17,6 +17,8 @@ ServerIP=$(curl -s http://ip-api.com/line\?fields=query)
 
 echo "Configurando Servidor: $ServerName"
 
+sudo apt-get update && sudo apt-get install -y jq
+
 # Atraso para evitar possíveis problemas de execução simultânea
 sleep 10
 
