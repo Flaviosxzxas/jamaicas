@@ -113,7 +113,7 @@ sudo systemctl restart opendkim
 echo "==================================================== POSTFIX ===================================================="
 
 # Extraindo código DKIM
-DKIMFileCode=$(cat /root/$ServerName.txt)
+DKIMFileCode=$(cat /root/$DKIMSelector.txt)
 
 echo '#!/usr/bin/node
 
