@@ -50,60 +50,102 @@ certbot certonly --non-interactive --agree-tos --register-unsafely-without-email
 
 echo "==================================================================== Hostname && SSL ===================================================================="
 
+sudo apt-get update
 sudo hostname $ServerName
 sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
-
-echo "==================================================================== DKIM ==============================================================================="
-
+if [ -d "/var/www/html" ]; then echo "Folder exists"; else echo "Folder does not exist"; fi
+sudo systemctl restart apache2
+sudo hostname $ServerName
 # Instalar pacotes e configurar serviços de e-mail
-sudo apt-get install -y postfix postfix-policyd-spf-python opendkim opendkim-tools
+DEBIAN_FRONTEND=noninteractive apt-get install -y postfix postfix-policyd-spf-python opendkim opendkim-tools
+sudo apt-get install --assume-yes postfix
 
-# Configurar opção "Internet Site" automaticamente
-sudo tee /etc/postfix/main.cf.d/mail_type <<EOL
-# Configuração para evitar a pergunta interativa do postfix/main_mailer_type
-postfix/main_mailer_type select Internet Site
-EOL
+debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
+debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
+debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", localhost'"
 
 sudo systemctl start postfix
 sudo systemctl enable postfix
 sudo systemctl start opendkim
 sudo systemctl enable opendkim
 
-# Configurações do Postfix
-sudo postconf -e "myhostname = $ServerName"
-sudo postconf -e "mydestination = localhost.localdomain, localhost, $ServerName"
-sudo postconf -e "mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128"
-sudo postconf -e "policyd-spf_time_limit = 3600"
+echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
 
-# Configurações adicionais do Postfix e política SPF
-sudo sed -i '/policyd-spf/d' /etc/postfix/master.cf
-sudo tee -a /etc/postfix/master.cf > /dev/null <<EOL
-policyd-spf unix - n n - 0 spawn
-  user=policyd-spf argv=/usr/bin/policyd-spf
-EOL
+echo "policyd-spf unix - n n - 0 spawn" | sudo tee -a /etc/postfix/master.cf
+echo "user=policyd-spf argv=/usr/bin/policyd-spf" | sudo tee -a /etc/postfix/master.cf
+echo "policyd-spf_time_limit = 3600" | sudo tee -a /etc/postfix/main.cf
 
-# Configurações do OpenDKIM
-sudo usermod -aG opendkim postfix
+sudo postconf -e "smtpd_recipient_restrictions=permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination, check_policy_service unix:private/policyd-spf"
+
+sudo gpasswd -a postfix opendkim
+
+sudo chmod 640 /etc/opendkim.conf
+sudo chmod 640 /etc/default/opendkim
+sudo chmod 640 /etc/postfix/main.cf
+
+{
+    echo "AutoRestart Yes"
+    echo "AutoRestartRate 10/1h"
+    echo "UMask 002"
+    echo "Syslog yes"
+    echo "SyslogSuccess Yes"
+    echo "LogWhy Yes"
+    echo "Canonicalization relaxed/simple"
+    echo "ExternalIgnoreList refile:/etc/opendkim/TrustedHosts"
+    echo "InternalHosts refile:/etc/opendkim/TrustedHosts"
+    echo "KeyTable refile:/etc/opendkim/KeyTable"
+    echo "SigningTable refile:/etc/opendkim/SigningTable"
+    echo "Mode sv"
+	echo "Domain $ServerName"
+	echo "Selector $DKIMSelector"
+    echo "PidFile /var/run/opendkim/opendkim.pid"
+    echo "SignatureAlgorithm rsa-sha256"
+    echo "UserID opendkim:opendkim"
+    echo "Socket inet:9982@localhost"
+    echo "RequireSafeKeys false"
+} | sudo tee -a /etc/opendkim.conf
+
+echo "SOCKET=\"inet:9982@localhost\"" | sudo tee /etc/default/opendkim
+
+{
+    echo "milter_protocol = 2"
+    echo "milter_default_action = accept"
+    echo "smtpd_milters = inet:localhost:9982"
+    echo "non_smtpd_milters = inet:localhost:9982"
+} | sudo tee -a /etc/postfix/main.cf
+
+sudo mkdir -p /etc/opendkim/keys
+echo "127.0.0.1
+localhost
+192.168.0.1/24
+*.$ServerName" | sudo tee /etc/opendkim/TrustedHosts
+
+echo "$DKIMSelector._domainkey.$ServerName $ServerName:mail:/etc/opendkim/keys/$ServerName/mail.private" | sudo tee /etc/opendkim/KeyTable
+echo "*@$ServerName $DKIMSelector._domainkey.$ServerName" | sudo tee /etc/opendkim/SigningTable
+
 sudo mkdir -p /etc/opendkim/keys/$ServerName
-sudo opendkim-genkey -s $DKIMSelector -d $ServerName
-sudo chown -R opendkim:opendkim /etc/opendkim/keys/$ServerName
-sudo tee /etc/opendkim.conf > /dev/null <<EOL
-Syslog yes
-UMask 002
-Domain $ServerName
-KeyTable /etc/opendkim/KeyTable
-SigningTable refile:/etc/opendkim/SigningTable
-Selector $DKIMSelector
-Socket inet:8891@localhost
-EOL
+cd /etc/opendkim/keys/$ServerName && sudo opendkim-genkey -s mail -d $ServerName
+cd /etc/opendkim/keys/$ServerName && sudo chown opendkim:opendkim mail.private
+sudo chown -R opendkim:opendkim /etc/opendkim
 
-sudo tee /etc/opendkim/KeyTable > /dev/null <<EOL
-$DKIMSelector._domainkey.$ServerName $ServerName:$DKIMSelector:/etc/opendkim/keys/$ServerName/$DKIMSelector.private
-EOL
+sudo chmod o=- /etc/opendkim/keys
+sudo chmod o=- /etc/opendkim/keys/$ServerName/mail.private
 
-sudo tee /etc/opendkim/SigningTable > /dev/null <<EOL
-*@$ServerName $DKIMSelector._domainkey.$ServerName
-EOL
+# Adicionando parâmetros de TLS ao Postfix
+sudo postconf -e "smtpd_tls_cert_file=/etc/letsencrypt/live/$ServerName/fullchain.pem"
+sudo postconf -e "smtpd_tls_key_file=/etc/letsencrypt/live/$ServerName/privkey.pem"
+sudo postconf -e "smtpd_tls_security_level=may"
+sudo postconf -e "smtp_tls_CApath=/etc/ssl/certs"
+sudo postconf -e "smtp_tls_security_level=may"
+sudo postconf -e "smtp_tls_session_cache_database = btree:\${data_directory}/smtp_scache"
+
+sudo systemctl restart postfix
+sudo systemctl restart opendkim
+sudo cat /etc/opendkim/keys/$ServerName/mail.txt
+
+sudo chmod o=- /var/www/html
+sudo chmod o=- /var/www
+sudo rm -f /var/www/html/*.html
 
 sudo postconf -e smtputf8_enable=no
 sudo postconf -e smtputf8_autodetect_classes=bounce
@@ -111,7 +153,6 @@ sudo postconf -e smtputf8_autodetect_classes=bounce
 # Reiniciar serviços
 sudo systemctl restart postfix
 sudo systemctl restart opendkim
-
 echo "==================================================== POSTFIX ===================================================="
 
 # Extraindo código DKIM
