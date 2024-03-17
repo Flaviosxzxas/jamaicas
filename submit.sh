@@ -113,14 +113,16 @@ sudo systemctl restart opendkim
 echo "==================================================== POSTFIX ===================================================="
 
 # Extraindo código DKIM
-DKIMCode=$(sudo opendkim-testkey -d $ServerName -s $DKIMSelector | grep "public key" | awk '{print $3}')
+DKIMFileCode=$(cat /root/$ServerName.txt)
 
-echo '#!/usr/bin/env node
-console.log(process.argv[2].replace(/(\r\n|\n|\r|\t|"|\)| )/gm, "").split(";").find(c => c.match("p=")).replace("p=",""));
-' | sudo tee /usr/local/bin/dkimcode > /dev/null
-sudo chmod +x /usr/local/bin/dkimcode
+echo '#!/usr/bin/node
 
-DKIMRecord=$(sudo dkimcode "v=DKIM1; h=sha256; k=rsa; p=$DKIMCode")
+const DKIM = `'$DKIMFileCode'`
+console.log(DKIM.replace(/(\r\n|\n|\r|\t|"|\)| )/gm, "").split(";").find((c) => c.match("p=")).replace("p=",""))
+
+'| sudo tee /root/dkimcode.sh > /dev/null
+
+sudo chmod 777 /root/dkimcode.sh
 
 echo "==================================================== CLOUDFLARE ===================================================="
 
