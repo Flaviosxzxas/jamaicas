@@ -50,9 +50,6 @@ certbot certonly --non-interactive --agree-tos --register-unsafely-without-email
 
 echo "==================================================================== Hostname && SSL ===================================================================="
 
-sudo hostname $ServerName
-sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
-
 echo "==================================================================== DKIM ==============================================================================="
 
 # Instalar pacotes e configurar serviços de e-mail
