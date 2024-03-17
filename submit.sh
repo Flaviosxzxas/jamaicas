@@ -14,14 +14,12 @@ sleep 10
 
 sudo apt-get update && sudo apt-get install -y jq
 
-echo "==================================================================== Hostname && SSL ===================================================================="
-
 ufw allow 25/tcp
 
 sudo apt-get install nodejs -y
 npm i -g pm2
 
-echo "==================================================================== Hostname && SSL ===================================================================="
+echo "==================================================================== Bommmmmm ===================================================================="
 
 
 sudo apt-get update
@@ -126,6 +124,8 @@ sudo postconf -e smtputf8_autodetect_classes=bounce
 # Reiniciar serviços
 sudo systemctl restart postfix
 sudo systemctl restart opendkim
+
+echo "==================================================================== Hostname && SSL ===================================================================="
 
 sudo apt-get install python3-certbot-dns-cloudflare -y
 sudo apt install certbot -y
