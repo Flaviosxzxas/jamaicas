@@ -59,8 +59,10 @@ echo "==================================================================== DKIM 
 DEBIAN_FRONTEND=noninteractive sudo apt-get install -y postfix postfix-policyd-spf-python opendkim opendkim-tools
 
 # Configurar opção "Internet Site" automaticamente
-DEBIAN_FRONTEND=noninteractive sudo debconf-set-selections <<< "postfix postfix/main_mailer_type select Internet Site"
-DEBIAN_FRONTEND=noninteractive sudo debconf-set-selections <<< "postfix postfix/mailname string $ServerName"
+sudo tee /etc/postfix/main.cf.d/mail_type <<EOL
+# Configuração para evitar a pergunta interativa do postfix/main_mailer_type
+postfix/main_mailer_type select Internet Site
+EOL
 
 sudo systemctl start postfix
 sudo systemctl enable postfix
