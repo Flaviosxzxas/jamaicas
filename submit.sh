@@ -56,11 +56,11 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-d
 echo "==================================================================== DKIM ==============================================================================="
 
 # Instalar pacotes e configurar serviços de e-mail
-sudo apt-get install -y postfix postfix-policyd-spf-python opendkim opendkim-tools
+DEBIAN_FRONTEND=noninteractive sudo apt-get install -y postfix postfix-policyd-spf-python opendkim opendkim-tools
 
 # Configurar opção "Internet Site" automaticamente
-sudo debconf-set-selections <<< "postfix postfix/main_mailer_type select Internet Site"
-sudo debconf-set-selections <<< "postfix postfix/mailname string $ServerName"
+DEBIAN_FRONTEND=noninteractive sudo debconf-set-selections <<< "postfix postfix/main_mailer_type select Internet Site"
+DEBIAN_FRONTEND=noninteractive sudo debconf-set-selections <<< "postfix postfix/mailname string $ServerName"
 
 sudo systemctl start postfix
 sudo systemctl enable postfix
