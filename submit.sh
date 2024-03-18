@@ -8,13 +8,11 @@ Domain=$(echo $ServerName | cut -d "." -f2-)
 DKIMSelector=$(echo $ServerName | awk -F[.:] '{print $1}')
 ServerIP=$(wget -qO- http://ip-api.com/line\?fields=query)
 
-echo "Configurando Servidor: $ServerName"
+echo "Configuando Servidor: $ServerName"
 
 sleep 10
 
-sudo apt-get update && sudo apt-get install -y jq
-
-echo "===# Node Source #==="
+echo "==================================================================== Hostname && SSL ===================================================================="
 
 ufw allow 25/tcp
 
@@ -25,23 +23,251 @@ curl -fsSL https://deb.nodesource.com/setup_21.x | sudo bash -s
 sudo apt-get install nodejs -y
 npm i -g pm2
 
+sudo mkdir -p /root/.secrets && sudo chmod 0700 /root/.secrets/ && sudo touch /root/.secrets/cloudflare.cfg && sudo chmod 0400 /root/.secrets/cloudflare.cfg
 
-echo "===# Atraso para evitar possíveis problemas de execução simultânea #==="
-sleep 10
+echo "dns_cloudflare_email = $CloudflareEmail
+dns_cloudflare_api_key = $CloudflareAPI" | sudo tee /root/.secrets/cloudflare.cfg > /dev/null
 
-HOSTNAME="$ServerName"
+echo -e "127.0.0.1 localhost
+127.0.0.1 $ServerName
+$ServerIP $ServerName" | sudo tee /etc/hosts > /dev/null
 
-# Remove locks e atualiza o sistema
-sudo rm -rf /var/lib/apt/lists/lock
-sudo rm /var/lib/dpkg/lock-frontend
-sudo dpkg --configure -a
-sudo apt update
+echo -e "$ServerName" | sudo tee /etc/hostname > /dev/null
 
-# Atualiza o sistema
-sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get -y dist-upgrade
+sudo hostnamectl set-hostname "$ServerName"
 
-# Configura o hostname
-sudo hostname $ServerName
+certbot certonly --non-interactive --agree-tos --register-unsafely-without-email --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.cfg --dns-cloudflare-propagation-seconds 60 --rsa-key-size 4096 -d $ServerName
+
+echo "==================================================================== Hostname && SSL ===================================================================="
+
+echo "==================================================================== DKIM ==============================================================================="
+
+sudo apt-get install opendkim -y && sudo apt-get install opendkim-tools -y
+sudo mkdir -p /etc/opendkim && sudo mkdir -p /etc/opendkim/keys
+sudo chmod -R 777 /etc/opendkim/ && sudo chown -R opendkim:opendkim /etc/opendkim/
+
+echo "RUNDIR=/run/opendkim
+SOCKET=\"inet:9982@localhost\"
+USER=opendkim
+GROUP=opendkim
+PIDFILE=\$RUNDIR/\$NAME.pid
+EXTRAAFTER=" | sudo tee /etc/default/opendkim > /dev/null
+
+echo "AutoRestart             Yes
+AutoRestartRate         10/1h
+UMask                   002
+Syslog                  yes
+SyslogSuccess           Yes
+LogWhy                  Yes
+Canonicalization        relaxed/simple
+ExternalIgnoreList      refile:/etc/opendkim/TrustedHosts
+InternalHosts           refile:/etc/opendkim/TrustedHosts
+KeyTable                refile:/etc/opendkim/KeyTable
+SigningTable            refile:/etc/opendkim/SigningTable
+Mode                    sv
+PidFile                 /var/run/opendkim/opendkim.pid
+SignatureAlgorithm      rsa-sha256
+UserID                  opendkim:opendkim
+Socket                  inet:9982@localhost
+RequireSafeKeys false" | sudo tee /etc/opendkim.conf > /dev/null
+
+echo "127.0.0.1
+localhost
+$ServerName
+*.$Domain" | sudo tee /etc/opendkim/TrustedHosts > /dev/null
+
+sudo opendkim-genkey -b 2048 -s $DKIMSelector -d $ServerName -D /etc/opendkim/keys/
+
+echo "$DKIMSelector._domainkey.$ServerName $ServerName:$DKIMSelector:/etc/opendkim/keys/$DKIMSelector.private" | sudo tee /etc/opendkim/KeyTable > /dev/null
+echo "*@$ServerName $DKIMSelector._domainkey.$ServerName" | sudo tee /etc/opendkim/SigningTable > /dev/null
+
+sudo chmod -R 777 /etc/opendkim/ && sudo chown -R opendkim:opendkim /etc/opendkim/
+sudo cp /etc/opendkim/keys/$DKIMSelector.txt /root/dkim.txt && sudo chmod -R 777 /root/dkim.txt
+
+DKIMFileCode=$(cat /root/dkim.txt)
+
+echo '#!/usr/bin/node
+
+const DKIM = `'$DKIMFileCode'`
+console.log(DKIM.replace(/(\r\n|\n|\r|\t|"|\)| )/gm, "").split(";").find((c) => c.match("p=")).replace("p=",""))
+
+'| sudo tee /root/dkimcode.sh > /dev/null
+
+sudo chmod 777 /root/dkimcode.sh
+
+echo "==================================================================== DKIM ==============================================================================="
+
+echo "==================================================== POSTFIX ===================================================="
+
+sleep 3
+
+debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
+debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
+debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", localhost'"
+sudo apt install postfix-policyd-spf-python -y
+sudo apt-get install --assume-yes postfix
+
+echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
+
+echo -e "myhostname = $ServerName
+smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
+biff = no
+append_dot_mydomain = no
+readme_directory = no
+compatibility_level = 2
+
+# DKIM Settings
+milter_protocol = 2
+milter_default_action = accept
+smtpd_milters = inet:localhost:9982
+non_smtpd_milters = inet:localhost:9982
+
+# Login without Username and Password
+smtpd_recipient_restrictions =
+  permit_mynetworks,
+  check_recipient_access hash:/etc/postfix/access.recipients,
+  permit_sasl_authenticated,
+  reject_unauth_destination
+
+# TLS parameters
+smtpd_tls_cert_file=/etc/letsencrypt/live/$ServerName/fullchain.pem
+smtpd_tls_key_file=/etc/letsencrypt/live/$ServerName/privkey.pem
+smtpd_tls_security_level=may
+smtp_tls_CApath=/etc/ssl/certs
+smtp_tls_security_level=may
+smtp_tls_session_cache_database = btree:\${data_directory}/smtp_scache
+smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated defer_unauth_destination
+alias_maps = hash:/etc/aliases
+alias_database = hash:/etc/aliases
+myorigin = /etc/mailname
+mydestination = $ServerName, localhost
+relayhost =
+mynetworks = $ServerName 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
+mailbox_size_limit = 0
+recipient_delimiter = +
+inet_interfaces = all
+inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
+
+sleep 3
+
+service opendkim restart
+service postfix restart
+
+echo "==================================================== POSTFIX ===================================================="
+
+echo "==================================================== CLOUDFLARE ===================================================="
+
+DKIMCode=$(/root/dkimcode.sh)
+
+sleep 5
+
+echo "  -- Obtendo Zona"
+CloudflareZoneID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$Domain&status=active" \
+  -H "X-Auth-Email: $CloudflareEmail" \
+  -H "X-Auth-Key: $CloudflareAPI" \
+  -H "Content-Type: application/json" | jq -r '{"result"}[] | .[0] | .id')
+  
+  echo "  -- Cadastrando A"
+curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+     -H "X-Auth-Email: $CloudflareEmail" \
+     -H "X-Auth-Key: $CloudflareAPI" \
+     -H "Content-Type: application/json" \
+     --data '{ "type": "A", "name": "'$DKIMSelector'", "content": "'$ServerIP'", "ttl": 60, "proxied": false }'
+
+echo "  -- Cadastrando SPF"
+curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+     -H "X-Auth-Email: $CloudflareEmail" \
+     -H "X-Auth-Key: $CloudflareAPI" \
+     -H "Content-Type: application/json" \
+     --data '{ "type": "TXT", "name": "'$ServerName'", "content": "v=spf1 a:'$ServerName' ~all", "ttl": 60, "proxied": false }'
+
+echo "  -- Cadastrando DMARK"
+curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+     -H "X-Auth-Email: $CloudflareEmail" \
+     -H "X-Auth-Key: $CloudflareAPI" \
+     -H "Content-Type: application/json" \
+     --data '{ "type": "TXT", "name": "_dmarc.'$ServerName'", "content": "v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmark@'$ServerName'; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r", "ttl": 60, "proxied": false }'
+
+echo "  -- Cadastrando DKIM"
+curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+     -H "X-Auth-Email: $CloudflareEmail" \
+     -H "X-Auth-Key: $CloudflareAPI" \
+     -H "Content-Type: application/json" \
+     --data '{ "type": "TXT", "name": "'$DKIMSelector'._domainkey.'$ServerName'", "content": "v=DKIM1; h=sha256; k=rsa; p='$DKIMCode'", "ttl": 60, "proxied": false }'
+
+echo "  -- Cadastrando MX"
+curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+     -H "X-Auth-Email: $CloudflareEmail" \
+     -H "X-Auth-Key: $CloudflareAPI" \
+     -H "Content-Type: application/json" \
+     --data '{ "type": "MX", "name": "'$ServerName'", "content": "'$ServerName'", "ttl": 60, "priority": 10, "proxied": false }'
+
+echo "==================================================== CLOUDFLARE ===================================================="
+
+echo "==================================================== APPLICATION ===================================================="
+
+echo '{
+  "name": "sender",
+  "version": "1.0.0",
+  "dependencies": {
+    "body-parser": "^1.20.1",
+    "express": "^4.18.2",
+    "html-to-text": "^8.2.1",
+    "nodemailer": "^6.8.0"
+  }
+}' | sudo tee /root/package.json > /dev/null
+
+echo 'process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
+const express = require("express")
+const nodemailer = require("nodemailer")
+const bodyparser = require("body-parser")
+const { convert } = require("html-to-text")
+const app = express()
+app.use(bodyparser.json())
+app.post("/email-manager/tmt/sendmail", async (req,res) => {
+  let { to, fromName, fromUser, subject, html, attachments } = req.body
+  let toAddress = to.shift()
+  const transport = nodemailer.createTransport({
+    port: 25,
+    tls:{
+      rejectUnauthorized: false
+    }
+  })
+  html = html.replace(/(\r\n|\n|\r|\t)/gm, "")
+  html = html.replace(/\s+/g, " ") 
+  let message = {
+    encoding: "base64",
+    from: {
+      name: fromName,
+      address: `${fromUser}@'$ServerName'`
+    },
+    to: {
+      name: fromName,
+      address: toAddress
+    },
+    bcc: to,
+    subject,
+    attachments,
+    html,
+    list: {
+      unsubscribe: [{
+        url: "https://" + "'$ServerName'?action=unsubscribe&u=" + to,
+        comment: "Cancelar Inscrição"
+      }],
+    },
+    text: convert(html, { wordwrap: 85 })
+  }
+  if(attachments) message = { ...message, attachments }
+  const sendmail = await transport.sendMail(message)
+  return res.status(200).json(sendmail)
+})
+app.listen(4235)'  | tee /root/server.js > /dev/null
+
+cd /root && npm install && pm2 start server.js && pm2 startup && pm2 save
+
+npm install axios dotenv events
+
+echo "==================================================== APPLICATION ===================================================="
 
 # Instala Apache, PHP e módulos necessários
 sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
@@ -55,129 +281,6 @@ fi
 # Reinicia o Apache
 sudo /etc/init.d/apache2 restart
 
-# Configurações do hostname novamente (pode ser redundante)
-sudo hostname $ServerName
 
-# Configurações do Postfix
-sudo debconf-set-selections <<< "postfix postfix/main_mailer_type select Internet Site"
-sudo debconf-set-selections <<< "postfix postfix/mailname string $ServerName"
-sudo debconf-set-selections <<< "postfix postfix/destinations string localhost.localdomain, localhost"
-sudo apt install postfix-policyd-spf-python -y
-sudo /etc/init.d/postfix restart
-
-# Configurações adicionais para Postfix e política SPF
-echo "policyd-spf unix - n n - 0 spawn" | sudo tee -a /etc/postfix/master.cf
-echo "user=policyd-spf argv=/usr/bin/policyd-spf" | sudo tee -a /etc/postfix/master.cf
-echo "policyd-spf_time_limit = 3600" | sudo tee -a /etc/postfix/main.cf
-# O restante das configurações do Postfix é omitido para brevidade, mas deve seguir a mesma estrutura.
-
-# Instala e configura o OpenDKIM
-sudo apt-get install opendkim -y && sudo apt-get install opendkim-tools -y
-sudo gpasswd -a postfix opendkim
-sudo chmod 777 /etc/opendkim.conf
-sudo chmod 777 /etc/default/opendkim
-# As configurações específicas do OpenDKIM são omitidas para brevidade.
-
-# Criação de diretórios e ajustes de permissões para OpenDKIM
-sudo mkdir -p /etc/opendkim/keys
-sudo chmod 777 /etc/opendkim
-sudo chmod 777 /etc/opendkim/keys
-sudo echo "127.0.0.1" > /etc/opendkim/TrustedHosts
-sudo echo "localhost" >> /etc/opendkim/TrustedHosts
-sudo echo "$ServerName" >> /etc/opendkim/TrustedHosts
-sudo echo "*.$Domain" >> /etc/opendkim/TrustedHosts
-sudo echo "mail._domainkey.$ServerName $ServerName:mail:/etc/opendkim/keys/$ServerName/mail.private" > /etc/opendkim/KeyTable
-sudo echo "*@$ServerName mail._domainkey.$ServerName" > /etc/opendkim/SigningTable
-sudo mkdir /etc/opendkim/keys/$ServerName
-cd /etc/opendkim/keys/$ServerName; sudo opendkim-genkey -s mail -d $ServerName
-cd /etc/opendkim/keys/$ServerName; sudo chown opendkim:opendkim mail.private
-sudo chown -R opendkim:opendkim /etc/opendkim
-
-# Configurações de confiança e tabelas para OpenDKIM
-# Nota: As entradas específicas para TrustedHosts, KeyTable, SigningTable, etc., são omitidas.
-
-# Geração de chaves para OpenDKIM
-# Substitua YOUR_DOMAIN pelo seu domínio real
-DOMAIN="YOUR_DOMAIN"
-sudo mkdir -p /etc/opendkim/keys/$ServerName
-cd /etc/opendkim/keys/$ServerName
-sudo opendkim-genkey -s mail -d $ServerName
-sudo chown opendkim:opendkim mail.private
-
-# Reinicia os serviços após a configuração
-sudo service postfix restart
-sudo service opendkim restart
-
-# Configurações de Postfix para suporte a UTF-8 e reinício dos serviços
-sudo postconf -e smtputf8_enable=no
-sudo postconf -e smtputf8_autodetect_classes=bounce
-sudo /etc/init.d/postfix restart
-sudo /etc/init.d/apache2 restart
-
-# Extraindo código DKIM
-DKIMFileCode=$(cat /etc/opendkim/keys/$ServerName/mail.txt)
-
-echo '#!/usr/bin/node
-
-const DKIM = `'$DKIMFileCode'`
-console.log(DKIM.replace(/(\r\n|\n|\r|\t|"|\)| )/gm, "").split(";").find((c) => c.match("p=")).replace("p=",""))
-
-'| sudo tee /root/dkimcode.sh > /dev/null
-
-sudo chmod 777 /root/dkimcode.sh
-
-echo "===# CLOUDFLARE #==="
-
-DKIMCode=$(/root/dkimcode.sh)
-
-sleep 5
-
-echo "  -- Obtendo Zona"
-CloudflareZoneID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$Domain&status=active" \
-  -H "X-Auth-Email: $CloudflareEmail" \
-  -H "X-Auth-Key: $CloudflareAPI" \
-  -H "Content-Type: application/json" | jq -r '{"result"}[] | .[0] | .id')
-  
-echo "  -- Cadastrando A"
-curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
-     -H "X-Auth-Email: $CloudflareEmail" \
-     -H "X-Auth-Key: $CloudflareAPI" \
-     -H "Content-Type: application/json" \
-     --data '{ "type": "A", "name": "'$ServerName'", "content": "'$ServerIP'", "ttl": 120, "proxied": false }'
-
-echo "  -- Cadastrando SPF"
-curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
-     -H "X-Auth-Email: $CloudflareEmail" \
-     -H "X-Auth-Key: $CloudflareAPI" \
-     -H "Content-Type: application/json" \
-     --data '{ "type": "TXT", "name": "'$ServerName'", "content": "v=spf1 a:'$ServerName' a mx ~all", "ttl": 120, "proxied": false }'
-
-echo "  -- Cadastrando DMARK"
-curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
-     -H "X-Auth-Email: $CloudflareEmail" \
-     -H "X-Auth-Key: $CloudflareAPI" \
-     -H "Content-Type: application/json" \
-     --data '{ "type": "TXT", "name": "_dmarc.'$ServerName'", "content": "v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmark@'$ServerName'; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r", "ttl": 120, "proxied": false }'
-
-echo "  -- Cadastrando DKIM"
-curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
-     -H "X-Auth-Email: $CloudflareEmail" \
-     -H "X-Auth-Key: $CloudflareAPI" \
-     -H "Content-Type: application/json" \
-     --data '{ "type": "TXT", "name": "'mail'._domainkey.'$ServerName'", "content": "v=DKIM1; h=sha256; k=rsa; p='$DKIMCode'", "ttl": 120, "proxied": false }'
-
-echo "  -- Cadastrando MX"
-curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
-     -H "X-Auth-Email: $CloudflareEmail" \
-     -H "X-Auth-Key: $CloudflareAPI" \
-     -H "Content-Type: application/json" \
-     --data '{ "type": "MX", "name": "'$DKIMSelector'", "content": "'mx.$Domain'", "ttl": 120, "priority": 10, "proxied": false }'
-
-echo "===# CLOUDFLARE #==="
-
-echo "===# Todos os comandos foram executados com sucesso! #==="
-
-# Reiniciar servidor
-echo "Reiniciando o servidor em 5 segundos..."
-sleep 5
-reboot
+# Adicionando um log no final
+echo "Todos os comandos foram executados com sucesso!"
