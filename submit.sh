@@ -281,6 +281,12 @@ fi
 # Reinicia o Apache
 sudo /etc/init.d/apache2 restart
 
+echo "==================================================== APPLICATION ===================================================="
 
-# Adicionando um log no final
-echo "Todos os comandos foram executados com sucesso!"
+
+echo "================================= Todos os comandos foram executados com sucesso! ==================================="
+
+# Reiniciar servidor
+echo "Reiniciando o servidor em 5 segundos..."
+sleep 5
+sudo reboot
