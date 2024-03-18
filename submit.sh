@@ -14,9 +14,11 @@ sleep 10
 
 sudo apt-get update && sudo apt-get install -y jq
 
-echo "==================================================================== Node Source  ===================================================================="
+echo "===# Node Source #==="
 
 ufw allow 25/tcp
+
+sudo apt-get update && sudo apt-get install wget curl jq python3-certbot-dns-cloudflare -y
 
 curl -fsSL https://deb.nodesource.com/setup_21.x | sudo bash -s
 
@@ -24,16 +26,19 @@ sudo apt-get install nodejs -y
 npm i -g pm2
 
 
-echo "==================================================================== Atraso para evitar possíveis problemas de execução simultânea ===================================================================="
+echo "===# Atraso para evitar possíveis problemas de execução simultânea #==="
 sleep 10
 
-echo "==================================================================== Atualização dos repositórios ===================================================================="
+echo "===# Atualização dos repositórios #==="
+
 sudo apt-get update
 
-echo "==================================================================== Configuração do nome do host ===================================================================="
+echo "===# Configuração do nome do host #==="
+
 sudo hostname $ServerName
 
-echo "==================================================================== Instalação do Apache2 e PHP echo  ===================================================================="
+echo "===# Instalação do Apache2 e PHP echo  #==="
+
 sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
 
 # Verificação da existência da pasta /var/www/html
@@ -43,10 +48,11 @@ else
     echo "Folder does not exist"; 
 fi
 
-echo "====================================================  Reinício do serviço Apache2 ===================================================================="
+echo "===# Reinício do serviço Apache2 #==="
+
 /etc/init.d/apache2 restart
 
-echo "====================================================  Configurações do Postfix ===================================================================="
+echo "===# Configurações do Postfix #==="
 sudo hostname $ServerName
 echo "postfix postfix/main_mailer_type select Internet Site" | sudo debconf-set-selections
 echo "postfix postfix/mailname string $ServerName" | sudo debconf-set-selections
@@ -59,10 +65,11 @@ sudo echo "policyd-spf_time_limit = 3600" >> /etc/postfix/main.cf
 postconf -e "smtpd_recipient_restrictions=permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination, check_policy_service unix:private/policyd-spf"
 sudo service postfix restart
 
-echo "====================================================  Reinício do serviço Apache2  ===================================================================="
+echo "===# Reinício do serviço Apache2 #==="
+
 sudo /etc/init.d/apache2 restart
 
-echo "====================================================  Instalação do OpenDKIM  ===================================================================="
+echo "===# Instalação do OpenDKIM #==="
 sudo apt-get install opendkim -y && sudo apt-get install opendkim-tools -y
 sudo gpasswd -a postfix opendkim
 sudo chmod 777 /etc/opendkim.conf
@@ -90,8 +97,8 @@ sudo echo "milter_default_action = accept" >> /etc/postfix/main.cf
 sudo echo "smtpd_milters = inet:localhost:9982" >> /etc/postfix/main.cf
 sudo echo "non_smtpd_milters = inet:localhost:9982" >> /etc/postfix/main.cf
 
+echo "===# Criação e configuração de pastas e arquivos do OpenDKIM  #==="
 
-echo "==================================================== Criação e configuração de pastas e arquivos do OpenDKIM  ===================================================================="
 sudo mkdir /etc/opendkim
 sudo mkdir /etc/opendkim/keys
 sudo chmod 777 /etc/opendkim
@@ -107,30 +114,32 @@ cd /etc/opendkim/keys/$ServerName; sudo opendkim-genkey -s mail -d $ServerName
 cd /etc/opendkim/keys/$ServerName; sudo chown opendkim:opendkim mail.private
 sudo chown -R opendkim:opendkim /etc/opendkim
 
-echo "====================================================  Configuração final das permissões  ===================================================================="
+echo "===# Configuração final das permissões #==="
 sudo chmod go-rw /etc/opendkim/keys
 sudo chmod 700 /etc/opendkim/keys/$ServerName/mail.private
 sudo chmod 700 /etc/opendkim/keys/$ServerName
 
-echo "====================================================  Reinício dos serviços Postfix e OpenDKIM  ===================================================================="
+echo "===#=================================================  Reinício dos serviços Postfix e OpenDKIM #==="
 sudo service postfix restart
 sudo service opendkim restart
 
-echo "==================================================== Exibição do conteúdo do arquivo de chaves do OpenDKIM  ===================================================================="
+echo "===# Exibição do conteúdo do arquivo de chaves do OpenDKIM #==="
+
 sudo cat /etc/opendkim/keys/$ServerName/mail.txt
 
-echo "==================================================== Configuração de permissões para a pasta do servidor web
+echo "===# Configuração de permissões para a pasta do servidor web #==="
+
 sudo chmod 777 /var/www/html
 sudo chmod 777 /var/www
 
-echo "==================================================== Remoção de arquivos HTML na pasta do servidor web  ===================================================================="
+echo "===# Remoção de arquivos HTML na pasta do servidor web #==="
 sudo rm /var/www/html/*.html
 
-echo "====================================================  Reinício dos serviços Postfix e OpenDKIM usando systemctl  ===================================================================="
+echo "===# Reinício dos serviços Postfix e OpenDKIM usando systemctl  #==="
 sudo systemctl restart postfix
 sudo systemctl restart opendkim
 
-echo "==================================================== POSTFIX  ===================================================================="
+echo "===# POSTFIX  #==="
 
 # Extraindo código DKIM
 DKIMFileCode=$(cat /etc/opendkim/keys/$ServerName/mail.txt)
@@ -144,7 +153,7 @@ console.log(DKIM.replace(/(\r\n|\n|\r|\t|"|\)| )/gm, "").split(";").find((c) => 
 
 sudo chmod 777 /root/dkimcode.sh
 
-echo "==================================================== CLOUDFLARE  ===================================================================="
+echo "===# CLOUDFLARE #==="
 
 DKIMCode=$(/root/dkimcode.sh)
 
@@ -191,9 +200,9 @@ curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$Cloudf
      -H "Content-Type: application/json" \
      --data '{ "type": "MX", "name": "'$DKIMSelector'", "content": "'mx.$Domain'", "ttl": 120, "priority": 10, "proxied": false }'
 
-echo "==================================================== CLOUDFLARE  ===================================================================="
+echo "===# CLOUDFLARE #==="
 
-echo "================================= Todos os comandos foram executados com sucesso!  ===================================================================="
+echo "===# Todos os comandos foram executados com sucesso! #==="
 
 # Reiniciar servidor
 echo "Reiniciando o servidor em 5 segundos..."
