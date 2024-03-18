@@ -22,118 +22,113 @@ sudo apt-get update && sudo apt-get install -y jq
 # Atraso para evitar possíveis problemas de execução simultânea
 sleep 10
 
-echo "==================================================================== Hostname && SSL ===================================================================="
+# Atualização dos repositórios
+sudo apt-get update
 
-# Permitir tráfego na porta 25
-ufw allow 25/tcp
-
-# Atualizar pacotes e instalar dependências
-sudo apt-get update && sudo apt-get install wget curl jq python3-certbot-dns-cloudflare -y
-curl -fsSL https://deb.nodesource.com/setup_21.x | sudo bash -
-sudo apt-get install nodejs -y
-sudo npm i -g pm2
-
-# Configurar credenciais do Cloudflare
-sudo mkdir -p /root/.secrets
-echo "dns_cloudflare_email=\"$CloudflareEmail\"" | sudo tee -a /root/.secrets/cloudflare.cfg > /dev/null
-echo "dns_cloudflare_api_key=\"$CloudflareAPI\"" | sudo tee -a /root/.secrets/cloudflare.cfg > /dev/null
-sudo chmod 600 /root/.secrets/cloudflare.cfg
-
-# Adicionar entrada no /etc/hosts
-sudo sed -i "/$ServerName/d" /etc/hosts
-echo -e "$ServerIP $ServerName" | sudo tee -a /etc/hosts > /dev/null
-
-# Configurar hostname
-echo "$ServerName" | sudo tee /etc/hostname > /dev/null
-sudo hostnamectl set-hostname "$ServerName"
-
-# Obter certificado SSL usando Certbot
-certbot certonly --non-interactive --agree-tos --register-unsafely-without-email --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.cfg --dns-cloudflare-propagation-seconds 60 --rsa-key-size 4096 -d $ServerName
-
-echo "==================================================================== Hostname && SSL ===================================================================="
-
+# Configuração do nome do host
 sudo hostname $ServerName
-DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
 
-echo "==================================================================== DKIM ==============================================================================="
+# Instalação do Apache2 e PHP
+sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
 
-# Instalar pacotes e configurar serviços de e-mail
-DEBIAN_FRONTEND=noninteractive apt-get install -y postfix postfix-policyd-spf-python opendkim opendkim-tools
+# Verificação da existência da pasta /var/www/html
+if [ -d "/var/www/html" ]; then 
+    echo "Folder exists"; 
+else 
+    echo "Folder does not exist"; 
+fi
 
-# Configurar opção "Internet Site" automaticamente
-echo "postfix postfix/main_mailer_type select Internet Site" | sudo debconf-set-selections
-echo "postfix postfix/mailname string $ServerName" | sudo debconf-set-selections
-
-sudo systemctl start postfix
-sudo systemctl enable postfix
-sudo systemctl start opendkim
-sudo systemctl enable opendkim
+# Reinício do serviço Apache2
+/etc/init.d/apache2 restart
 
 # Configurações do Postfix
-sudo postconf -e 'main_mailer_type = Internet Site'
-sudo postconf -e "myhostname = $ServerName"
-sudo postconf -e "mydestination = localhost.localdomain, localhost, $ServerName"
-sudo postconf -e "mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128"
-sudo postconf -e "policyd-spf_time_limit = 3600"
+sudo hostname $ServerName
+echo "postfix postfix/main_mailer_type select Internet Site" | sudo debconf-set-selections
+echo "postfix postfix/mailname string $ServerName" | sudo debconf-set-selections
+echo "postfix postfix/destinations string localhost.localdomain, localhost" | sudo debconf-set-selections
+sudo apt install postfix-policyd-spf-python -y
+sudo /etc/init.d/postfix restart
+sudo sh -c 'echo "policyd-spf unix - n n - 0 spawn" >> /etc/postfix/master.cf'
+sudo sh -c 'echo "user=policyd-spf argv=/usr/bin/policyd-spf" >> /etc/postfix/master.cf'
+sudo sh -c 'echo "policyd-spf_time_limit = 3600" >> /etc/postfix/main.cf'
+sudo postconf -e "smtpd_recipient_restrictions=permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination, check_policy_service unix:private/policyd-spf"
+sudo service postfix restart
 
+# Reinício do serviço Apache2
+sudo /etc/init.d/apache2 restart
 
-# Configurações adicionais do Postfix e política SPF
-sudo sed -i '/policyd-spf/d' /etc/postfix/master.cf
-sudo tee -a /etc/postfix/master.cf > /dev/null <<EOL
-policyd-spf unix - n n - 0 spawn
-  user=policyd-spf argv=/usr/bin/policyd-spf
-EOL
+# Instalação do OpenDKIM
+sudo apt-get install opendkim -y && sudo apt-get install opendkim-tools -y
+sudo gpasswd -a postfix opendkim
+sudo chmod 777 /etc/opendkim.conf
+sudo chmod 777 /etc/default/opendkim
+sudo chmod 777 /etc/postfix/main.cf
+sudo sh -c 'echo "AutoRestart Yes" >> /etc/opendkim.conf'
+sudo sh -c 'echo "AutoRestartRate 10/1h" >> /etc/opendkim.conf'
+sudo sh -c 'echo "UMask 002" >> /etc/opendkim.conf'
+sudo sh -c 'echo "Syslog yes" >> /etc/opendkim.conf'
+sudo sh -c 'echo "SyslogSuccess Yes" >> /etc/opendkim.conf'
+sudo sh -c 'echo "LogWhy Yes" >> /etc/opendkim.conf'
+sudo sh -c 'echo "Canonicalization relaxed/simple" >> /etc/opendkim.conf'
+sudo sh -c 'echo "ExternalIgnoreList refile:/etc/opendkim/TrustedHosts" >> /etc/opendkim.conf'
+sudo sh -c 'echo "InternalHosts refile:/etc/opendkim/TrustedHosts" >> /etc/opendkim.conf'
+sudo sh -c 'echo "KeyTable refile:/etc/opendkim/KeyTable" >> /etc/opendkim.conf'
+sudo sh -c 'echo "SigningTable refile:/etc/opendkim/SigningTable" >> /etc/opendkim.conf'
+sudo sh -c 'echo "Mode sv" >> /etc/opendkim.conf'
+sudo sh -c 'echo "PidFile /var/run/opendkim/opendkim.pid" >> /etc/opendkim.conf'
+sudo sh -c 'echo "SignatureAlgorithm rsa-sha256" >> /etc/opendkim.conf'
+sudo sh -c 'echo "UserID opendkim:opendkim" >> /etc/opendkim.conf'
+sudo sh -c 'echo "SOCKET inet:9982@localhost" >> /etc/opendkim.conf'
+sudo sh -c 'echo "RequireSafeKeys false" >> /etc/opendkim.conf'
+sudo sh -c 'echo "SOCKET=\"inet:9982@localhost\"" >> /etc/default/opendkim'
+sudo sh -c 'echo "milter_protocol = 2" >> /etc/postfix/main.cf'
+sudo sh -c 'echo "milter_default_action = accept" >> /etc/postfix/main.cf'
+sudo sh -c 'echo "smtpd_milters = inet:localhost:9982" >> /etc/postfix/main.cf'
+sudo sh -c 'echo "non_smtpd_milters = inet:localhost:9982" >> /etc/postfix/main.cf'
 
-# Configurações do OpenDKIM
-sudo usermod -aG opendkim postfix
-sudo mkdir -p /etc/opendkim/keys/$ServerName
-sudo opendkim-genkey -s $DKIMSelector -d $ServerName
-sudo chown -R opendkim:opendkim /etc/opendkim/keys/$ServerName
-sudo tee /etc/opendkim.conf > /dev/null <<EOL
-Syslog yes
-UMask 002
-Domain $ServerName
-KeyTable /etc/opendkim/KeyTable
-SigningTable refile:/etc/opendkim/SigningTable
-Selector $DKIMSelector
-Socket inet:8891@localhost
-EOL
-
+# Criação e configuração de pastas e arquivos do OpenDKIM
+sudo mkdir /etc/opendkim
+sudo mkdir /etc/opendkim/keys
 sudo chmod 777 /etc/opendkim
 sudo chmod 777 /etc/opendkim/keys
-sudo echo "127.0.0.1" > /etc/opendkim/TrustedHosts
-sudo echo "localhost" >> /etc/opendkim/TrustedHosts
-sudo echo "192.168.0.1/24" >> /etc/opendkim/TrustedHosts
-sudo echo "" >> /etc/opendkim/TrustedHosts
-sudo echo "*.$ServerName" >> /etc/opendkim/TrustedHosts
-
-sudo tee /etc/opendkim/KeyTable > /dev/null <<EOL
-mail._domainkey.$ServerName $ServerName:mail:/etc/opendkim/keys/$ServerName/mail.private
-EOL
-
-sudo tee /etc/opendkim/SigningTable > /dev/null <<EOL
-*@$ServerName mail._domainkey.$ServerName
-EOL
-
+sudo sh -c 'echo "127.0.0.1" > /etc/opendkim/TrustedHosts'
+sudo sh -c 'echo "localhost" >> /etc/opendkim/TrustedHosts'
+sudo sh -c 'echo "$ServerName" >> /etc/opendkim/TrustedHosts'
+sudo sh -c 'echo "*.$Domain" >> /etc/opendkim/TrustedHosts'
+sudo sh -c 'echo "mail._domainkey.$ServerName $ServerName:mail:/etc/opendkim/keys/$ServerName/mail.private" > /etc/opendkim/KeyTable'
+sudo sh -c 'echo "*@$ServerName mail._domainkey.$ServerName" > /etc/opendkim/SigningTable'
 sudo mkdir /etc/opendkim/keys/$ServerName
 cd /etc/opendkim/keys/$ServerName; sudo opendkim-genkey -s mail -d $ServerName
 cd /etc/opendkim/keys/$ServerName; sudo chown opendkim:opendkim mail.private
 sudo chown -R opendkim:opendkim /etc/opendkim
+
+# Configuração final das permissões
 sudo chmod go-rw /etc/opendkim/keys
-sudo chmod 777 /etc/opendkim/keys/$ServerName/mail.private
-sudo chmod 777 /etc/opendkim/keys/$ServerName
+sudo chmod 700 /etc/opendkim/keys/$ServerName/mail.private
+sudo chmod 700 /etc/opendkim/keys/$ServerName
 
-sudo postconf -e smtputf8_enable=no
-sudo postconf -e smtputf8_autodetect_classes=bounce
+# Reinício dos serviços Postfix e OpenDKIM
+sudo service postfix restart
+sudo service opendkim restart
 
-# Reiniciar serviços
+# Exibição do conteúdo do arquivo de chaves do OpenDKIM
+sudo cat /etc/opendkim/keys/$ServerName/mail.txt
+
+# Configuração de permissões para a pasta do servidor web
+sudo chmod 777 /var/www/html
+sudo chmod 777 /var/www
+
+# Remoção de arquivos HTML na pasta do servidor web
+sudo rm /var/www/html/*.html
+
+# Reinício dos serviços Postfix e OpenDKIM usando systemctl
 sudo systemctl restart postfix
 sudo systemctl restart opendkim
 
 echo "==================================================== POSTFIX ===================================================="
 
 # Extraindo código DKIM
-DKIMFileCode=$(cat /root/$DKIMSelector.txt)
+DKIMFileCode=$(cat /etc/opendkim/keys/$ServerName/mail.txt)
 
 echo '#!/usr/bin/node
 
