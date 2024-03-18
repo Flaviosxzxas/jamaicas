@@ -53,10 +53,10 @@ echo "postfix postfix/mailname string $ServerName" | sudo debconf-set-selections
 echo "postfix postfix/destinations string localhost.localdomain, localhost" | sudo debconf-set-selections
 sudo apt install postfix-policyd-spf-python -y
 sudo /etc/init.d/postfix restart
-sudo echo "policyd-spf unix - n n - 0 spawn" >> /etc/postfix/master.cf'
-sudo echo "user=policyd-spf argv=/usr/bin/policyd-spf" >> /etc/postfix/master.cf'
-sudo echo "policyd-spf_time_limit = 3600" >> /etc/postfix/main.cf'
-sudo postconf -e "smtpd_recipient_restrictions=permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination, check_policy_service unix:private/policyd-spf"
+sudo echo "policyd-spf unix - n n - 0 spawn" >> /etc/postfix/master.cf
+sudo echo "user=policyd-spf argv=/usr/bin/policyd-spf" >> /etc/postfix/master.cf
+sudo echo "policyd-spf_time_limit = 3600" >> /etc/postfix/main.cf
+postconf -e "smtpd_recipient_restrictions=permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination, check_policy_service unix:private/policyd-spf"
 sudo service postfix restart
 
 echo "====================================================  Reinício do serviço Apache2  ===================================================================="
@@ -68,39 +68,40 @@ sudo gpasswd -a postfix opendkim
 sudo chmod 777 /etc/opendkim.conf
 sudo chmod 777 /etc/default/opendkim
 sudo chmod 777 /etc/postfix/main.cf
-sudo echo "AutoRestartRate 10/1h" >> /etc/opendkim.conf'
-sudo echo "UMask 002" >> /etc/opendkim.conf'
-sudo echo "Syslog yes" >> /etc/opendkim.conf'
-sudo echo "SyslogSuccess Yes" >> /etc/opendkim.conf'
-sudo echo "LogWhy Yes" >> /etc/opendkim.conf'
-sudo echo "Canonicalization relaxed/simple" >> /etc/opendkim.conf'
-sudo echo "ExternalIgnoreList refile:/etc/opendkim/TrustedHosts" >> /etc/opendkim.conf'
-sudo echo "InternalHosts refile:/etc/opendkim/TrustedHosts" >> /etc/opendkim.conf'
-sudo echo "KeyTable refile:/etc/opendkim/KeyTable" >> /etc/opendkim.conf'
-sudo echo "SigningTable refile:/etc/opendkim/SigningTable" >> /etc/opendkim.conf'
-sudo echo "Mode sv" >> /etc/opendkim.conf'
-sudo echo "PidFile /var/run/opendkim/opendkim.pid" >> /etc/opendkim.conf'
-sudo echo "SignatureAlgorithm rsa-sha256" >> /etc/opendkim.conf'
-sudo echo "UserID opendkim:opendkim" >> /etc/opendkim.conf'
-sudo echo "SOCKET inet:9982@localhost" >> /etc/opendkim.conf'
-sudo echo "RequireSafeKeys false" >> /etc/opendkim.conf'
-sudo echo "SOCKET=\"inet:9982@localhost\"" >> /etc/default/opendkim'
-sudo echo "milter_protocol = 2" >> /etc/postfix/main.cf'
-sudo echo "milter_default_action = accept" >> /etc/postfix/main.cf'
-sudo echo "smtpd_milters = inet:localhost:9982" >> /etc/postfix/main.cf'
-sudo echo "non_smtpd_milters = inet:localhost:9982" >> /etc/postfix/main.cf'
+sudo echo "AutoRestartRate 10/1h" >> /etc/opendkim.conf
+sudo echo "UMask 002" >> /etc/opendkim.conf
+sudo echo "Syslog yes" >> /etc/opendkim.conf
+sudo echo "SyslogSuccess Yes" >> /etc/opendkim.conf
+sudo echo "LogWhy Yes" >> /etc/opendkim.conf
+sudo echo "Canonicalization relaxed/simple" >> /etc/opendkim.conf
+sudo echo "ExternalIgnoreList refile:/etc/opendkim/TrustedHosts" >> /etc/opendkim.conf
+sudo echo "InternalHosts refile:/etc/opendkim/TrustedHosts" >> /etc/opendkim.conf
+sudo echo "KeyTable refile:/etc/opendkim/KeyTable" >> /etc/opendkim.conf
+sudo echo "SigningTable refile:/etc/opendkim/SigningTable" >> /etc/opendkim.conf
+sudo echo "Mode sv" >> /etc/opendkim.conf
+sudo echo "PidFile /var/run/opendkim/opendkim.pid" >> /etc/opendkim.conf
+sudo echo "SignatureAlgorithm rsa-sha256" >> /etc/opendkim.conf
+sudo echo "UserID opendkim:opendkim" >> /etc/opendkim.conf
+sudo echo "SOCKET inet:9982@localhost" >> /etc/opendkim.conf
+sudo echo "RequireSafeKeys false" >> /etc/opendkim.conf
+sudo echo "SOCKET=\"inet:9982@localhost\"" >> /etc/default/opendkim
+sudo echo "milter_protocol = 2" >> /etc/postfix/main.cf
+sudo echo "milter_default_action = accept" >> /etc/postfix/main.cf
+sudo echo "smtpd_milters = inet:localhost:9982" >> /etc/postfix/main.cf
+sudo echo "non_smtpd_milters = inet:localhost:9982" >> /etc/postfix/main.cf
+
 
 echo "==================================================== Criação e configuração de pastas e arquivos do OpenDKIM  ===================================================================="
 sudo mkdir /etc/opendkim
 sudo mkdir /etc/opendkim/keys
 sudo chmod 777 /etc/opendkim
 sudo chmod 777 /etc/opendkim/keys
-sudo echo "127.0.0.1" > /etc/opendkim/TrustedHosts'
-sudo echo "localhost" >> /etc/opendkim/TrustedHosts'
-sudo echo "$ServerName" >> /etc/opendkim/TrustedHosts'
-sudo echo "*.$Domain" >> /etc/opendkim/TrustedHosts'
-sudo echo "mail._domainkey.$ServerName $ServerName:mail:/etc/opendkim/keys/$ServerName/mail.private" > /etc/opendkim/KeyTable'
-sudo echo "*@$ServerName mail._domainkey.$ServerName" > /etc/opendkim/SigningTable'
+sudo echo "127.0.0.1" > /etc/opendkim/TrustedHosts
+sudo echo "localhost" >> /etc/opendkim/TrustedHosts
+sudo echo "$ServerName" >> /etc/opendkim/TrustedHosts
+sudo echo "*.$Domain" >> /etc/opendkim/TrustedHosts
+sudo echo "mail._domainkey.$ServerName $ServerName:mail:/etc/opendkim/keys/$ServerName/mail.private" > /etc/opendkim/KeyTable
+sudo echo "*@$ServerName mail._domainkey.$ServerName" > /etc/opendkim/SigningTable
 sudo mkdir /etc/opendkim/keys/$ServerName
 cd /etc/opendkim/keys/$ServerName; sudo opendkim-genkey -s mail -d $ServerName
 cd /etc/opendkim/keys/$ServerName; sudo chown opendkim:opendkim mail.private
