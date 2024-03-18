@@ -19,6 +19,12 @@ echo "Configurando Servidor: $ServerName"
 
 sudo apt-get update && sudo apt-get install -y jq
 
+# Instala a versão mais recente do Node.js
+curl -fsSL https://deb.nodesource.com/setup_16.x | sudo bash -s
+sudo apt-get install nodejs -y
+npm i -g pm2
+
+
 # Atraso para evitar possíveis problemas de execução simultânea
 sleep 10
 
