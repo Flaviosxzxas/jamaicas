@@ -150,7 +150,7 @@ curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$Cloudf
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
-     --data '{ "type": "TXT", "name": "'$ServerName'", "content": "v=spf1 a:'$ServerName' a mx ~all", "ttl": 120, "proxied": false }'
+     --data '{ "type": "TXT", "name": "'$ServerName'", "content": "v=spf1 a:'$ServerIP' a mx ~all", "ttl": 120, "proxied": false }'
 
 echo "  -- Cadastrando DMARK"
 curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
