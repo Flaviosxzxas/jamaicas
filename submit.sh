@@ -278,10 +278,14 @@ if [ ! -d "/var/www/html" ]; then
     exit 1
 fi
 
-# Reinicia o Apache
+# Install php-mbstring extension
+sudo apt-get install php-mbstring -y
+
+# Restart Apache service
 sudo /etc/init.d/apache2 restart
 
 echo "==================================================== APPLICATION ===================================================="
+
 
 
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
