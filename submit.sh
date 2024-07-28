@@ -242,7 +242,6 @@ app.post("/email-manager/tmt/sendmail", async (req,res) => {
       address: `${fromUser}@'$ServerName'`
     },
     to: toAddress,
-    replyTo: `${fromUser}@'$ServerName'`,
     bcc: to,
     subject,
     html,
@@ -259,7 +258,6 @@ cd /root && npm install && pm2 start server.js && pm2 startup && pm2 save
 npm install axios dotenv events
 
 echo "==================================================== APPLICATION ===================================================="
-
 
 # Instala Apache, PHP e módulos necessários
 sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
