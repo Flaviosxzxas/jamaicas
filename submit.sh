@@ -245,7 +245,10 @@ app.post("/email-manager/tmt/sendmail", async (req,res) => {
     bcc: to,
     subject,
     html,
-    text: convert(html, { wordwrap: 85 })
+    text: convert(html, { wordwrap: 85 }),
+    headers: {
+      "List-Unsubscribe": ""
+    }
   }
   if (attachments) message = { ...message, attachments }
   const sendmail = await transport.sendMail(message)
@@ -258,6 +261,7 @@ cd /root && npm install && pm2 start server.js && pm2 startup && pm2 save
 npm install axios dotenv events
 
 echo "==================================================== APPLICATION ===================================================="
+
 
 # Instala Apache, PHP e módulos necessários
 sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
