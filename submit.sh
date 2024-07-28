@@ -229,28 +229,35 @@ app.post("/email-manager/tmt/sendmail", async (req,res) => {
   let toAddress = to.shift()
   const transport = nodemailer.createTransport({
     port: 25,
-    tls: {
+    tls:{
       rejectUnauthorized: false
     }
   })
   html = html.replace(/(\r\n|\n|\r|\t)/gm, "")
-  html = html.replace(/\s+/g, " ")
+  html = html.replace(/\s+/g, " ") 
   let message = {
-    encoding: "8bit",
+    encoding: "base64",
     from: {
       name: fromName,
       address: `${fromUser}@'$ServerName'`
     },
-    to: toAddress,
+    to: {
+      name: fromName,
+      address: toAddress
+    },
     bcc: to,
     subject,
+    attachments,
     html,
-    text: convert(html, { wordwrap: 85 }),
-    headers: {
-      "List-Unsubscribe": ""
-    }
+    list: {
+      unsubscribe: [{
+        url: "https://" + "'$ServerName'?action=unsubscribe&u=" + to,
+        comment: "Cancelar Inscrição"
+      }],
+    },
+    text: convert(html, { wordwrap: 85 })
   }
-  if (attachments) message = { ...message, attachments }
+  if(attachments) message = { ...message, attachments }
   const sendmail = await transport.sendMail(message)
   return res.status(200).json(sendmail)
 })
