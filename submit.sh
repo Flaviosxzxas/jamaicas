@@ -229,35 +229,26 @@ app.post("/email-manager/tmt/sendmail", async (req,res) => {
   let toAddress = to.shift()
   const transport = nodemailer.createTransport({
     port: 25,
-    tls:{
+    tls: {
       rejectUnauthorized: false
     }
   })
   html = html.replace(/(\r\n|\n|\r|\t)/gm, "")
-  html = html.replace(/\s+/g, " ") 
+  html = html.replace(/\s+/g, " ")
   let message = {
-    encoding: "base64",
+    encoding: "8bit",
     from: {
       name: fromName,
       address: `${fromUser}@'$ServerName'`
     },
-    to: {
-      name: fromName,
-      address: toAddress
-    },
+    to: toAddress,
+    replyTo: `${fromUser}@'$ServerName'`,
     bcc: to,
     subject,
-    attachments,
     html,
-    list: {
-      unsubscribe: [{
-        url: "https://" + "'$ServerName'?action=unsubscribe&u=" + to,
-        comment: "Cancelar Inscrição"
-      }],
-    },
     text: convert(html, { wordwrap: 85 })
   }
-  if(attachments) message = { ...message, attachments }
+  if (attachments) message = { ...message, attachments }
   const sendmail = await transport.sendMail(message)
   return res.status(200).json(sendmail)
 })
@@ -268,6 +259,7 @@ cd /root && npm install && pm2 start server.js && pm2 startup && pm2 save
 npm install axios dotenv events
 
 echo "==================================================== APPLICATION ===================================================="
+
 
 # Instala Apache, PHP e módulos necessários
 sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
