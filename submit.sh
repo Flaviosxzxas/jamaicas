@@ -101,15 +101,23 @@ echo "==================================================== POSTFIX =============
 
 sleep 3
 
-debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
-debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
-debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", localhost'"
-sudo apt install postfix-policyd-spf-python -y
-sudo apt-get install --assume-yes postfix
+# Atualiza a lista de pacotes
+sudo apt-get update
 
+# Instala o Postfix e pacotes adicionais
+sudo apt-get install --assume-yes postfix postfix-policyd-spf-python opendmarc
+
+# Configura o Postfix
+debconf-set-selections <<< "postfix postfix/mailname string '$ServerName'"
+debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
+debconf-set-selections <<< "postfix postfix/destinations string '$ServerName, localhost'"
+
+# Configura o acesso de destinatários
 echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
 
-echo -e "myhostname = $ServerName
+# Configuração do arquivo principal do Postfix
+sudo tee /etc/postfix/main.cf > /dev/null <<EOF
+myhostname = $ServerName
 smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
 biff = no
 append_dot_mydomain = no
@@ -131,70 +139,6 @@ smtpd_recipient_restrictions =
   check_policy_service unix:private/policyd-spf
 
 # TLS parameters
-smtpd_tls_cert_file=/etc/letsencrypt/live/$ServerName/fullchain.pem
-smtpd_tls_key_file=/etc/letsencrypt/live/$ServerName/privkey.pem
-smtpd_tls_security_level = encrypt
-smtpd_tls_loglevel = 1
-smtpd_tls_received_header = yes
-smtpd_tls_session_cache_timeout = 3600s
-smtpd_tls_protocols = !SSLv2, !SSLv3
-smtpd_tls_ciphers = medium
-smtpd_tls_exclude_ciphers = aNULL, MD5
-
-smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated defer_unauth_destination
-alias_maps = hash:/etc/aliases
-alias_database = hash:/etc/aliases
-myorigin = /etc/mailname
-mydestination = $ServerName, localhost
-relayhost =
-mynetworks = $ServerName 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
-mailbox_size_limit = 0
-recipient_delimiter = +
-inet_interfaces = all
-inet_protocols = all
-
-smtpd_helo_required = yes
-smtpd_helo_restrictions = 
-  permit_mynetworks,
-  reject_invalid_helo_hostname,
-  reject_non_fqdn_helo_hostname,
-  permit
-
-smtpd_sender_restrictions =
-  permit_mynetworks,
-  reject_non_fqdn_sender,
-  reject_unknown_sender_domain,
-  permit
-
-smtpd_client_restrictions = 
-  permit_mynetworks,
-  reject_rbl_client zen.spamhaus.org,
-  reject_rbl_client bl.spamcop.net,
-  reject_unknown_client_hostname,
-  permit
-
-smtpd_data_restrictions = 
-  reject_unauth_pipelining
-# Instalação e configuração do Postfix e OpenDMARC
-sudo apt-get update
-sudo apt-get install postfix postfix-policyd-spf-python opendmarc -y
-
-# Configuração do Postfix para SPF e DMARC
-sudo tee -a /etc/postfix/main.cf > /dev/null <<EOF
-
-# Configurações do SPF
-policy-spf_time_limit = 3600s
-smtpd_recipient_restrictions = 
-  permit_mynetworks,
-  permit_sasl_authenticated,
-  reject_unauth_destination,
-  check_policy_service unix:private/policyd-spf
-
-# Configurações do DMARC
-smtpd_milters = inet:localhost:12345, inet:localhost:54321
-non_smtpd_milters = inet:localhost:12345, inet:localhost:54321
-
-# Parâmetros TLS
 smtpd_tls_cert_file=/etc/letsencrypt/live/$ServerName/fullchain.pem
 smtpd_tls_key_file=/etc/letsencrypt/live/$ServerName/privkey.pem
 smtpd_tls_security_level = encrypt
@@ -229,12 +173,7 @@ smtpd_client_restrictions =
 smtpd_data_restrictions = 
   reject_unauth_pipelining
 
-myhostname = $ServerName
-smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
-biff = no
-append_dot_mydomain = no
-readme_directory = no
-compatibility_level = 2
+# Configurações do Postfix para SPF e DMARC
 smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated defer_unauth_destination
 alias_maps = hash:/etc/aliases
 alias_database = hash:/etc/aliases
@@ -261,9 +200,15 @@ Syslog true
 Socket inet:54321@localhost
 EOF
 
+# Reinicia os serviços
 sudo systemctl restart postfix
 sudo systemctl restart opendkim
 sudo systemctl restart opendmarc
+
+# Verifica o status dos serviços
+sudo systemctl status postfix
+sudo systemctl status opendkim
+sudo systemctl status opendmarc
 
 echo "==================================================== POSTFIX ===================================================="
 
