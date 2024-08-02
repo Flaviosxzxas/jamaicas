@@ -59,7 +59,7 @@ UMask                   002
 Syslog                  yes
 SyslogSuccess           Yes
 LogWhy                  Yes
-Canonicalization        relaxed/simple
+Canonicalization        relaxed/relaxed
 ExternalIgnoreList      refile:/etc/opendkim/TrustedHosts
 InternalHosts           refile:/etc/opendkim/TrustedHosts
 KeyTable                refile:/etc/opendkim/KeyTable
@@ -138,7 +138,7 @@ smtpd_tls_loglevel = 1
 smtpd_tls_received_header = yes
 smtpd_tls_session_cache_timeout = 3600s
 smtpd_tls_protocols = !SSLv2, !SSLv3
-smtpd_tls_ciphers = medium
+smtpd_tls_ciphers = ECDHE-RSA-AES256-GCM-SHA384:!aNULL:!MD5
 smtpd_tls_exclude_ciphers = aNULL, MD5
 
 smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated defer_unauth_destination
