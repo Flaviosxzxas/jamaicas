@@ -176,38 +176,26 @@ smtpd_data_restrictions =
   reject_unauth_pipelining" | sudo tee /etc/postfix/main.cf > /dev/null
 
 # Instalação e configuração do Postfix e OpenDMARC
-sudo apt-get install debconf-utils -y
+sudo apt-get install opendmarc -y
+sudo systemctl enable opendmarc
+sudo systemctl start opendmarc
 
-# Configuração automática para não configurar o banco de dados
-echo "opendmarc opendmarc/dbconfig-common/dbconfig-install boolean false" | sudo debconf-set-selections
+echo "Configurando banco de dados MySQL para OpenDMARC"
+
+# Configuração do banco de dados MySQL
+echo "opendmarc opendmarc/dbconfig-common/dbconfig-install boolean true" | sudo debconf-set-selections
 
 sudo apt-get install opendmarc -y
 
-# Configuração do Postfix para SPF e DMARC
-sudo tee -a /etc/postfix/main.cf > /dev/null <<EOF
+# Configuração do banco de dados MySQL
+sudo mysql -e "CREATE DATABASE dmarc_db;"
+sudo mysql -e "CREATE USER 'dmarc_user'@'localhost' IDENTIFIED BY 'dmarc_password';"
+sudo mysql -e "GRANT ALL PRIVILEGES ON dmarc_db.* TO 'dmarc_user'@'localhost';"
+sudo mysql -e "FLUSH PRIVILEGES;"
 
-# Configurações do DMARC
-smtpd_milters = inet:localhost:9982, inet:localhost:54321
-non_smtpd_milters = inet:localhost:9982, inet:localhost:54321
-EOF
+echo "Banco de dados MySQL configurado com sucesso."
 
-sudo systemctl enable postfix
-sudo systemctl restart postfix
-
-sudo tee /etc/opendmarc.conf > /dev/null <<EOF
-AuthservID $ServerName
-PidFile /var/run/opendmarc/opendmarc.pid
-RejectFailures true
-Socket inet:54321@localhost
-Syslog yes
-TrustedAuthservIDs $ServerName
-SignHeaders From,To,Subject,Date,Message-ID
-EOF
-
-sudo systemctl enable opendmarc
-sudo systemctl restart opendmarc
-
-echo "==================================================================== POSTFIX ========================================================================"
+echo "==================================================== POSTFIX ===================================================="
 
 echo "==================================================================== SPF ==============================================================================="
 
