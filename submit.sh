@@ -6,7 +6,7 @@ CloudflareEmail=$3
 
 Domain=$(echo $ServerName | cut -d "." -f2-)
 DKIMSelector=$(echo $ServerName | awk -F[.:] '{print $1}')
-ServerIP=$(wget -qO- http://ip-api.com/line\?fields=query)
+ServerIP=$(wget -qO- http://ip-api.com/line?fields=query)
 
 echo "Configuando Servidor: $ServerName"
 
@@ -121,7 +121,6 @@ milter_default_action = accept
 smtpd_milters = inet:localhost:9982, inet:localhost:54321
 non_smtpd_milters = inet:localhost:9982, inet:localhost:54321
 
-
 # SPF Settings
 policy-spf_time_limit = 3600s
 smtpd_recipient_restrictions = 
@@ -193,51 +192,24 @@ non_smtpd_milters = inet:localhost:9982, inet:localhost:54321
 EOF
 
 sudo systemctl enable postfix
-sudo systemctl start postfix
-
-sudo touch /etc/opendmarc.conf
-echo 'Syslog                   true
-Socket                   inet:54321@localhost
-UMask                    0002
-AuthservID               $ServerName
-TrustedAuthservIDs       $ServerName
-RejectFailures           false
-SPFSelfValidate          true
-MilterDebug              0
-IgnoreHosts              /etc/opendmarc/ignore.hosts
-HistoryFile              /var/run/opendmarc/opendmarc.dat' | sudo tee /etc/opendmarc.conf > /dev/null
-
-sudo touch /etc/opendmarc/ignore.hosts
-echo 'localhost
-127.0.0.1
-::1' | sudo tee /etc/opendmarc/ignore.hosts > /dev/null
-
-sudo systemctl enable opendmarc
-sudo systemctl start opendmarc
-
-# Configuração do OpenDKIM
-sudo touch /etc/default/opendkim
-echo 'SOCKET="inet:9982@localhost"' | sudo tee /etc/default/opendkim > /dev/null
-
-sudo touch /etc/opendkim.conf
-echo 'Syslog                  yes
-UMask                   0002
-Mode                    sv
-Canonicalization        relaxed/relaxed
-ExternalIgnoreList      refile:/etc/opendkim/TrustedHosts
-InternalHosts           refile:/etc/opendkim/TrustedHosts
-KeyTable                refile:/etc/opendkim/KeyTable
-SigningTable            refile:/etc/opendkim/SigningTable
-SignatureAlgorithm      rsa-sha256
-Socket                  inet:9982@localhost' | sudo tee /etc/opendkim.conf > /dev/null
-
-# Iniciando serviços
-sudo systemctl restart opendkim
 sudo systemctl restart postfix
 
+sudo tee /etc/opendmarc.conf > /dev/null <<EOF
+AuthservID $ServerName
+PidFile /var/run/opendmarc/opendmarc.pid
+RejectFailures true
+Socket inet:54321@localhost
+Syslog yes
+TrustedAuthservIDs $ServerName
+SignHeaders From,To,Subject,Date,Message-ID
+DMARC
 
+EOF
 
-echo "==================================================== POSTFIX ===================================================="
+sudo systemctl enable opendmarc
+sudo systemctl restart opendmarc
+
+echo "==================================================================== POSTFIX ===================================================="
 
 echo "==================================================== CLOUDFLARE ===================================================="
 
@@ -265,12 +237,18 @@ curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$Cloudf
      -H "Content-Type: application/json" \
      --data '{ "type": "TXT", "name": "'$ServerName'", "content": "v=spf1 a:'$ServerName' ~all", "ttl": 60, "proxied": false }'
 
-echo "  -- Cadastrando DMARK"
+echo "  -- Cadastrando DMARC"
+# Adicionando o registro DMARC com o nome correto
 curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
-     -H "X-Auth-Email: $CloudflareEmail" \
-     -H "X-Auth-Key: $CloudflareAPI" \
-     -H "Content-Type: application/json" \
-     --data '{ "type": "TXT", "name": "_dmarc.'$ServerName'", "content": "v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmark@'$ServerName'; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r", "ttl": 60, "proxied": false }'
+  -H "X-Auth-Email: $CloudflareEmail" \
+  -H "X-Auth-Key: $CloudflareAPI" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "type": "TXT",
+    "name": "_dmarc.'$ServerName'",
+    "content": "v=DMARC1; p=quarantine; rua=mailto:dmarc@'$ServerName'; ruf=mailto:dmarc@'$ServerName'; sp=none; aspf=r;",
+    "ttl": 3600
+  }'
 
 echo "  -- Cadastrando DKIM"
 curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
