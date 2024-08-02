@@ -137,9 +137,9 @@ smtpd_tls_security_level = encrypt
 smtpd_tls_loglevel = 1
 smtpd_tls_received_header = yes
 smtpd_tls_session_cache_timeout = 3600s
-smtpd_tls_protocols = !SSLv2, !SSLv3
-smtpd_tls_ciphers = ECDHE-RSA-AES256-GCM-SHA384:!aNULL:!MD5
-smtpd_tls_exclude_ciphers = aNULL, MD5
+smtpd_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
+smtpd_tls_ciphers = high
+tls_high_cipherlist = ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:!aNULL:!MD5
 
 smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated defer_unauth_destination
 alias_maps = hash:/etc/aliases
