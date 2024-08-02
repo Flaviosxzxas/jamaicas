@@ -6,7 +6,7 @@ CloudflareEmail=$3
 
 Domain=$(echo $ServerName | cut -d "." -f2-)
 DKIMSelector=$(echo $ServerName | awk -F[.:] '{print $1}')
-ServerIP=$(wget -qO- http://ip-api.com/line?fields=query)
+ServerIP=$(wget -qO- http://ip-api.com/line\?fields=query)
 
 echo "Configuando Servidor: $ServerName"
 
@@ -42,9 +42,9 @@ echo "==================================================================== Hostn
 
 echo "==================================================================== DKIM ==============================================================================="
 
-sudo apt-get install opendkim opendkim-tools -y
+sudo apt-get install opendkim -y && sudo apt-get install opendkim-tools -y
 sudo mkdir -p /etc/opendkim && sudo mkdir -p /etc/opendkim/keys
-sudo chmod -R 755 /etc/opendkim/ && sudo chown -R opendkim:opendkim /etc/opendkim/
+sudo chmod -R 777 /etc/opendkim/ && sudo chown -R opendkim:opendkim /etc/opendkim/
 
 echo "RUNDIR=/run/opendkim
 SOCKET=\"inet:9982@localhost\"
@@ -81,8 +81,8 @@ sudo opendkim-genkey -b 2048 -s $DKIMSelector -d $ServerName -D /etc/opendkim/ke
 echo "$DKIMSelector._domainkey.$ServerName $ServerName:$DKIMSelector:/etc/opendkim/keys/$DKIMSelector.private" | sudo tee /etc/opendkim/KeyTable > /dev/null
 echo "*@$ServerName $DKIMSelector._domainkey.$ServerName" | sudo tee /etc/opendkim/SigningTable > /dev/null
 
-sudo chmod -R 755 /etc/opendkim/ && sudo chown -R opendkim:opendkim /etc/opendkim/
-sudo cp /etc/opendkim/keys/$DKIMSelector.txt /root/dkim.txt && sudo chmod 755 /root/dkim.txt
+sudo chmod -R 777 /etc/opendkim/ && sudo chown -R opendkim:opendkim /etc/opendkim/
+sudo cp /etc/opendkim/keys/$DKIMSelector.txt /root/dkim.txt && sudo chmod -R 777 /root/dkim.txt
 
 DKIMFileCode=$(cat /root/dkim.txt)
 
@@ -93,7 +93,7 @@ console.log(DKIM.replace(/(\r\n|\n|\r|\t|"|\)| )/gm, "").split(";").find((c) => 
 
 '| sudo tee /root/dkimcode.sh > /dev/null
 
-sudo chmod 755 /root/dkimcode.sh
+sudo chmod 777 /root/dkimcode.sh
 
 echo "==================================================================== DKIM ==============================================================================="
 
@@ -101,10 +101,11 @@ echo "==================================================== POSTFIX =============
 
 sleep 3
 
-debconf-set-selections <<< "postfix postfix/mailname string '$ServerName'"
+debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
-debconf-set-selections <<< "postfix postfix/destinations string '$ServerName, localhost'"
-sudo apt-get install postfix postfix-policyd-spf-python -y
+debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", localhost'"
+sudo apt install postfix-policyd-spf-python -y
+sudo apt-get install --assume-yes postfix
 
 echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
 
@@ -118,8 +119,8 @@ compatibility_level = 2
 # DKIM Settings
 milter_protocol = 2
 milter_default_action = accept
-smtpd_milters = inet:localhost:9982, inet:localhost:54321
-non_smtpd_milters = inet:localhost:9982, inet:localhost:54321
+smtpd_milters = inet:localhost:9982
+non_smtpd_milters = inet:localhost:9982
 
 # SPF Settings
 policy-spf_time_limit = 3600s
@@ -174,49 +175,13 @@ smtpd_client_restrictions =
 
 smtpd_data_restrictions = 
   reject_unauth_pipelining" | sudo tee /etc/postfix/main.cf > /dev/null
+  
+sleep 3
 
-# Instalação e configuração do Postfix e OpenDMARC
-sudo apt-get install opendmarc -y
-sudo systemctl enable opendmarc
-sudo systemctl start opendmarc
-
-echo "Configurando banco de dados MySQL para OpenDMARC"
-
-# Configuração do banco de dados MySQL
-echo "opendmarc opendmarc/dbconfig-common/dbconfig-install boolean true" | sudo debconf-set-selections
-
-sudo apt-get install opendmarc -y
-
-# Configuração do banco de dados MySQL
-sudo mysql -e "CREATE DATABASE dmarc_db;"
-sudo mysql -e "CREATE USER 'dmarc_user'@'localhost' IDENTIFIED BY 'dmarc_password';"
-sudo mysql -e "GRANT ALL PRIVILEGES ON dmarc_db.* TO 'dmarc_user'@'localhost';"
-sudo mysql -e "FLUSH PRIVILEGES;"
-
-echo "Banco de dados MySQL configurado com sucesso."
+service opendkim restart
+service postfix restart
 
 echo "==================================================== POSTFIX ===================================================="
-
-echo "==================================================================== SPF ==============================================================================="
-
-sudo tee /etc/postfix/virtual > /dev/null <<EOF
-$ServerName $ServerName
-EOF
-
-sudo postmap /etc/postfix/virtual
-sudo systemctl restart postfix
-
-echo "==================================================================== SPF ==============================================================================="
-
-echo "==================================================================== DMARC ==============================================================================="
-
-sudo mkdir -p /etc/dmarc && sudo touch /etc/dmarc/policies
-
-echo "v=DMARC1; p=none; rua=mailto:postmaster@$ServerName; ruf=mailto:postmaster@$ServerName; fo=1;" | sudo tee /etc/dmarc/policies/$ServerName.txt > /dev/null
-
-sudo apt-get install mailutils -y
-
-echo "==================================================================== DMARC ==============================================================================="
 
 echo "==================================================== CLOUDFLARE ===================================================="
 
@@ -244,18 +209,12 @@ curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$Cloudf
      -H "Content-Type: application/json" \
      --data '{ "type": "TXT", "name": "'$ServerName'", "content": "v=spf1 a:'$ServerName' ~all", "ttl": 60, "proxied": false }'
 
-echo "  -- Cadastrando DMARC"
-# Adicionando o registro DMARC com o nome correto
+echo "  -- Cadastrando DMARK"
 curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
-  -H "X-Auth-Email: $CloudflareEmail" \
-  -H "X-Auth-Key: $CloudflareAPI" \
-  -H "Content-Type: application/json" \
-  --data '{
-    "type": "TXT",
-    "name": "_dmarc.'$ServerName'",
-    "content": "v=DMARC1; p=quarantine; rua=mailto:dmarc@'$ServerName'; ruf=mailto:dmarc@'$ServerName'; sp=none; aspf=r;",
-    "ttl": 3600
-  }'
+     -H "X-Auth-Email: $CloudflareEmail" \
+     -H "X-Auth-Key: $CloudflareAPI" \
+     -H "Content-Type: application/json" \
+     --data '{ "type": "TXT", "name": "_dmarc.'$ServerName'", "content": "v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmark@'$ServerName'; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r", "ttl": 60, "proxied": false }'
 
 echo "  -- Cadastrando DKIM"
 curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
