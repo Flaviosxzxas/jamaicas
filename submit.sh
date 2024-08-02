@@ -202,14 +202,33 @@ Socket inet:54321@localhost
 Syslog yes
 TrustedAuthservIDs $ServerName
 SignHeaders From,To,Subject,Date,Message-ID
-DMARC
-
 EOF
 
 sudo systemctl enable opendmarc
 sudo systemctl restart opendmarc
 
-echo "==================================================================== POSTFIX ===================================================="
+echo "==================================================================== POSTFIX ========================================================================"
+
+echo "==================================================================== SPF ==============================================================================="
+
+sudo tee /etc/postfix/virtual > /dev/null <<EOF
+$ServerName $ServerName
+EOF
+
+sudo postmap /etc/postfix/virtual
+sudo systemctl restart postfix
+
+echo "==================================================================== SPF ==============================================================================="
+
+echo "==================================================================== DMARC ==============================================================================="
+
+sudo mkdir -p /etc/dmarc && sudo touch /etc/dmarc/policies
+
+echo "v=DMARC1; p=none; rua=mailto:postmaster@$ServerName; ruf=mailto:postmaster@$ServerName; fo=1;" | sudo tee /etc/dmarc/policies/$ServerName.txt > /dev/null
+
+sudo apt-get install mailutils -y
+
+echo "==================================================================== DMARC ==============================================================================="
 
 echo "==================================================== CLOUDFLARE ===================================================="
 
