@@ -59,7 +59,7 @@ UMask                   002
 Syslog                  yes
 SyslogSuccess           Yes
 LogWhy                  Yes
-Canonicalization        relaxed/simple
+Canonicalization        relaxed/relaxed
 ExternalIgnoreList      refile:/etc/opendkim/TrustedHosts
 InternalHosts           refile:/etc/opendkim/TrustedHosts
 KeyTable                refile:/etc/opendkim/KeyTable
@@ -119,23 +119,28 @@ compatibility_level = 2
 # DKIM Settings
 milter_protocol = 2
 milter_default_action = accept
-smtpd_milters = inet:localhost:9982
-non_smtpd_milters = inet:localhost:9982
+smtpd_milters = inet:localhost:12345, inet:localhost:54321
+non_smtpd_milters = inet:localhost:12345, inet:localhost:54321
 
-# Login without Username and Password
-smtpd_recipient_restrictions =
+# SPF Settings
+policy-spf_time_limit = 3600s
+smtpd_recipient_restrictions = 
   permit_mynetworks,
-  check_recipient_access hash:/etc/postfix/access.recipients,
   permit_sasl_authenticated,
-  reject_unauth_destination
+  reject_unauth_destination,
+  check_policy_service unix:private/policyd-spf
 
 # TLS parameters
 smtpd_tls_cert_file=/etc/letsencrypt/live/$ServerName/fullchain.pem
 smtpd_tls_key_file=/etc/letsencrypt/live/$ServerName/privkey.pem
-smtpd_tls_security_level=may
-smtp_tls_CApath=/etc/ssl/certs
-smtp_tls_security_level=may
-smtp_tls_session_cache_database = btree:\${data_directory}/smtp_scache
+smtpd_tls_security_level = encrypt
+smtpd_tls_loglevel = 1
+smtpd_tls_received_header = yes
+smtpd_tls_session_cache_timeout = 3600s
+smtpd_tls_protocols = !SSLv2, !SSLv3
+smtpd_tls_ciphers = medium
+smtpd_tls_exclude_ciphers = aNULL, MD5
+
 smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated defer_unauth_destination
 alias_maps = hash:/etc/aliases
 alias_database = hash:/etc/aliases
@@ -146,12 +151,119 @@ mynetworks = $ServerName 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
 mailbox_size_limit = 0
 recipient_delimiter = +
 inet_interfaces = all
-inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
+inet_protocols = all
 
-sleep 3
+smtpd_helo_required = yes
+smtpd_helo_restrictions = 
+  permit_mynetworks,
+  reject_invalid_helo_hostname,
+  reject_non_fqdn_helo_hostname,
+  permit
 
-service opendkim restart
-service postfix restart
+smtpd_sender_restrictions =
+  permit_mynetworks,
+  reject_non_fqdn_sender,
+  reject_unknown_sender_domain,
+  permit
+
+smtpd_client_restrictions = 
+  permit_mynetworks,
+  reject_rbl_client zen.spamhaus.org,
+  reject_rbl_client bl.spamcop.net,
+  reject_unknown_client_hostname,
+  permit
+
+smtpd_data_restrictions = 
+  reject_unauth_pipelining
+# Instalação e configuração do Postfix e OpenDMARC
+sudo apt-get update
+sudo apt-get install postfix postfix-policyd-spf-python opendmarc -y
+
+# Configuração do Postfix para SPF e DMARC
+sudo tee -a /etc/postfix/main.cf > /dev/null <<EOF
+
+# Configurações do SPF
+policy-spf_time_limit = 3600s
+smtpd_recipient_restrictions = 
+  permit_mynetworks,
+  permit_sasl_authenticated,
+  reject_unauth_destination,
+  check_policy_service unix:private/policyd-spf
+
+# Configurações do DMARC
+smtpd_milters = inet:localhost:12345, inet:localhost:54321
+non_smtpd_milters = inet:localhost:12345, inet:localhost:54321
+
+# Parâmetros TLS
+smtpd_tls_cert_file=/etc/letsencrypt/live/$ServerName/fullchain.pem
+smtpd_tls_key_file=/etc/letsencrypt/live/$ServerName/privkey.pem
+smtpd_tls_security_level = encrypt
+smtpd_tls_loglevel = 1
+smtpd_tls_received_header = yes
+smtpd_tls_session_cache_timeout = 3600s
+smtpd_tls_protocols = !SSLv2, !SSLv3
+smtpd_tls_ciphers = medium
+smtpd_tls_exclude_ciphers = aNULL, MD5
+
+# Configurações adicionais de segurança
+smtpd_helo_required = yes
+smtpd_helo_restrictions = 
+  permit_mynetworks,
+  reject_invalid_helo_hostname,
+  reject_non_fqdn_helo_hostname,
+  permit
+
+smtpd_sender_restrictions =
+  permit_mynetworks,
+  reject_non_fqdn_sender,
+  reject_unknown_sender_domain,
+  permit
+
+smtpd_client_restrictions = 
+  permit_mynetworks,
+  reject_rbl_client zen.spamhaus.org,
+  reject_rbl_client bl.spamcop.net,
+  reject_unknown_client_hostname,
+  permit
+
+smtpd_data_restrictions = 
+  reject_unauth_pipelining
+
+myhostname = $ServerName
+smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
+biff = no
+append_dot_mydomain = no
+readme_directory = no
+compatibility_level = 2
+smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated defer_unauth_destination
+alias_maps = hash:/etc/aliases
+alias_database = hash:/etc/aliases
+myorigin = /etc/mailname
+mydestination = $ServerName, localhost
+relayhost =
+mynetworks = $ServerName 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
+mailbox_size_limit = 0
+recipient_delimiter = +
+inet_interfaces = all
+inet_protocols = all
+EOF
+
+# Criação do arquivo de configuração do policyd-spf
+sudo tee /etc/postfix-policyd-spf-python/policyd-spf.conf > /dev/null <<EOF
+HELO_reject = False
+Mail_From_reject = False
+Rcpt_To_reject = True
+EOF
+
+# Configuração do OpenDMARC
+sudo tee /etc/opendmarc.conf > /dev/null <<EOF
+Syslog true
+Socket inet:54321@localhost
+EOF
+
+sudo systemctl restart postfix
+sudo systemctl restart opendkim
+sudo systemctl restart opendmarc
 
 echo "==================================================== POSTFIX ===================================================="
 
