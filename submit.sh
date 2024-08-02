@@ -107,10 +107,13 @@ sudo apt-get update
 # Instala o Postfix e pacotes adicionais
 sudo apt-get install --assume-yes postfix postfix-policyd-spf-python opendmarc
 
-# Configura o Postfix
-debconf-set-selections <<< "postfix postfix/mailname string '$ServerName'"
-debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
-debconf-set-selections <<< "postfix postfix/destinations string '$ServerName, localhost'"
+# Configura o Postfix sem interação
+sudo debconf-set-selections <<< "postfix postfix/mailname string $ServerName"
+sudo debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
+sudo debconf-set-selections <<< "postfix postfix/destinations string '$ServerName, localhost'"
+
+# Reconfigura o Postfix para aplicar as configurações
+sudo dpkg-reconfigure -f noninteractive postfix
 
 # Configura o acesso de destinatários
 echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
@@ -209,7 +212,6 @@ sudo systemctl restart opendmarc
 sudo systemctl status postfix
 sudo systemctl status opendkim
 sudo systemctl status opendmarc
-
 echo "==================================================== POSTFIX ===================================================="
 
 echo "==================================================== CLOUDFLARE ===================================================="
