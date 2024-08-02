@@ -42,9 +42,9 @@ echo "==================================================================== Hostn
 
 echo "==================================================================== DKIM ==============================================================================="
 
-sudo apt-get install opendkim -y && sudo apt-get install opendkim-tools -y
+sudo apt-get install opendkim opendkim-tools -y
 sudo mkdir -p /etc/opendkim && sudo mkdir -p /etc/opendkim/keys
-sudo chmod -R 777 /etc/opendkim/ && sudo chown -R opendkim:opendkim /etc/opendkim/
+sudo chmod -R 755 /etc/opendkim/ && sudo chown -R opendkim:opendkim /etc/opendkim/
 
 echo "RUNDIR=/run/opendkim
 SOCKET=\"inet:9982@localhost\"
@@ -81,8 +81,8 @@ sudo opendkim-genkey -b 2048 -s $DKIMSelector -d $ServerName -D /etc/opendkim/ke
 echo "$DKIMSelector._domainkey.$ServerName $ServerName:$DKIMSelector:/etc/opendkim/keys/$DKIMSelector.private" | sudo tee /etc/opendkim/KeyTable > /dev/null
 echo "*@$ServerName $DKIMSelector._domainkey.$ServerName" | sudo tee /etc/opendkim/SigningTable > /dev/null
 
-sudo chmod -R 777 /etc/opendkim/ && sudo chown -R opendkim:opendkim /etc/opendkim/
-sudo cp /etc/opendkim/keys/$DKIMSelector.txt /root/dkim.txt && sudo chmod -R 777 /root/dkim.txt
+sudo chmod -R 755 /etc/opendkim/ && sudo chown -R opendkim:opendkim /etc/opendkim/
+sudo cp /etc/opendkim/keys/$DKIMSelector.txt /root/dkim.txt && sudo chmod 755 /root/dkim.txt
 
 DKIMFileCode=$(cat /root/dkim.txt)
 
@@ -93,7 +93,7 @@ console.log(DKIM.replace(/(\r\n|\n|\r|\t|"|\)| )/gm, "").split(";").find((c) => 
 
 '| sudo tee /root/dkimcode.sh > /dev/null
 
-sudo chmod 777 /root/dkimcode.sh
+sudo chmod 755 /root/dkimcode.sh
 
 echo "==================================================================== DKIM ==============================================================================="
 
@@ -101,26 +101,14 @@ echo "==================================================== POSTFIX =============
 
 sleep 3
 
-# Atualiza a lista de pacotes
-sudo apt-get update
+debconf-set-selections <<< "postfix postfix/mailname string '$ServerName'"
+debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
+debconf-set-selections <<< "postfix postfix/destinations string '$ServerName, localhost'"
+sudo apt-get install postfix postfix-policyd-spf-python -y
 
-# Instala o Postfix e pacotes adicionais
-sudo apt-get install --assume-yes postfix postfix-policyd-spf-python opendmarc
-
-# Configura o Postfix sem interação
-sudo debconf-set-selections <<< "postfix postfix/mailname string $ServerName"
-sudo debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
-sudo debconf-set-selections <<< "postfix postfix/destinations string '$ServerName, localhost'"
-
-# Reconfigura o Postfix para aplicar as configurações
-sudo dpkg-reconfigure -f noninteractive postfix
-
-# Configura o acesso de destinatários
 echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
 
-# Configuração do arquivo principal do Postfix
-sudo tee /etc/postfix/main.cf > /dev/null <<EOF
-myhostname = $ServerName
+echo -e "myhostname = $ServerName
 smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
 biff = no
 append_dot_mydomain = no
@@ -152,7 +140,18 @@ smtpd_tls_protocols = !SSLv2, !SSLv3
 smtpd_tls_ciphers = medium
 smtpd_tls_exclude_ciphers = aNULL, MD5
 
-# Configurações adicionais de segurança
+smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated defer_unauth_destination
+alias_maps = hash:/etc/aliases
+alias_database = hash:/etc/aliases
+myorigin = /etc/mailname
+mydestination = $ServerName, localhost
+relayhost =
+mynetworks = $ServerName 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
+mailbox_size_limit = 0
+recipient_delimiter = +
+inet_interfaces = all
+inet_protocols = all
+
 smtpd_helo_required = yes
 smtpd_helo_restrictions = 
   permit_mynetworks,
@@ -174,44 +173,64 @@ smtpd_client_restrictions =
   permit
 
 smtpd_data_restrictions = 
-  reject_unauth_pipelining
+  reject_unauth_pipelining" | sudo tee /etc/postfix/main.cf > /dev/null
 
-# Configurações do Postfix para SPF e DMARC
-smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated defer_unauth_destination
-alias_maps = hash:/etc/aliases
-alias_database = hash:/etc/aliases
-myorigin = /etc/mailname
-mydestination = $ServerName, localhost
-relayhost =
-mynetworks = $ServerName 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
-mailbox_size_limit = 0
-recipient_delimiter = +
-inet_interfaces = all
-inet_protocols = all
+# Instalação e configuração do Postfix e OpenDMARC
+sudo apt-get install opendmarc -y
+
+# Configuração do Postfix para SPF e DMARC
+sudo tee -a /etc/postfix/main.cf > /dev/null <<EOF
+
+# Configurações do DMARC
+smtpd_milters = inet:localhost:12345, inet:localhost:54321
+non_smtpd_milters = inet:localhost:12345, inet:localhost:54321
 EOF
 
-# Criação do arquivo de configuração do policyd-spf
-sudo tee /etc/postfix-policyd-spf-python/policyd-spf.conf > /dev/null <<EOF
-HELO_reject = False
-Mail_From_reject = False
-Rcpt_To_reject = True
-EOF
+sudo systemctl enable postfix
+sudo systemctl start postfix
 
-# Configuração do OpenDMARC
-sudo tee /etc/opendmarc.conf > /dev/null <<EOF
-Syslog true
-Socket inet:54321@localhost
-EOF
+sudo touch /etc/opendmarc.conf
+echo 'Syslog                   true
+Socket                   inet:54321@localhost
+UMask                    0002
+AuthservID               $ServerName
+TrustedAuthservIDs       $ServerName
+RejectFailures           false
+SPFSelfValidate          true
+MilterDebug              0
+IgnoreHosts              /etc/opendmarc/ignore.hosts
+HistoryFile              /var/run/opendmarc/opendmarc.dat' | sudo tee /etc/opendmarc.conf > /dev/null
 
-# Reinicia os serviços
-sudo systemctl restart postfix
+sudo touch /etc/opendmarc/ignore.hosts
+echo 'localhost
+127.0.0.1
+::1' | sudo tee /etc/opendmarc/ignore.hosts > /dev/null
+
+sudo systemctl enable opendmarc
+sudo systemctl start opendmarc
+
+# Configuração do OpenDKIM
+sudo touch /etc/default/opendkim
+echo 'SOCKET="inet:12345@localhost"' | sudo tee /etc/default/opendkim > /dev/null
+
+sudo touch /etc/opendkim.conf
+echo 'Syslog                  yes
+UMask                   0002
+Mode                    sv
+Canonicalization        relaxed/relaxed
+ExternalIgnoreList      refile:/etc/opendkim/TrustedHosts
+InternalHosts           refile:/etc/opendkim/TrustedHosts
+KeyTable                refile:/etc/opendkim/KeyTable
+SigningTable            refile:/etc/opendkim/SigningTable
+SignatureAlgorithm      rsa-sha256
+Socket                  inet:12345@localhost' | sudo tee /etc/opendkim.conf > /dev/null
+
+# Iniciando serviços
 sudo systemctl restart opendkim
-sudo systemctl restart opendmarc
+sudo systemctl restart postfix
 
-# Verifica o status dos serviços
-sudo systemctl status postfix
-sudo systemctl status opendkim
-sudo systemctl status opendmarc
+
+
 echo "==================================================== POSTFIX ===================================================="
 
 echo "==================================================== CLOUDFLARE ===================================================="
@@ -327,7 +346,6 @@ cd /root && npm install && pm2 start server.js && pm2 startup && pm2 save
 npm install axios dotenv events
 
 echo "==================================================== APPLICATION ===================================================="
-
 
 # Instala Apache, PHP e módulos necessários
 sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
