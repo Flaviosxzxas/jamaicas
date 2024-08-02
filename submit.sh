@@ -118,8 +118,9 @@ compatibility_level = 2
 # DKIM Settings
 milter_protocol = 2
 milter_default_action = accept
-smtpd_milters = inet:localhost:12345, inet:localhost:54321
-non_smtpd_milters = inet:localhost:12345, inet:localhost:54321
+smtpd_milters = inet:localhost:9982, inet:localhost:54321
+non_smtpd_milters = inet:localhost:9982, inet:localhost:54321
+
 
 # SPF Settings
 policy-spf_time_limit = 3600s
@@ -176,14 +177,19 @@ smtpd_data_restrictions =
   reject_unauth_pipelining" | sudo tee /etc/postfix/main.cf > /dev/null
 
 # Instalação e configuração do Postfix e OpenDMARC
+sudo apt-get install debconf-utils -y
+
+# Configuração automática para não configurar o banco de dados
+echo "opendmarc opendmarc/dbconfig-common/dbconfig-install boolean false" | sudo debconf-set-selections
+
 sudo apt-get install opendmarc -y
 
 # Configuração do Postfix para SPF e DMARC
 sudo tee -a /etc/postfix/main.cf > /dev/null <<EOF
 
 # Configurações do DMARC
-smtpd_milters = inet:localhost:12345, inet:localhost:54321
-non_smtpd_milters = inet:localhost:12345, inet:localhost:54321
+smtpd_milters = inet:localhost:9982, inet:localhost:54321
+non_smtpd_milters = inet:localhost:9982, inet:localhost:54321
 EOF
 
 sudo systemctl enable postfix
@@ -211,7 +217,7 @@ sudo systemctl start opendmarc
 
 # Configuração do OpenDKIM
 sudo touch /etc/default/opendkim
-echo 'SOCKET="inet:12345@localhost"' | sudo tee /etc/default/opendkim > /dev/null
+echo 'SOCKET="inet:9982@localhost"' | sudo tee /etc/default/opendkim > /dev/null
 
 sudo touch /etc/opendkim.conf
 echo 'Syslog                  yes
@@ -223,7 +229,7 @@ InternalHosts           refile:/etc/opendkim/TrustedHosts
 KeyTable                refile:/etc/opendkim/KeyTable
 SigningTable            refile:/etc/opendkim/SigningTable
 SignatureAlgorithm      rsa-sha256
-Socket                  inet:12345@localhost' | sudo tee /etc/opendkim.conf > /dev/null
+Socket                  inet:9982@localhost' | sudo tee /etc/opendkim.conf > /dev/null
 
 # Iniciando serviços
 sudo systemctl restart opendkim
