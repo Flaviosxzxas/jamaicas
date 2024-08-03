@@ -225,24 +225,30 @@ sudo systemctl restart opendmarc
 
 echo "==================================================== POSTFIX ===================================================="
 
-#!/bin/bash
-
-#!/bin/bash
-
 echo "==================================================== CLOUDFLARE ===================================================="
 
 DKIMCode=$(/root/dkimcode.sh)
 sleep 5
+
+log_response() {
+    local response=$1
+    local log_file=$2
+    echo "$response" >> "/root/$log_file"
+}
 
 # Função para verificar a existência de um registro DNS
 check_dns_record() {
     local record_type=$1
     local record_name=$2
 
-    local result=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records?type=$record_type&name=$record_name" \
+    local response=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records?type=$record_type&name=$record_name" \
       -H "X-Auth-Email: $CloudflareEmail" \
       -H "X-Auth-Key: $CloudflareAPI" \
-      -H "Content-Type: application/json" | jq -r '.result | .[0] | select(.name=="'$record_name'") | .id')
+      -H "Content-Type: application/json")
+    
+    local result=$(echo "$response" | jq -r '.result | .[0] | select(.name=="'$record_name'") | .id')
+
+    log_response "$response" "check_dns_record_${record_type}_${record_name}.log"
 
     if [ -n "$result" ]; then
         return 0  # Record exists
@@ -267,11 +273,13 @@ register_dns_record() {
 
     while [ $attempt -le $max_attempts ]; do
         echo "Tentando registrar $record_type $record_name (Tentativa $attempt de $max_attempts)..."
-        curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+        local response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
              -H "X-Auth-Email: $CloudflareEmail" \
              -H "X-Auth-Key: $CloudflareAPI" \
              -H "Content-Type: application/json" \
-             --data "{ \"type\": \"$record_type\", \"name\": \"$record_name\", \"content\": \"$record_content\", \"ttl\": 120, $extra_data }"
+             --data "{ \"type\": \"$record_type\", \"name\": \"$record_name\", \"content\": \"$record_content\", \"ttl\": 120, $extra_data }")
+
+        log_response "$response" "register_dns_record_${record_type}_${record_name}_attempt_${attempt}.log"
 
         sleep 5  # Esperar um pouco antes de verificar
 
@@ -311,6 +319,7 @@ echo "  -- Cadastrando MX"
 register_dns_record "MX" "$ServerName" "$ServerName" "\"priority\": 10, \"proxied\": false"
 
 echo "==================================================== CLOUDFLARE ===================================================="
+
 
 
 
