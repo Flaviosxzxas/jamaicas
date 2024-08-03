@@ -221,10 +221,6 @@ sudo systemctl restart postfix
 sudo systemctl restart opendkim
 sudo systemctl restart opendmarc
 
-# Verifica o status dos serviços
-sudo systemctl status postfix
-sudo systemctl status opendkim
-sudo systemctl status opendmarc
 echo "==================================================== POSTFIX ===================================================="
 
 echo "==================================================== CLOUDFLARE ===================================================="
