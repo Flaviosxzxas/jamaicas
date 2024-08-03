@@ -4,7 +4,7 @@ ServerName=$1
 CloudflareAPI=$2
 CloudflareEmail=$3
 
-=$(echo $ServerName | cut -d "." -f2-)
+Domain=$(echo $ServerName | cut -d "." -f2-)
 DKIMSelector=$(echo $ServerName | awk -F[.:] '{print $1}')
 ServerIP=$(wget -qO- http://ip-api.com/line\?fields=query)
 
