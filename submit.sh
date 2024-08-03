@@ -216,9 +216,6 @@ Socket inet:54321@localhost
 PidFile /run/opendmarc/opendmarc.pid
 EOF
 
-# Atualiza os arquivos de configuração do systemd
-sudo systemctl daemon-reload
-
 # Reinicia os serviços
 sudo systemctl restart postfix
 sudo systemctl restart opendkim
