@@ -84,6 +84,10 @@ sudo opendkim-genkey -b 2048 -s $DKIMSelector -d $ServerName -D /etc/opendkim/ke
 echo "$DKIMSelector._key.$ServerName $ServerName:$DKIMSelector:/etc/opendkim/keys/$DKIMSelector.private" | sudo tee /etc/opendkim/KeyTable > /dev/null
 echo "*@$ServerName $DKIMSelector._key.$ServerName" | sudo tee /etc/opendkim/SigningTable > /dev/null
 
+# Ajuste de permissões e propriedade após a criação das chaves
+sudo chmod 600 /etc/opendkim/keys/*
+sudo chown opendkim:opendkim /etc/opendkim/keys/*
+
 sudo chmod -R 777 /etc/opendkim/ && sudo chown -R opendkim:opendkim /etc/opendkim/
 sudo cp /etc/opendkim/keys/$DKIMSelector.txt /root/dkim.txt && sudo chmod -R 777 /root/dkim.txt
 
