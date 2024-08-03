@@ -125,7 +125,6 @@ sudo tee /etc/postfix/main.cf > /dev/null <<EOF
 myhostname = $ServerName
 smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
 biff = no
-append_dot_my = no
 readme_directory = no
 compatibility_level = 2
 
@@ -136,7 +135,6 @@ smtpd_milters = inet:localhost:9982
 non_smtpd_milters = inet:localhost:9982
 
 # SPF Settings
-policy-spf_time_limit = 3600s
 smtpd_recipient_restrictions = 
   permit_mynetworks,
   permit_sasl_authenticated,
