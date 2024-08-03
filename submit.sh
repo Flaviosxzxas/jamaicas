@@ -236,7 +236,6 @@ log_response() {
     echo "$response" >> "/root/$log_file"
 }
 
-# Função para verificar a existência de um registro DNS
 check_dns_record() {
     local record_type=$1
     local record_name=$2
@@ -251,13 +250,14 @@ check_dns_record() {
     log_response "$response" "check_dns_record_${record_type}_${record_name}.log"
 
     if [ -n "$result" ]; then
+        echo "Registro $record_type $record_name já existe."
         return 0  # Record exists
     else
+        echo "Registro $record_type $record_name não encontrado."
         return 1  # Record does not exist
     fi
 }
 
-# Função para registrar um DNS com verificação e retentativa
 register_dns_record() {
     local record_type=$1
     local record_name=$2
@@ -265,6 +265,7 @@ register_dns_record() {
     local extra_data=$4
     local max_attempts=5
     local attempt=1
+    local wait_time=10  # Tempo de espera entre tentativas
 
     if check_dns_record $record_type $record_name; then
         echo "Registro $record_type $record_name já existe. Nenhuma ação necessária."
@@ -273,17 +274,17 @@ register_dns_record() {
 
     while [ $attempt -le $max_attempts ]; do
         echo "Tentando registrar $record_type $record_name (Tentativa $attempt de $max_attempts)..."
-        local response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+        local response=$(curl -s -w "%{http_code}" -o /root/register_dns_record_${record_type}_${record_name}_attempt_${attempt}.log -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
              -H "X-Auth-Email: $CloudflareEmail" \
              -H "X-Auth-Key: $CloudflareAPI" \
              -H "Content-Type: application/json" \
              --data "{ \"type\": \"$record_type\", \"name\": \"$record_name\", \"content\": \"$record_content\", \"ttl\": 120, $extra_data }")
+        
+        # Salvar resposta completa em log
+        echo "Resposta da API: $response" >> /root/complete_register_dns_record_${record_type}_${record_name}_attempt_${attempt}.log
 
-        log_response "$response" "register_dns_record_${record_type}_${record_name}_attempt_${attempt}.log"
-
-        sleep 5  # Esperar um pouco antes de verificar
-
-        if check_dns_record $record_type $record_name; then
+        # Verificar se a resposta da API contém um código de sucesso
+        if echo "$response" | grep -q '"success": true'; then
             echo "Registro $record_type $record_name cadastrado com sucesso."
             return 0
         else
@@ -291,11 +292,15 @@ register_dns_record() {
         fi
 
         attempt=$((attempt + 1))
+        sleep $wait_time  # Esperar um pouco antes de tentar novamente
     done
 
     echo "Falha ao cadastrar $record_type $record_name após $max_attempts tentativas."
     return 1
 }
+
+# Esperar um pouco entre registros para evitar excesso de requisições
+sleep 10
 
 echo "  -- Obtendo Zona"
 CloudflareZoneID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$Domain&status=active" \
@@ -303,22 +308,33 @@ CloudflareZoneID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?na
   -H "X-Auth-Key: $CloudflareAPI" \
   -H "Content-Type: application/json" | jq -r '.result | .[0].id')
 
+sleep 10  # Tempo de espera antes do próximo registro
+
 echo "  -- Cadastrando A"
 register_dns_record "A" "$DKIMSelector" "$ServerIP" "\"proxied\": false"
+
+sleep 10  # Tempo de espera antes do próximo registro
 
 echo "  -- Cadastrando SPF"
 register_dns_record "TXT" "$ServerName" "v=spf1 a:$ServerName ~all" "\"proxied\": false"
 
+sleep 10  # Tempo de espera antes do próximo registro
+
 echo "  -- Cadastrando DMARC"
 register_dns_record "TXT" "_dmarc.$ServerName" "v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmarc@$ServerName; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r" "\"proxied\": false"
 
+sleep 10  # Tempo de espera antes do próximo registro
+
 echo "  -- Cadastrando DKIM"
 register_dns_record "TXT" "$DKIMSelector._domainkey.$ServerName" "v=DKIM1; h=sha256; k=rsa; p=$DKIMCode" "\"proxied\": false"
+
+sleep 10  # Tempo de espera antes do próximo registro
 
 echo "  -- Cadastrando MX"
 register_dns_record "MX" "$ServerName" "$ServerName" "\"priority\": 10, \"proxied\": false"
 
 echo "==================================================== CLOUDFLARE ===================================================="
+
 
 
 
