@@ -3,7 +3,6 @@
 ServerName=$1
 CloudflareAPI=$2
 CloudflareEmail=$3
-MailName=$4  # Novo argumento para $mail_name
 
 Domain=$(echo $ServerName | cut -d "." -f2-)
 DKIMSelector=$(echo $ServerName | awk -F[.:] '{print $1}')
@@ -124,13 +123,10 @@ debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Si
 debconf-set-selections <<< "postfix postfix/destinations string $ServerName, localhost"
 sudo dpkg-reconfigure -f noninteractive postfix
 
-postconf -e "smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)"
-sed -i "s/\$mail_name/$MailName/" /etc/postfix/main.cf
-
 # Atualiza o arquivo main.cf
 sudo tee /etc/postfix/main.cf > /dev/null <<EOF
 myhostname = $ServerName
-smtpd_banner = \${ServerName} ESMTP \${mail_name} (Ubuntu)
+smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
 biff = no
 readme_directory = no
 compatibility_level = 3.6
