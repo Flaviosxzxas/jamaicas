@@ -225,54 +225,85 @@ sudo systemctl restart opendmarc
 
 echo "==================================================== POSTFIX ===================================================="
 
+#!/bin/bash
+
 echo "==================================================== CLOUDFLARE ===================================================="
 
 DKIMCode=$(/root/dkimcode.sh)
-
 sleep 5
+
+# Função para verificar a existência de um registro DNS
+check_dns_record() {
+    local record_type=$1
+    local record_name=$2
+
+    local result=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records?type=$record_type&name=$record_name" \
+      -H "X-Auth-Email: $CloudflareEmail" \
+      -H "X-Auth-Key: $CloudflareAPI" \
+      -H "Content-Type: application/json" | jq -r '{"result"}[] | .[0] | .id')
+
+    if [ "$result" != "null" ]; then
+        return 0  # Record exists
+    else
+        return 1  # Record does not exist
+    fi
+}
+
+# Função para registrar um DNS com verificação e retentativa
+register_dns_record() {
+    local record_type=$1
+    local record_name=$2
+    local record_content=$3
+    local extra_data=$4
+    local max_attempts=5
+    local attempt=1
+
+    while [ $attempt -le $max_attempts ]; do
+        curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+             -H "X-Auth-Email: $CloudflareEmail" \
+             -H "X-Auth-Key: $CloudflareAPI" \
+             -H "Content-Type: application/json" \
+             --data "{ \"type\": \"$record_type\", \"name\": \"$record_name\", \"content\": \"$record_content\", \"ttl\": 120, $extra_data }"
+
+        sleep 5  # Esperar um pouco antes de verificar
+
+        if check_dns_record $record_type $record_name; then
+            echo "Registro $record_type $record_name cadastrado com sucesso."
+            return 0
+        else
+            echo "Falha ao cadastrar $record_type $record_name. Tentativa $attempt de $max_attempts."
+        fi
+
+        attempt=$((attempt + 1))
+    done
+
+    echo "Falha ao cadastrar $record_type $record_name após $max_attempts tentativas."
+    return 1
+}
 
 echo "  -- Obtendo Zona"
 CloudflareZoneID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$Domain&status=active" \
   -H "X-Auth-Email: $CloudflareEmail" \
   -H "X-Auth-Key: $CloudflareAPI" \
   -H "Content-Type: application/json" | jq -r '{"result"}[] | .[0] | .id')
-  
-  echo "  -- Cadastrando A"
-curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
-     -H "X-Auth-Email: $CloudflareEmail" \
-     -H "X-Auth-Key: $CloudflareAPI" \
-     -H "Content-Type: application/json" \
-     --data '{ "type": "A", "name": "'$DKIMSelector'", "content": "'$ServerIP'", "ttl": 120, "proxied": false }'
+
+echo "  -- Cadastrando A"
+register_dns_record "A" "$DKIMSelector" "$ServerIP" "\"proxied\": false"
 
 echo "  -- Cadastrando SPF"
-curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
-     -H "X-Auth-Email: $CloudflareEmail" \
-     -H "X-Auth-Key: $CloudflareAPI" \
-     -H "Content-Type: application/json" \
-     --data '{ "type": "TXT", "name": "'$ServerName'", "content": "v=spf1 a:'$ServerName' ~all", "ttl": 120, "proxied": false }'
+register_dns_record "TXT" "$ServerName" "v=spf1 a:$ServerName ~all" "\"proxied\": false"
 
-echo "  -- Cadastrando DMARK"
-curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
-     -H "X-Auth-Email: $CloudflareEmail" \
-     -H "X-Auth-Key: $CloudflareAPI" \
-     -H "Content-Type: application/json" \
-     --data '{ "type": "TXT", "name": "_dmarc.'$ServerName'", "content": "v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmark@'$ServerName'; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r", "ttl": 120, "proxied": false }'
+echo "  -- Cadastrando DMARC"
+register_dns_record "TXT" "_dmarc.$ServerName" "v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmarc@$ServerName; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r" "\"proxied\": false"
 
 echo "  -- Cadastrando DKIM"
-curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
-     -H "X-Auth-Email: $CloudflareEmail" \
-     -H "X-Auth-Key: $CloudflareAPI" \
-     -H "Content-Type: application/json" \
-     --data '{ "type": "TXT", "name": "'$DKIMSelector'._domainkey.'$ServerName'", "content": "v=DKIM1; h=sha256; k=rsa; p='$DKIMCode'", "ttl": 120, "proxied": false }'
+register_dns_record "TXT" "$DKIMSelector._domainkey.$ServerName" "v=DKIM1; h=sha256; k=rsa; p=$DKIMCode" "\"proxied\": false"
 
 echo "  -- Cadastrando MX"
-curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
-     -H "X-Auth-Email: $CloudflareEmail" \
-     -H "X-Auth-Key: $CloudflareAPI" \
-     -H "Content-Type: application/json" \
-     --data '{ "type": "MX", "name": "'$ServerName'", "content": "'$ServerName'", "ttl": 120, "priority": 10, "proxied": false }'
+register_dns_record "MX" "$ServerName" "$ServerName" "\"priority\": 10, \"proxied\": false"
 
 echo "==================================================== CLOUDFLARE ===================================================="
+
 
 echo "==================================================== APPLICATION ===================================================="
 
