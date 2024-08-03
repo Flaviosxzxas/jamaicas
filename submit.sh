@@ -101,11 +101,20 @@ echo "==================================================== POSTFIX =============
 
 sleep 3
 
+# Atualiza a lista de pacotes
+sudo apt-get update
+
+# Instala o Postfix e pacotes adicionais
+sudo DEBIAN_FRONTEND=noninteractive apt-get install --assume-yes postfix postfix-policyd-spf-python opendmarc
+
 debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
 debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", localhost'"
 sudo apt install postfix-policyd-spf-python -y
 sudo apt-get install --assume-yes postfix
+
+# Reconfigura o Postfix para aplicar as configurações
+sudo DEBIAN_FRONTEND=noninteractive dpkg-reconfigure postfix
 
 echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
 
@@ -181,9 +190,28 @@ smtpd_data_restrictions =
   
 sleep 3
 
-service opendkim restart
-service postfix restart
+# Criação do arquivo de configuração do policyd-spf
+sudo tee /etc/postfix-policyd-spf-python/policyd-spf.conf > /dev/null <<EOF
+HELO_reject = False
+Mail_From_reject = False
+Rcpt_To_reject = True
+EOF
 
+# Configuração do OpenDMARC
+sudo tee /etc/opendmarc.conf > /dev/null <<EOF
+Syslog true
+Socket inet:54321@localhost
+EOF
+
+# Reinicia os serviços
+sudo systemctl restart postfix
+sudo systemctl restart opendkim
+sudo systemctl restart opendmarc
+
+# Verifica o status dos serviços
+sudo systemctl status postfix
+sudo systemctl status opendkim
+sudo systemctl status opendmarc
 echo "==================================================== POSTFIX ===================================================="
 
 echo "==================================================== CLOUDFLARE ===================================================="
