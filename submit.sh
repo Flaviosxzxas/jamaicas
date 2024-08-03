@@ -50,7 +50,7 @@ echo "RUNDIR=/run/opendkim
 SOCKET=\"inet:9982@localhost\"
 USER=opendkim
 GROUP=opendkim
-PIDFILE=\$RUNDIR/\opendkim.pid
+PIDFILE=\$RUNDIR/\$NAME.pid
 EXTRAAFTER=" | sudo tee /etc/default/opendkim > /dev/null
 
 echo "AutoRestart             Yes
@@ -123,7 +123,7 @@ sudo dpkg-reconfigure -f noninteractive postfix
 # Atualiza o arquivo main.cf
 sudo tee /etc/postfix/main.cf > /dev/null <<EOF
 myhostname = $ServerName
-smtpd_banner = \$myhostname ESMTP \Postfix (Ubuntu)
+smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
 biff = no
 readme_directory = no
 compatibility_level = 2
