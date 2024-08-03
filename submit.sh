@@ -188,8 +188,6 @@ smtpd_client_restrictions =
 smtpd_data_restrictions = 
   reject_unauth_pipelining" | sudo tee /etc/postfix/main.cf > /dev/null
   
-sleep 3
-
 # Criação do arquivo de configuração do policyd-spf
 sudo tee /etc/postfix-policyd-spf-python/policyd-spf.conf > /dev/null <<EOF
 HELO_reject = False
@@ -201,6 +199,7 @@ EOF
 sudo tee /etc/opendmarc.conf > /dev/null <<EOF
 Syslog true
 Socket inet:54321@localhost
+PidFile /run/opendmarc/opendmarc.pid
 EOF
 
 # Reinicia os serviços
