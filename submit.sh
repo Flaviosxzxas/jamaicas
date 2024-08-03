@@ -225,6 +225,7 @@ sudo systemctl restart opendmarc
 
 echo "==================================================== POSTFIX ===================================================="
 
+
 echo "==================================================== CLOUDFLARE ===================================================="
 
 DKIMCode=$(/root/dkimcode.sh)
@@ -280,15 +281,20 @@ register_dns_record() {
              -H "Content-Type: application/json" \
              --data "{ \"type\": \"$record_type\", \"name\": \"$record_name\", \"content\": \"$record_content\", \"ttl\": 120, $extra_data }")
         
-        # Salvar resposta completa em log
-        echo "Resposta da API: $response" >> /root/complete_register_dns_record_${record_type}_${record_name}_attempt_${attempt}.log
+        local http_code=$(echo "$response" | tail -n 1)
+        local response_body=$(cat /root/register_dns_record_${record_type}_${record_name}_attempt_${attempt}.log)
 
-        # Verificar se a resposta da API contém um código de sucesso
-        if echo "$response" | grep -q '"success": true'; then
+        # Salvar resposta completa em log
+        echo "Resposta da API: $response_body" >> /root/complete_register_dns_record_${record_type}_${record_name}_attempt_${attempt}.log
+
+        # Verificar código de status HTTP
+        if [ "$http_code" -eq 200 ] && echo "$response_body" | grep -q '"success": true'; then
             echo "Registro $record_type $record_name cadastrado com sucesso."
             return 0
         else
             echo "Falha ao cadastrar $record_type $record_name. Tentativa $attempt de $max_attempts."
+            echo "Código HTTP: $http_code"
+            echo "Resposta da API: $response_body"
         fi
 
         attempt=$((attempt + 1))
@@ -334,6 +340,7 @@ echo "  -- Cadastrando MX"
 register_dns_record "MX" "$ServerName" "$ServerName" "\"priority\": 10, \"proxied\": false"
 
 echo "==================================================== CLOUDFLARE ===================================================="
+
 
 
 
