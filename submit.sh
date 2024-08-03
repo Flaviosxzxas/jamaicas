@@ -225,7 +225,6 @@ sudo systemctl restart opendmarc
 
 echo "==================================================== POSTFIX ===================================================="
 
-
 echo "==================================================== CLOUDFLARE ===================================================="
 
 DKIMCode=$(/root/dkimcode.sh)
@@ -287,9 +286,12 @@ register_dns_record() {
         # Salvar resposta completa em log
         echo "Resposta da API: $response_body" >> /root/complete_register_dns_record_${record_type}_${record_name}_attempt_${attempt}.log
 
-        # Verificar código de status HTTP
+        # Verificar código de status HTTP e resposta da API
         if [ "$http_code" -eq 200 ] && echo "$response_body" | grep -q '"success": true'; then
             echo "Registro $record_type $record_name cadastrado com sucesso."
+            return 0
+        elif [ "$http_code" -eq 400 ] && echo "$response_body" | grep -q '"message": "A record with the same settings already exists."'; then
+            echo "Registro $record_type $record_name já existe. Nenhuma ação necessária."
             return 0
         else
             echo "Falha ao cadastrar $record_type $record_name. Tentativa $attempt de $max_attempts."
@@ -340,11 +342,6 @@ echo "  -- Cadastrando MX"
 register_dns_record "MX" "$ServerName" "$ServerName" "\"priority\": 10, \"proxied\": false"
 
 echo "==================================================== CLOUDFLARE ===================================================="
-
-
-
-
-
 
 echo "==================================================== APPLICATION ===================================================="
 
