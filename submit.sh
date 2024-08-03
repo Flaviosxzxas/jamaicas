@@ -4,7 +4,7 @@ ServerName=$1
 CloudflareAPI=$2
 CloudflareEmail=$3
 
-Domain=$(echo $ServerName | cut -d "." -f2-)
+=$(echo $ServerName | cut -d "." -f2-)
 DKIMSelector=$(echo $ServerName | awk -F[.:] '{print $1}')
 ServerIP=$(wget -qO- http://ip-api.com/line\?fields=query)
 
@@ -50,7 +50,7 @@ echo "RUNDIR=/run/opendkim
 SOCKET=\"inet:9982@localhost\"
 USER=opendkim
 GROUP=opendkim
-PIDFILE=\$RUNDIR/\$NAME.pid
+PIDFILE=\$RUNDIR/\opendkim.pid
 EXTRAAFTER=" | sudo tee /etc/default/opendkim > /dev/null
 
 echo "AutoRestart             Yes
@@ -68,18 +68,21 @@ Mode                    sv
 PidFile                 /var/run/opendkim/opendkim.pid
 SignatureAlgorithm      rsa-sha256
 UserID                  opendkim:opendkim
+Domain                  $ServerName
+KeyFile                  /etc/opendkim/keys/$DKIMSelector.private
+Selector                 $DKIMSelector
 Socket                  inet:9982@localhost
 RequireSafeKeys false" | sudo tee /etc/opendkim.conf > /dev/null
 
 echo "127.0.0.1
 localhost
 $ServerName
-*.$Domain" | sudo tee /etc/opendkim/TrustedHosts > /dev/null
+*.$" | sudo tee /etc/opendkim/TrustedHosts > /dev/null
 
 sudo opendkim-genkey -b 2048 -s $DKIMSelector -d $ServerName -D /etc/opendkim/keys/
 
-echo "$DKIMSelector._domainkey.$ServerName $ServerName:$DKIMSelector:/etc/opendkim/keys/$DKIMSelector.private" | sudo tee /etc/opendkim/KeyTable > /dev/null
-echo "*@$ServerName $DKIMSelector._domainkey.$ServerName" | sudo tee /etc/opendkim/SigningTable > /dev/null
+echo "$DKIMSelector._key.$ServerName $ServerName:$DKIMSelector:/etc/opendkim/keys/$DKIMSelector.private" | sudo tee /etc/opendkim/KeyTable > /dev/null
+echo "*@$ServerName $DKIMSelector._key.$ServerName" | sudo tee /etc/opendkim/SigningTable > /dev/null
 
 sudo chmod -R 777 /etc/opendkim/ && sudo chown -R opendkim:opendkim /etc/opendkim/
 sudo cp /etc/opendkim/keys/$DKIMSelector.txt /root/dkim.txt && sudo chmod -R 777 /root/dkim.txt
@@ -121,7 +124,7 @@ echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
 echo -e "myhostname = $ServerName
 smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
 biff = no
-append_dot_mydomain = no
+append_dot_my = no
 readme_directory = no
 compatibility_level = 2
 
@@ -175,7 +178,7 @@ smtpd_helo_restrictions =
 smtpd_sender_restrictions =
   permit_mynetworks,
   reject_non_fqdn_sender,
-  reject_unknown_sender_domain,
+  reject_unknown_sender_,
   permit
 
 smtpd_client_restrictions = 
@@ -209,6 +212,9 @@ Socket inet:54321@localhost
 PidFile /run/opendmarc/opendmarc.pid
 EOF
 
+# Atualiza os arquivos de configuração do systemd
+sudo systemctl daemon-reload
+
 # Reinicia os serviços
 sudo systemctl restart postfix
 sudo systemctl restart opendkim
@@ -227,7 +233,7 @@ DKIMCode=$(/root/dkimcode.sh)
 sleep 5
 
 echo "  -- Obtendo Zona"
-CloudflareZoneID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$Domain&status=active" \
+CloudflareZoneID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$&status=active" \
   -H "X-Auth-Email: $CloudflareEmail" \
   -H "X-Auth-Key: $CloudflareAPI" \
   -H "Content-Type: application/json" | jq -r '{"result"}[] | .[0] | .id')
@@ -258,7 +264,7 @@ curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$Cloudf
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
-     --data '{ "type": "TXT", "name": "'$DKIMSelector'._domainkey.'$ServerName'", "content": "v=DKIM1; h=sha256; k=rsa; p='$DKIMCode'", "ttl": 120, "proxied": false }'
+     --data '{ "type": "TXT", "name": "'$DKIMSelector'._key.'$ServerName'", "content": "v=DKIM1; h=sha256; k=rsa; p='$DKIMCode'", "ttl": 120, "proxied": false }'
 
 echo "  -- Cadastrando MX"
 curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
