@@ -126,7 +126,7 @@ sudo DEBIAN_FRONTEND=noninteractive dpkg-reconfigure postfix
 echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
 
 echo -e "myhostname = $ServerName
-smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
+smtpd_banner = \$myhostname ESMTP \$ServerName (Ubuntu)
 biff = no
 append_dot_my = no
 readme_directory = no
@@ -224,9 +224,6 @@ sudo systemctl restart opendkim
 sudo systemctl restart opendmarc
 
 echo "==================================================== POSTFIX ===================================================="
-timestamp() {
-    date +"%Y-%m-%d %H:%M:%S"
-}
 
 echo "==================================================== CLOUDFLARE ===================================================="
 
