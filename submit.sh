@@ -114,19 +114,16 @@ sudo apt-get update
 # Instala o Postfix e pacotes adicionais
 sudo DEBIAN_FRONTEND=noninteractive apt-get install --assume-yes postfix postfix-policyd-spf-python opendmarc
 
-debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
+# Configurações básicas do Postfix
+debconf-set-selections <<< "postfix postfix/mailname string $ServerName"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
-debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", localhost'"
-sudo apt install postfix-policyd-spf-python -y
-sudo apt-get install --assume-yes postfix
+debconf-set-selections <<< "postfix postfix/destinations string $ServerName, localhost"
+sudo dpkg-reconfigure -f noninteractive postfix
 
-# Reconfigura o Postfix para aplicar as configurações
-sudo DEBIAN_FRONTEND=noninteractive dpkg-reconfigure postfix
-
-echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
-
-echo -e "myhostname = $ServerName\nsmtpd_banner = \$ServerName ESMTP \$ServerName (Ubuntu)"
-
+# Atualiza o arquivo main.cf
+sudo tee /etc/postfix/main.cf > /dev/null <<EOF
+myhostname = $ServerName
+smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
 biff = no
 append_dot_my = no
 readme_directory = no
@@ -182,7 +179,7 @@ smtpd_helo_restrictions =
 smtpd_sender_restrictions =
   permit_mynetworks,
   reject_non_fqdn_sender,
-  reject_unknown_sender_,
+  reject_unknown_sender_domain,
   permit
 
 smtpd_client_restrictions = 
@@ -193,8 +190,12 @@ smtpd_client_restrictions =
   permit
 
 smtpd_data_restrictions = 
-  reject_unauth_pipelining" | sudo tee /etc/postfix/main.cf > /dev/null
-  
+  reject_unauth_pipelining
+EOF
+
+# Atualiza o arquivo access.recipients
+echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
+
 # Criação do arquivo de configuração do policyd-spf
 sudo tee /etc/postfix-policyd-spf-python/policyd-spf.conf > /dev/null <<EOF
 HELO_reject = False
