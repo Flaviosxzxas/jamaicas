@@ -228,64 +228,52 @@ timestamp() {
     date +"%Y-%m-%d %H:%M:%S"
 }
 
-echo "$(timestamp) ==================================================== CLOUDFLARE ===================================================="
+echo "==================================================== CLOUDFLARE ===================================================="
 
 DKIMCode=$(/root/dkimcode.sh)
 
 sleep 5
 
-echo "$(timestamp)  -- Obtendo Zona"
+echo "  -- Obtendo Zona"
 CloudflareZoneID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$Domain&status=active" \
   -H "X-Auth-Email: $CloudflareEmail" \
   -H "X-Auth-Key: $CloudflareAPI" \
   -H "Content-Type: application/json" | jq -r '{"result"}[] | .[0] | .id')
-
-sleep 2  # Tempo de espera antes do próximo registro
-
-echo "$(timestamp)  -- Cadastrando A"
+  
+  echo "  -- Cadastrando A"
 curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
      --data '{ "type": "A", "name": "'$DKIMSelector'", "content": "'$ServerIP'", "ttl": 120, "proxied": false }'
 
-sleep 2  # Tempo de espera antes do próximo registro
-
-echo "$(timestamp)  -- Cadastrando SPF"
+echo "  -- Cadastrando SPF"
 curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
      --data '{ "type": "TXT", "name": "'$ServerName'", "content": "v=spf1 a:'$ServerName' ~all", "ttl": 120, "proxied": false }'
 
-sleep 2  # Tempo de espera antes do próximo registro
-
-echo "$(timestamp)  -- Cadastrando DMARK"
+echo "  -- Cadastrando DMARK"
 curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
      --data '{ "type": "TXT", "name": "_dmarc.'$ServerName'", "content": "v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmark@'$ServerName'; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r", "ttl": 120, "proxied": false }'
 
-sleep 2  # Tempo de espera antes do próximo registro
-
-echo "$(timestamp)  -- Cadastrando DKIM"
+echo "  -- Cadastrando DKIM"
 curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
      --data '{ "type": "TXT", "name": "'$DKIMSelector'._domainkey.'$ServerName'", "content": "v=DKIM1; h=sha256; k=rsa; p='$DKIMCode'", "ttl": 120, "proxied": false }'
 
-sleep 2  # Tempo de espera antes do próximo registro
-
-echo "$(timestamp)  -- Cadastrando MX"
+echo "  -- Cadastrando MX"
 curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
      --data '{ "type": "MX", "name": "'$ServerName'", "content": "'$ServerName'", "ttl": 120, "priority": 10, "proxied": false }'
-
-echo "$(timestamp) ==================================================== CLOUDFLARE ===================================================="
 
 echo "==================================================== CLOUDFLARE ===================================================="
 
@@ -314,9 +302,11 @@ echo "==================================================== APPLICATION =========
 
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
 
+echo "======================================================= FIM =========================================================="
+
 # Reiniciar servidor
 echo "Reiniciando o servidor em 5 segundos..."
 sleep 5
 sudo reboot
 
-echo "======================================================= FIM =========================================================="
+
