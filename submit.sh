@@ -227,6 +227,8 @@ echo "==================================================== POSTFIX =============
 
 #!/bin/bash
 
+#!/bin/bash
+
 echo "==================================================== CLOUDFLARE ===================================================="
 
 DKIMCode=$(/root/dkimcode.sh)
@@ -240,9 +242,9 @@ check_dns_record() {
     local result=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records?type=$record_type&name=$record_name" \
       -H "X-Auth-Email: $CloudflareEmail" \
       -H "X-Auth-Key: $CloudflareAPI" \
-      -H "Content-Type: application/json" | jq -r '{"result"}[] | .[0] | .id')
+      -H "Content-Type: application/json" | jq -r '.result | .[0] | select(.name=="'$record_name'") | .id')
 
-    if [ "$result" != "null" ]; then
+    if [ -n "$result" ]; then
         return 0  # Record exists
     else
         return 1  # Record does not exist
@@ -258,7 +260,13 @@ register_dns_record() {
     local max_attempts=5
     local attempt=1
 
+    if check_dns_record $record_type $record_name; then
+        echo "Registro $record_type $record_name já existe. Nenhuma ação necessária."
+        return 0
+    fi
+
     while [ $attempt -le $max_attempts ]; do
+        echo "Tentando registrar $record_type $record_name (Tentativa $attempt de $max_attempts)..."
         curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
              -H "X-Auth-Email: $CloudflareEmail" \
              -H "X-Auth-Key: $CloudflareAPI" \
@@ -285,7 +293,7 @@ echo "  -- Obtendo Zona"
 CloudflareZoneID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$Domain&status=active" \
   -H "X-Auth-Email: $CloudflareEmail" \
   -H "X-Auth-Key: $CloudflareAPI" \
-  -H "Content-Type: application/json" | jq -r '{"result"}[] | .[0] | .id')
+  -H "Content-Type: application/json" | jq -r '.result | .[0].id')
 
 echo "  -- Cadastrando A"
 register_dns_record "A" "$DKIMSelector" "$ServerIP" "\"proxied\": false"
@@ -303,6 +311,7 @@ echo "  -- Cadastrando MX"
 register_dns_record "MX" "$ServerName" "$ServerName" "\"priority\": 10, \"proxied\": false"
 
 echo "==================================================== CLOUDFLARE ===================================================="
+
 
 
 echo "==================================================== APPLICATION ===================================================="
