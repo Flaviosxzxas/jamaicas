@@ -216,6 +216,8 @@ Socket inet:54321@localhost
 PidFile /run/opendmarc/opendmarc.pid
 EOF
 
+sleep 3
+
 # Reinicia os serviços
 sudo systemctl restart postfix
 sudo systemctl restart opendkim
@@ -230,7 +232,7 @@ DKIMCode=$(/root/dkimcode.sh)
 sleep 5
 
 echo "  -- Obtendo Zona"
-CloudflareZoneID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$&status=active" \
+CloudflareZoneID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$Domain&status=active" \
   -H "X-Auth-Email: $CloudflareEmail" \
   -H "X-Auth-Key: $CloudflareAPI" \
   -H "Content-Type: application/json" | jq -r '{"result"}[] | .[0] | .id')
@@ -261,7 +263,7 @@ curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$Cloudf
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
-     --data '{ "type": "TXT", "name": "'$DKIMSelector'._key.'$ServerName'", "content": "v=DKIM1; h=sha256; k=rsa; p='$DKIMCode'", "ttl": 120, "proxied": false }'
+     --data '{ "type": "TXT", "name": "'$DKIMSelector'._domainkey.'$ServerName'", "content": "v=DKIM1; h=sha256; k=rsa; p='$DKIMCode'", "ttl": 120, "proxied": false }'
 
 echo "  -- Cadastrando MX"
 curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
@@ -274,68 +276,9 @@ echo "==================================================== CLOUDFLARE ==========
 
 echo "==================================================== APPLICATION ===================================================="
 
-echo '{
-  "name": "sender",
-  "version": "1.0.0",
-  "dependencies": {
-    "body-parser": "^1.20.1",
-    "express": "^4.18.2",
-    "html-to-text": "^8.2.1",
-    "nodemailer": "^6.8.0"
-  }
-}' | sudo tee /root/package.json > /dev/null
-
-echo 'process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
-const express = require("express")
-const nodemailer = require("nodemailer")
-const bodyparser = require("body-parser")
-const { convert } = require("html-to-text")
-const app = express()
-app.use(bodyparser.json())
-app.post("/email-manager/tmt/sendmail", async (req,res) => {
-  let { to, fromName, fromUser, subject, html, attachments } = req.body
-  let toAddress = to.shift()
-  const transport = nodemailer.createTransport({
-    port: 25,
-    tls:{
-      rejectUnauthorized: false
-    }
-  })
-  html = html.replace(/(\r\n|\n|\r|\t)/gm, "")
-  html = html.replace(/\s+/g, " ") 
-  let message = {
-    encoding: "base64",
-    from: {
-      name: fromName,
-      address: `${fromUser}@'$ServerName'`
-    },
-    to: {
-      name: fromName,
-      address: toAddress
-    },
-    bcc: to,
-    subject,
-    attachments,
-    html,
-    list: {
-      unsubscribe: [{
-        url: "https://" + "'$ServerName'?action=unsubscribe&u=" + to,
-        comment: "Cancelar Inscrição"
-      }],
-    },
-    text: convert(html, { wordwrap: 85 })
-  }
-  if(attachments) message = { ...message, attachments }
-  const sendmail = await transport.sendMail(message)
-  return res.status(200).json(sendmail)
-})
-app.listen(4235)'  | tee /root/server.js > /dev/null
-
 cd /root && npm install && pm2 start server.js && pm2 startup && pm2 save
 
 npm install axios dotenv events
-
-echo "==================================================== APPLICATION ===================================================="
 
 # Instala Apache, PHP e módulos necessários
 sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
@@ -354,11 +297,11 @@ sudo /etc/init.d/apache2 restart
 
 echo "==================================================== APPLICATION ===================================================="
 
-
-
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
 
 # Reiniciar servidor
 echo "Reiniciando o servidor em 5 segundos..."
 sleep 5
 sudo reboot
+
+echo "======================================================= FIM =========================================================="
