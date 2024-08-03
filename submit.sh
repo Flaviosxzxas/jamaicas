@@ -126,7 +126,7 @@ myhostname = $ServerName
 smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
 biff = no
 readme_directory = no
-compatibility_level = 2
+compatibility_level = 3.6
 
 # DKIM Settings
 milter_protocol = 2
