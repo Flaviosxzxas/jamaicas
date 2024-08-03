@@ -123,7 +123,7 @@ sudo dpkg-reconfigure -f noninteractive postfix
 # Atualiza o arquivo main.cf
 sudo tee /etc/postfix/main.cf > /dev/null <<EOF
 myhostname = $ServerName
-smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
+smtpd_banner = \$myhostname ESMTP \Postfix (Ubuntu)
 biff = no
 readme_directory = no
 compatibility_level = 2
