@@ -3,9 +3,13 @@
 ServerName=$1
 CloudflareAPI=$2
 CloudflareEmail=$3
-MailName=$4  # Novo argumento para $mail_name
+MailName=$4
 
-# Verifica se todas as variáveis necessárias foram passadas
+echo "ServerName: $ServerName"
+echo "CloudflareAPI: $CloudflareAPI"
+echo "CloudflareEmail: $CloudflareEmail"
+echo "MailName: $MailName"
+
 if [ -z "$ServerName" ] || [ -z "$CloudflareAPI" ] || [ -z "$CloudflareEmail" ] || [ -z "$MailName" ]; then
     echo "Uso: $0 <ServerName> <CloudflareAPI> <CloudflareEmail> <MailName>"
     exit 1
@@ -16,6 +20,9 @@ DKIMSelector=$(echo $ServerName | awk -F[.:] '{print $1}')
 ServerIP=$(wget -qO- http://ip-api.com/line\?fields=query)
 
 echo "Configurando Servidor: $ServerName"
+echo "Domain: $Domain"
+echo "DKIMSelector: $DKIMSelector"
+echo "ServerIP: $ServerIP"
 
 sleep 10
 
