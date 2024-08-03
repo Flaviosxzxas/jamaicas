@@ -5,11 +5,17 @@ CloudflareAPI=$2
 CloudflareEmail=$3
 MailName=$4  # Novo argumento para $mail_name
 
+# Verifica se todas as variáveis necessárias foram passadas
+if [ -z "$ServerName" ] || [ -z "$CloudflareAPI" ] || [ -z "$CloudflareEmail" ] || [ -z "$MailName" ]; then
+    echo "Uso: $0 <ServerName> <CloudflareAPI> <CloudflareEmail> <MailName>"
+    exit 1
+fi
+
 Domain=$(echo $ServerName | cut -d "." -f2-)
 DKIMSelector=$(echo $ServerName | awk -F[.:] '{print $1}')
 ServerIP=$(wget -qO- http://ip-api.com/line\?fields=query)
 
-echo "Configuando Servidor: $ServerName"
+echo "Configurando Servidor: $ServerName"
 
 sleep 10
 
@@ -124,7 +130,7 @@ sudo dpkg-reconfigure -f noninteractive postfix
 # Atualiza o arquivo main.cf
 sudo tee /etc/postfix/main.cf > /dev/null <<EOF
 myhostname = $ServerName
-smtpd_banner = $myhostname ESMTP $mail_name (Ubuntu)
+smtpd_banner = \$myhostname ESMTP $mail_name (Ubuntu)
 biff = no
 readme_directory = no
 compatibility_level = 3.6
