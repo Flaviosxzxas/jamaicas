@@ -68,9 +68,9 @@ Mode                    sv
 PidFile                 /var/run/opendkim/opendkim.pid
 SignatureAlgorithm      rsa-sha256
 UserID                  opendkim:opendkim
-Domain                  \$ServerName
-KeyFile                 /etc/opendkim/keys/\$DKIMSelector.private
-Selector                \$DKIMSelector
+Domain                  ${ServerName}
+KeyFile                 /etc/opendkim/keys/${DKIMSelector}.private
+Selector                ${DKIMSelector}
 Socket                  inet:9982@localhost
 RequireSafeKeys         false" | sudo tee /etc/opendkim.conf > /dev/null
 
