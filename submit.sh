@@ -248,12 +248,6 @@ TrustedAuthservIDs ${ServerName}
 
 # Arquivo de histórico para relatórios detalhados
 HistoryFile /var/run/opendmarc/opendmarc.dat
-
-# Endereço de email para enviar relatórios agregados DMARC
-ReportCommand /usr/sbin/sendmail dmarc-reports@${ServerName}
-
-# Configuração de tempo de envio dos relatórios agregados
-AggregateReports true
 EOF
 
 # Criar o arquivo de hosts a serem ignorados se não existir
@@ -266,21 +260,20 @@ sudo touch /var/run/opendmarc/opendmarc.dat
 sudo chown opendmarc:opendmarc /var/run/opendmarc/opendmarc.dat
 sudo chmod 644 /var/run/opendmarc/opendmarc.dat
 
-# Reinicia os serviços do Postfix e Dovecot
+# Reiniciar os serviços do Postfix e Dovecot
 sudo systemctl restart postfix
 sudo systemctl enable postfix
 
-# Configura o OpenDKIM
+# Configurar e reiniciar o OpenDKIM
 sudo systemctl restart opendkim
 sudo systemctl enable opendkim
 
-# Configura o OpenDMARC
+# Configurar e reiniciar o OpenDMARC
 sudo systemctl restart opendmarc
 sudo systemctl enable opendmarc
 
-# Reinicia o serviço de spooler de política SPF
+# Reiniciar o serviço de spooler de política SPF
 sudo systemctl restart postfix-policyd-spf-python
-
 
 echo "==================================================== POSTFIX ===================================================="
 
