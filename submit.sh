@@ -81,7 +81,7 @@ RequireSafeKeys         false" | sudo tee /etc/opendkim.conf > /dev/null
 echo "127.0.0.1
 localhost
 $ServerName
-*.$" | sudo tee /etc/opendkim/TrustedHosts > /dev/null
+*.$Domain" | sudo tee /etc/opendkim/TrustedHosts > /dev/null
 
 # Gera as chaves para o DKIM
 sudo opendkim-genkey -b 2048 -s $DKIMSelector -d $ServerName -D /etc/opendkim/keys/
