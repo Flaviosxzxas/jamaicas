@@ -223,6 +223,8 @@ sudo chmod 750 /etc/opendmarc
 sudo chown opendmarc:opendmarc /var/log/opendmarc
 sudo chmod 750 /var/log/opendmarc
 
+sudo apt-get install postfix-policyd-spf-python
+
 # Criar o arquivo de configuração do OpenDMARC
 sudo tee /etc/opendmarc.conf > /dev/null <<EOF
 # Configuração de logs
