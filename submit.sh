@@ -47,7 +47,10 @@ echo "==================================================================== DKIM 
 
 sudo apt-get install opendkim -y && sudo apt-get install opendkim-tools -y
 sudo mkdir -p /etc/opendkim && sudo mkdir -p /etc/opendkim/keys
-sudo chmod -R 777 /etc/opendkim/ && sudo chown -R opendkim:opendkim /etc/opendkim/
+
+# Defina as permissões e a propriedade adequadas
+sudo chown -R opendkim:opendkim /etc/opendkim
+sudo chmod -R 700 /etc/opendkim
 
 echo "RUNDIR=/run/opendkim
 SOCKET=\"inet:9982@localhost\"
@@ -58,7 +61,7 @@ EXTRAAFTER=" | sudo tee /etc/default/opendkim > /dev/null
 
 echo "AutoRestart             Yes
 AutoRestartRate         10/1h
-UMask                   002
+UMask                   007
 Syslog                  yes
 SyslogSuccess           Yes
 LogWhy                  Yes
@@ -80,20 +83,21 @@ RequireSafeKeys         false" | sudo tee /etc/opendkim.conf > /dev/null
 echo "127.0.0.1
 localhost
 $ServerName
-*.$" | sudo tee /etc/opendkim/TrustedHosts > /dev/null
+*.$ServerName" | sudo tee /etc/opendkim/TrustedHosts > /dev/null
 
 sudo opendkim-genkey -b 2048 -s $DKIMSelector -d $ServerName -D /etc/opendkim/keys/
 
-echo "$DKIMSelector._key.$ServerName $ServerName:$DKIMSelector:/etc/opendkim/keys/$DKIMSelector.private" | sudo tee /etc/opendkim/KeyTable > /dev/null
-echo "*@$ServerName $DKIMSelector._key.$ServerName" | sudo tee /etc/opendkim/SigningTable > /dev/null
+echo "$DKIMSelector._domainkey.$ServerName $ServerName:$DKIMSelector:/etc/opendkim/keys/$DKIMSelector.private" | sudo tee /etc/opendkim/KeyTable > /dev/null
+echo "*@$ServerName $DKIMSelector._domainkey.$ServerName" | sudo tee /etc/opendkim/SigningTable > /dev/null
 
 # Ajuste de permissões e propriedade após a criação das chaves
 sudo chmod 600 /etc/opendkim/keys/*
 sudo chown opendkim:opendkim /etc/opendkim/keys/*
 
-sudo chmod -R 777 /etc/opendkim/ && sudo chown -R opendkim:opendkim /etc/opendkim/
-sudo cp /etc/opendkim/keys/$DKIMSelector.txt /root/dkim.txt && sudo chmod -R 777 /root/dkim.txt
+# Remover permissões 777 e definir permissões mais restritivas para os arquivos gerados
+sudo chmod 644 /root/dkim.txt
 
+# Atualize o script para gerar o código DKIM
 DKIMFileCode=$(cat /root/dkim.txt)
 
 echo '#!/usr/bin/node
@@ -101,9 +105,9 @@ echo '#!/usr/bin/node
 const DKIM = `'$DKIMFileCode'`
 console.log(DKIM.replace(/(\r\n|\n|\r|\t|"|\)| )/gm, "").split(";").find((c) => c.match("p=")).replace("p=",""))
 
-'| sudo tee /root/dkimcode.sh > /dev/null
+' | sudo tee /root/dkimcode.sh > /dev/null
 
-sudo chmod 777 /root/dkimcode.sh
+sudo chmod 700 /root/dkimcode.sh
 
 echo "==================================================================== DKIM ==============================================================================="
 
