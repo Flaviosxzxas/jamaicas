@@ -223,8 +223,6 @@ sudo chmod 750 /etc/opendmarc
 sudo chown opendmarc:opendmarc /var/log/opendmarc
 sudo chmod 750 /var/log/opendmarc
 
-sudo apt-get install postfix-policyd-spf-python
-
 # Criar o arquivo de configuração do OpenDMARC
 sudo tee /etc/opendmarc.conf > /dev/null <<EOF
 # Configuração de logs
@@ -249,7 +247,7 @@ RejectFailures false
 TrustedAuthservIDs ${ServerName}
 
 # Arquivo de histórico para relatórios detalhados
-HistoryFile /var/run/opendmarc/opendmarc.dat
+HistoryFile /run/opendmarc/opendmarc.dat
 EOF
 
 # Criar o arquivo de hosts a serem ignorados se não existir
@@ -258,10 +256,9 @@ sudo chown opendmarc:opendmarc /etc/opendmarc/ignore.hosts
 sudo chmod 644 /etc/opendmarc/ignore.hosts
 
 # Criar o diretório e arquivo de histórico do OpenDMARC
-sudo mkdir -p /var/run/opendmarc  # Assegure-se de que o diretório existe
-sudo touch /var/run/opendmarc/opendmarc.dat
-sudo chown opendmarc:opendmarc /var/run/opendmarc/opendmarc.dat
-sudo chmod 644 /var/run/opendmarc/opendmarc.dat
+sudo touch /run/opendmarc/opendmarc.dat
+sudo chown opendmarc:opendmarc /run/opendmarc/opendmarc.dat
+sudo chmod 644 /run/opendmarc/opendmarc.dat
 
 # Criar o arquivo PID do OpenDMARC
 sudo touch /run/opendmarc/opendmarc.pid
@@ -279,9 +276,6 @@ sudo systemctl enable opendkim
 # Configurar e reiniciar o OpenDMARC
 sudo systemctl restart opendmarc
 sudo systemctl enable opendmarc
-
-# Reiniciar o serviço de spooler de política SPF
-sudo systemctl restart postfix-policyd-spf-python
 
 echo "==================================================== POSTFIX ===================================================="
 
