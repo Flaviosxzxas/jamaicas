@@ -244,13 +244,13 @@ IgnoreHosts /etc/opendmarc/ignore.hosts
 RejectFailures false
 
 # IDs de servidores de autenticação confiáveis
-TrustedAuthservIDs mail.$ServerName
+TrustedAuthservIDs ${ServerName}
 
 # Arquivo de histórico para relatórios detalhados
 HistoryFile /var/run/opendmarc/opendmarc.dat
 
 # Endereço de email para enviar relatórios agregados DMARC
-ReportCommand /usr/sbin/sendmail dmarc-reports@$ServerName
+ReportCommand /usr/sbin/sendmail dmarc-reports@${ServerName}
 
 # Configuração de tempo de envio dos relatórios agregados
 AggregateReports true
@@ -260,12 +260,27 @@ EOF
 sudo touch /etc/opendmarc/ignore.hosts
 sudo chown opendmarc:opendmarc /etc/opendmarc/ignore.hosts
 sudo chmod 644 /etc/opendmarc/ignore.hosts
-sleep 3
 
-# Reinicia os serviços
+# Criar o arquivo de histórico do OpenDMARC se não existir
+sudo touch /var/run/opendmarc/opendmarc.dat
+sudo chown opendmarc:opendmarc /var/run/opendmarc/opendmarc.dat
+sudo chmod 644 /var/run/opendmarc/opendmarc.dat
+
+# Reinicia os serviços do Postfix e Dovecot
 sudo systemctl restart postfix
+sudo systemctl enable postfix
+
+# Configura o OpenDKIM
 sudo systemctl restart opendkim
+sudo systemctl enable opendkim
+
+# Configura o OpenDMARC
 sudo systemctl restart opendmarc
+sudo systemctl enable opendmarc
+
+# Reinicia o serviço de spooler de política SPF
+sudo systemctl restart postfix-policyd-spf-python
+
 
 echo "==================================================== POSTFIX ===================================================="
 
