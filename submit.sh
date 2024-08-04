@@ -207,10 +207,12 @@ Mail_From_reject = False
 Rcpt_To_reject = True
 EOF
 
-# Criar o diretório necessário para o OpenDMARC
+# Criar os diretórios necessários para o OpenDMARC
 sudo mkdir -p /run/opendmarc
+sudo mkdir -p /var/run/opendmarc
+sudo mkdir -p /etc/opendmarc
 
-# Ajustar as permissões e a propriedade do diretório
+# Ajustar permissões e a propriedade dos diretórios
 sudo chown opendmarc:opendmarc /run/opendmarc
 sudo chmod 750 /run/opendmarc
 
