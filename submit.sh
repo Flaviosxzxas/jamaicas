@@ -211,12 +211,19 @@ EOF
 sudo mkdir -p /run/opendmarc
 sudo mkdir -p /var/run/opendmarc
 sudo mkdir -p /etc/opendmarc
+sudo mkdir -p /var/log/opendmarc
 
-# Ajustar permissões e a propriedade dos diretórios
+# Ajustar permissões e propriedade dos diretórios
 sudo chown opendmarc:opendmarc /run/opendmarc
 sudo chmod 750 /run/opendmarc
+sudo chown opendmarc:opendmarc /var/run/opendmarc
+sudo chmod 750 /var/run/opendmarc
+sudo chown opendmarc:opendmarc /etc/opendmarc
+sudo chmod 750 /etc/opendmarc
+sudo chown opendmarc:opendmarc /var/log/opendmarc
+sudo chmod 750 /var/log/opendmarc
 
-# Criação do arquivo de configuração do OpenDMARC
+# Criar o arquivo de configuração do OpenDMARC
 sudo tee /etc/opendmarc.conf > /dev/null <<EOF
 # Configuração de logs
 Syslog true
@@ -249,6 +256,10 @@ ReportCommand /usr/sbin/sendmail dmarc-reports@$ServerName
 AggregateReports true
 EOF
 
+# Criar o arquivo de hosts a serem ignorados se não existir
+sudo touch /etc/opendmarc/ignore.hosts
+sudo chown opendmarc:opendmarc /etc/opendmarc/ignore.hosts
+sudo chmod 644 /etc/opendmarc/ignore.hosts
 sleep 3
 
 # Reinicia os serviços
