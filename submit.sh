@@ -214,11 +214,37 @@ sudo mkdir -p /run/opendmarc
 sudo chown opendmarc:opendmarc /run/opendmarc
 sudo chmod 750 /run/opendmarc
 
-# Configuração do OpenDMARC
+# Criação do arquivo de configuração do OpenDMARC
 sudo tee /etc/opendmarc.conf > /dev/null <<EOF
+# Configuração de logs
 Syslog true
+
+# Definição do socket onde o OpenDMARC escuta
 Socket inet:54321@localhost
+
+# Definição do arquivo PID para controle do processo
 PidFile /run/opendmarc/opendmarc.pid
+
+# ID do autenticador usado nos cabeçalhos de autenticação
+AuthservID OpenDMARC
+
+# Localização do arquivo de hosts a serem ignorados
+IgnoreHosts /etc/opendmarc/ignore.hosts
+
+# Definição de se rejeitar falhas de DMARC
+RejectFailures false
+
+# IDs de servidores de autenticação confiáveis
+TrustedAuthservIDs mail.$ServerName
+
+# Arquivo de histórico para relatórios detalhados
+HistoryFile /var/run/opendmarc/opendmarc.dat
+
+# Endereço de email para enviar relatórios agregados DMARC
+ReportCommand /usr/sbin/sendmail dmarc-reports@$ServerName
+
+# Configuração de tempo de envio dos relatórios agregados
+AggregateReports true
 EOF
 
 sleep 3
@@ -261,7 +287,7 @@ curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$Cloudf
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
-     --data '{ "type": "TXT", "name": "_dmarc.'$ServerName'", "content": "v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmark@'$ServerName'; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r", "ttl": 120, "proxied": false }'
+     --data '{ "type": "TXT", "name": "_dmarc.'$ServerName'", "content": "v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmarc-reports@'$ServerName'; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r", "ttl": 120, "proxied": false }'
 
 echo "  -- Cadastrando DKIM"
 curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
