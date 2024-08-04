@@ -209,15 +209,12 @@ EOF
 
 # Criar os diretórios necessários para o OpenDMARC
 sudo mkdir -p /run/opendmarc
-sudo mkdir -p /var/run/opendmarc
 sudo mkdir -p /etc/opendmarc
 sudo mkdir -p /var/log/opendmarc
 
 # Ajustar permissões e propriedade dos diretórios
 sudo chown opendmarc:opendmarc /run/opendmarc
 sudo chmod 750 /run/opendmarc
-sudo chown opendmarc:opendmarc /var/run/opendmarc
-sudo chmod 750 /var/run/opendmarc
 sudo chown opendmarc:opendmarc /etc/opendmarc
 sudo chmod 750 /etc/opendmarc
 sudo chown opendmarc:opendmarc /var/log/opendmarc
@@ -256,9 +253,9 @@ sudo chown opendmarc:opendmarc /etc/opendmarc/ignore.hosts
 sudo chmod 644 /etc/opendmarc/ignore.hosts
 
 # Criar o diretório e arquivo de histórico do OpenDMARC
-sudo touch /run/opendmarc/opendmarc.dat
-sudo chown opendmarc:opendmarc /run/opendmarc/opendmarc.dat
-sudo chmod 644 /run/opendmarc/opendmarc.dat
+sudo touch /var/run/opendmarc/opendmarc.dat
+sudo chown opendmarc:opendmarc /var/run/opendmarc/opendmarc.dat
+sudo chmod 644 /var/run/opendmarc/opendmarc.dat
 
 # Criar o arquivo PID do OpenDMARC
 sudo touch /run/opendmarc/opendmarc.pid
