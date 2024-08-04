@@ -77,12 +77,15 @@ Selector                ${DKIMSelector}
 Socket                  inet:9982@localhost
 RequireSafeKeys         false" | sudo tee /etc/opendkim.conf > /dev/null
 
+# Define os hosts confiáveis para o DKIM
 echo "127.0.0.1
 localhost
 $ServerName
 *.$" | sudo tee /etc/opendkim/TrustedHosts > /dev/null
 
+# Gera as chaves para o DKIM
 sudo opendkim-genkey -b 2048 -s $DKIMSelector -d $ServerName -D /etc/opendkim/keys/
+
 
 echo "$DKIMSelector._key.$ServerName $ServerName:$DKIMSelector:/etc/opendkim/keys/$DKIMSelector.private" | sudo tee /etc/opendkim/KeyTable > /dev/null
 echo "*@$ServerName $DKIMSelector._key.$ServerName" | sudo tee /etc/opendkim/SigningTable > /dev/null
@@ -91,6 +94,7 @@ echo "*@$ServerName $DKIMSelector._key.$ServerName" | sudo tee /etc/opendkim/Sig
 sudo chmod 600 /etc/opendkim/keys/*
 sudo chown opendkim:opendkim /etc/opendkim/keys/*
 
+# Adiciona as chaves ao KeyTable e SigningTable
 sudo chmod -R 777 /etc/opendkim/ && sudo chown -R opendkim:opendkim /etc/opendkim/
 sudo cp /etc/opendkim/keys/$DKIMSelector.txt /root/dkim.txt && sudo chmod -R 777 /root/dkim.txt
 
