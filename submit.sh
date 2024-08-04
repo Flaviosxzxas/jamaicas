@@ -257,10 +257,16 @@ sudo touch /etc/opendmarc/ignore.hosts
 sudo chown opendmarc:opendmarc /etc/opendmarc/ignore.hosts
 sudo chmod 644 /etc/opendmarc/ignore.hosts
 
-# Criar o arquivo de histórico do OpenDMARC se não existir
+# Criar o diretório e arquivo de histórico do OpenDMARC
+sudo mkdir -p /var/run/opendmarc  # Assegure-se de que o diretório existe
 sudo touch /var/run/opendmarc/opendmarc.dat
 sudo chown opendmarc:opendmarc /var/run/opendmarc/opendmarc.dat
 sudo chmod 644 /var/run/opendmarc/opendmarc.dat
+
+# Criar o arquivo PID do OpenDMARC
+sudo touch /run/opendmarc/opendmarc.pid
+sudo chown opendmarc:opendmarc /run/opendmarc/opendmarc.pid
+sudo chmod 644 /run/opendmarc/opendmarc.pid
 
 # Reiniciar os serviços do Postfix e Dovecot
 sudo systemctl restart postfix
