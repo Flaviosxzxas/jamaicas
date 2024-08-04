@@ -211,6 +211,7 @@ EOF
 sudo mkdir -p /run/opendmarc
 sudo mkdir -p /etc/opendmarc
 sudo mkdir -p /var/log/opendmarc
+sudo mkdir -p /var/lib/opendmarc
 
 # Ajustar permissões e propriedade dos diretórios
 sudo chown opendmarc:opendmarc /run/opendmarc
@@ -219,6 +220,8 @@ sudo chown opendmarc:opendmarc /etc/opendmarc
 sudo chmod 750 /etc/opendmarc
 sudo chown opendmarc:opendmarc /var/log/opendmarc
 sudo chmod 750 /var/log/opendmarc
+sudo chown opendmarc:opendmarc /var/lib/opendmarc
+sudo chmod 750 /var/lib/opendmarc
 
 # Criar o arquivo de configuração do OpenDMARC
 sudo tee /etc/opendmarc.conf > /dev/null <<EOF
@@ -244,7 +247,7 @@ RejectFailures false
 TrustedAuthservIDs ${ServerName}
 
 # Arquivo de histórico para relatórios detalhados
-HistoryFile /run/opendmarc/opendmarc.dat
+HistoryFile /var/lib/opendmarc/opendmarc.dat
 EOF
 
 # Criar o arquivo de hosts a serem ignorados se não existir
@@ -252,15 +255,15 @@ sudo touch /etc/opendmarc/ignore.hosts
 sudo chown opendmarc:opendmarc /etc/opendmarc/ignore.hosts
 sudo chmod 644 /etc/opendmarc/ignore.hosts
 
-# Criar o diretório e arquivo de histórico do OpenDMARC
-sudo touch /var/run/opendmarc/opendmarc.dat
-sudo chown opendmarc:opendmarc /var/run/opendmarc/opendmarc.dat
-sudo chmod 644 /var/run/opendmarc/opendmarc.dat
+# Criar o arquivo de histórico do OpenDMARC
+sudo touch /var/lib/opendmarc/opendmarc.dat
+sudo chown opendmarc:opendmarc /var/lib/opendmarc/opendmarc.dat
+sudo chmod 644 /var/lib/opendmarc/opendmarc.dat
 
 # Criar o arquivo PID do OpenDMARC
 sudo touch /run/opendmarc/opendmarc.pid
 sudo chown opendmarc:opendmarc /run/opendmarc/opendmarc.pid
-sudo chmod 644 /run/opendmarc/opendmarc.pid
+sudo chmod 600 /run/opendmarc/opendmarc.pid
 
 # Reiniciar os serviços do Postfix e Dovecot
 sudo systemctl restart postfix
