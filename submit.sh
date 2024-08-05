@@ -103,6 +103,16 @@ sudo chown -R opendkim:opendkim /etc/opendkim/keys
 sudo chmod 600 /etc/opendkim/keys/*
 sudo chmod 700 /etc/opendkim/keys
 
+sudo chown opendkim:opendkim /etc/opendkim/KeyTable
+sudo chmod 644 /etc/opendkim/KeyTable
+
+sudo chown opendkim:opendkim /etc/opendkim/SigningTable
+sudo chmod 644 /etc/opendkim/SigningTable
+
+sudo chown -R opendkim:opendkim /etc/opendkim/keys
+sudo chmod -R 700 /etc/opendkim/keys
+
+
 # Adiciona as chaves ao KeyTable e SigningTable
 sudo cp /etc/opendkim/keys/$DKIMSelector.txt /root/dkim.txt && sudo chmod 600 /root/dkim.txt
 
@@ -216,6 +226,7 @@ HELO_reject = False
 Mail_From_reject = False
 Rcpt_To_reject = True
 EOF
+
 
 # Criar os diretórios necessários para o OpenDMARC
 sudo mkdir -p /run/opendmarc
