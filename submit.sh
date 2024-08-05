@@ -193,7 +193,7 @@ inet_protocols = all
 
 # Define o tempo máximo de inatividade para uma conexão SMTP. 
 # Neste caso, a conexão será encerrada após 1 segundo de inatividade.
-smtpd_client_idle_timeout = 1s
+smtpd_client_idle_timeout = 100s
 
 # Exige que o cliente SMTP envie um comando HELO ou EHLO antes de enviar uma mensagem.
 # Isso ajuda a garantir que o cliente se identifique corretamente.
