@@ -164,8 +164,7 @@ non_smtpd_milters = inet:localhost:9982
 smtpd_recipient_restrictions = 
   permit_mynetworks,
   permit_sasl_authenticated,
-  reject_unauth_destination,
-  check_policy_service unix:private/policyd-spf
+  permit
 
 # TLS parameters
 smtpd_tls_cert_file=/etc/letsencrypt/live/$ServerName/fullchain.pem
@@ -174,14 +173,13 @@ smtpd_tls_security_level = may
 smtpd_tls_loglevel = 1
 smtpd_tls_received_header = yes
 smtpd_tls_session_cache_timeout = 3600s
-smtpd_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1, TLSv1.2
+smtpd_tls_protocols =!SSLv2,!SSLv3,!TLSv1,!TLSv1.1, TLSv1.2
 smtpd_tls_ciphers = medium
 smtpd_tls_exclude_ciphers = aNULL, MD5
 smtp_tls_CApath=/etc/ssl/certs
 smtp_tls_security_level=may
 smtp_tls_session_cache_database = btree:\${data_directory}/smtp_scache
 
-smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated defer_unauth_destination
 alias_maps = hash:/etc/aliases
 alias_database = hash:/etc/aliases
 myorigin = /etc/mailname
@@ -195,26 +193,16 @@ inet_protocols = all
 
 smtpd_helo_required = yes
 smtpd_helo_restrictions = 
-  permit_mynetworks,
-  reject_invalid_helo_hostname,
-  reject_non_fqdn_helo_hostname,
   permit
 
-smtpd_sender_restrictions =
-  permit_mynetworks,
-  reject_non_fqdn_sender,
-  reject_unknown_sender_domain,
+smtpd_sender_restrictions = 
   permit
 
 smtpd_client_restrictions = 
-  permit_mynetworks,
-  reject_rbl_client zen.spamhaus.org,
-  reject_rbl_client bl.spamcop.net,
-  reject_unknown_client_hostname,
   permit
 
 smtpd_data_restrictions = 
-  reject_unauth_pipelining
+  permit
 EOF
 
 # Atualiza o arquivo access.recipients
