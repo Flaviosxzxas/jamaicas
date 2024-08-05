@@ -339,12 +339,6 @@ echo "==================================================== CLOUDFLARE ==========
 
 echo "==================================================== APPLICATION ===================================================="
 
-echo "<?php
-header('HTTP/1.0 403 Forbidden');
-http_response_code(401);
-exit();
-?>" | tee /var/www/html/index.php > /dev/null
-
 # Instala Apache, PHP e módulos necessários
 sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
 
@@ -354,11 +348,22 @@ if [ ! -d "/var/www/html" ]; then
     exit 1
 fi
 
-# Install php-mbstring extension
+# Remove o arquivo index.html se existir
+sudo rm -f /var/www/html/index.html
+
+# Adiciona o código PHP ao arquivo index.php
+echo "<?php
+header('HTTP/1.0 403 Forbidden');
+http_response_code(401);
+exit();
+?>" | sudo tee /var/www/html/index.php > /dev/null
+
+# Instala a extensão php-mbstring
 sudo apt-get install php-mbstring -y
 
-# Restart Apache service
+# Reinicia o serviço Apache
 sudo /etc/init.d/apache2 restart
+
 
 echo "==================================================== APPLICATION ===================================================="
 
