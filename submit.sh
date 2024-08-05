@@ -160,9 +160,6 @@ milter_default_action = accept
 smtpd_milters = inet:localhost:9982
 non_smtpd_milters = inet:localhost:9982
 
-# Destination settings
-destination_rate_delay = 5s
-
 # SPF Settings
 smtpd_recipient_restrictions = 
   permit_mynetworks,
