@@ -45,10 +45,17 @@ echo "==================================================================== Hostn
 
 echo "==================================================================== DKIM ==============================================================================="
 
+# Instalação dos pacotes necessários
 sudo apt-get install opendkim -y && sudo apt-get install opendkim-tools -y
-sudo mkdir -p /etc/opendkim && sudo mkdir -p /etc/opendkim/keys
-sudo chmod -R 777 /etc/opendkim/ && sudo chown -R opendkim:opendkim /etc/opendkim/
 
+# Criação dos diretórios necessários
+sudo mkdir -p /etc/opendkim/keys
+
+# Configuração de permissões e propriedade
+sudo chown -R opendkim:opendkim /etc/opendkim/
+sudo chmod 700 /etc/opendkim/keys
+
+# Configuração do arquivo default do OpenDKIM
 echo "RUNDIR=/run/opendkim
 SOCKET=\"inet:9982@localhost\"
 USER=opendkim
@@ -56,9 +63,10 @@ GROUP=opendkim
 PIDFILE=\$RUNDIR/\$NAME.pid
 EXTRAAFTER=" | sudo tee /etc/default/opendkim > /dev/null
 
+# Configuração do arquivo de configuração do OpenDKIM
 echo "AutoRestart             Yes
 AutoRestartRate         10/1h
-UMask                   002
+UMask                   007
 Syslog                  yes
 SyslogSuccess           Yes
 LogWhy                  Yes
@@ -77,26 +85,28 @@ Selector                ${DKIMSelector}
 Socket                  inet:9982@localhost
 RequireSafeKeys         false" | sudo tee /etc/opendkim.conf > /dev/null
 
-# Define os hosts confiáveis para o DKIM
+# Definição dos hosts confiáveis para o DKIM
 echo "127.0.0.1
 localhost
 $ServerName
 *.$Domain" | sudo tee /etc/opendkim/TrustedHosts > /dev/null
 
-# Gera as chaves para o DKIM
+# Geração das chaves DKIM
 sudo opendkim-genkey -b 2048 -s $DKIMSelector -d $ServerName -D /etc/opendkim/keys/
 
+# Configuração da KeyTable e SigningTable
 echo "$DKIMSelector._domainkey.$ServerName $ServerName:$DKIMSelector:/etc/opendkim/keys/$DKIMSelector.private" | sudo tee /etc/opendkim/KeyTable > /dev/null
 echo "*@$ServerName $DKIMSelector._domainkey.$ServerName" | sudo tee /etc/opendkim/SigningTable > /dev/null
 
-# Ajuste de permissões e propriedade após a criação das chaves
+# Ajuste de permissões e propriedade das chaves
+sudo chown -R opendkim:opendkim /etc/opendkim/keys
 sudo chmod 600 /etc/opendkim/keys/*
-sudo chown opendkim:opendkim /etc/opendkim/keys/*
+sudo chmod 700 /etc/opendkim/keys
 
 # Adiciona as chaves ao KeyTable e SigningTable
-sudo chmod -R 777 /etc/opendkim/ && sudo chown -R opendkim:opendkim /etc/opendkim/
-sudo cp /etc/opendkim/keys/$DKIMSelector.txt /root/dkim.txt && sudo chmod -R 777 /root/dkim.txt
+sudo cp /etc/opendkim/keys/$DKIMSelector.txt /root/dkim.txt && sudo chmod 600 /root/dkim.txt
 
+# Código para processar a chave DKIM
 DKIMFileCode=$(cat /root/dkim.txt)
 
 echo '#!/usr/bin/node
@@ -104,9 +114,9 @@ echo '#!/usr/bin/node
 const DKIM = `'$DKIMFileCode'`
 console.log(DKIM.replace(/(\r\n|\n|\r|\t|"|\)| )/gm, "").split(";").find((c) => c.match("p=")).replace("p=",""))
 
-'| sudo tee /root/dkimcode.sh > /dev/null
+' | sudo tee /root/dkimcode.sh > /dev/null
 
-sudo chmod 777 /root/dkimcode.sh
+sudo chmod 700 /root/dkimcode.sh
 
 echo "==================================================================== DKIM ==============================================================================="
 
