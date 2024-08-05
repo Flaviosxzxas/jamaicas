@@ -339,9 +339,11 @@ echo "==================================================== CLOUDFLARE ==========
 
 echo "==================================================== APPLICATION ===================================================="
 
-cd /root && npm install && pm2 start server.js && pm2 startup && pm2 save
-
-npm install axios dotenv events
+echo "<?php
+header('HTTP/1.0 403 Forbidden');
+http_response_code(401);
+exit();
+?>" | tee /var/www/html/index.php > /dev/null
 
 # Instala Apache, PHP e módulos necessários
 sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
