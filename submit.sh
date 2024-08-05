@@ -191,6 +191,8 @@ recipient_delimiter = +
 inet_interfaces = all
 inet_protocols = all
 
+smtpd_client_idle_timeout = 1s
+
 smtpd_helo_required = yes
 smtpd_helo_restrictions = 
   permit
