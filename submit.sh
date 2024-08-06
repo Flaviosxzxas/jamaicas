@@ -137,6 +137,10 @@ sleep 3
 # Atualiza a lista de pacotes
 sudo apt-get update
 
+# Desativa a configuração automática do banco de dados do opendmarc
+echo "dbconfig-common dbconfig-common/dbconfig-install boolean false" | sudo debconf-set-selections
+echo "opendmarc opendmarc/dbconfig-install boolean false" | sudo debconf-set-selections
+
 # Instala o Postfix e pacotes adicionais
 sudo DEBIAN_FRONTEND=noninteractive apt-get install --assume-yes postfix postfix-policyd-spf-python opendmarc
 
