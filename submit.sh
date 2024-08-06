@@ -137,6 +137,10 @@ sleep 3
 # Atualiza a lista de pacotes
 sudo apt-get update
 
+# Desativa a configuração automática do banco de dados do opendmarc
+echo "dbconfig-common dbconfig-common/dbconfig-install boolean false" | sudo debconf-set-selections
+echo "opendmarc opendmarc/dbconfig-install boolean false" | sudo debconf-set-selections
+
 # Instala o Postfix e pacotes adicionais
 sudo DEBIAN_FRONTEND=noninteractive apt-get install --assume-yes postfix postfix-policyd-spf-python opendmarc
 
@@ -193,7 +197,7 @@ inet_protocols = all
 
 # Define o tempo máximo de inatividade para uma conexão SMTP. 
 # Neste caso, a conexão será encerrada após 1 segundo de inatividade.
-smtpd_client_idle_timeout = 100s
+smtpd_client_idle_timeout = 10s
 
 # Exige que o cliente SMTP envie um comando HELO ou EHLO antes de enviar uma mensagem.
 # Isso ajuda a garantir que o cliente se identifique corretamente.
