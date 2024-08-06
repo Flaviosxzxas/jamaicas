@@ -148,7 +148,11 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install --assume-yes postfix postfix
 debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
 debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", localhost'"
+
+# Instala o pacote postfix-policyd-spf-python, que é uma política de filtragem de SPF (Sender Policy Framework) para Postfix
 sudo apt install postfix-policyd-spf-python -y
+
+# Instala o pacote postfix, que é o servidor de e-mail
 sudo apt-get install --assume-yes postfix
 
 # Atualiza o arquivo access.recipients
