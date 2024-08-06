@@ -193,7 +193,7 @@ alias_database = hash:/etc/aliases
 myorigin = /etc/mailname
 mydestination = $ServerName, localhost
 relayhost =
-mynetworks = 127.0.0.0/8 [::1]/128
+mynetworks = $ServerName 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
 mailbox_size_limit = 0
 recipient_delimiter = +
 inet_interfaces = all
@@ -208,9 +208,8 @@ EOF
 sudo tee /etc/postfix-policyd-spf-python/policyd-spf.conf > /dev/null <<EOF
 HELO_reject = False
 Mail_From_reject = False
-Rcpt_To_reject = True
+# Rcpt_To_reject = True
 EOF
-
 
 # Criar os diretórios necessários para o OpenDMARC
 sudo mkdir -p /run/opendmarc
