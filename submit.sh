@@ -171,22 +171,51 @@ wait # adiciona essa linha para esperar que o comando seja concluído
 echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
 sudo postmap /etc/postfix/access.recipients
 
-# Instala o dos2unix
-sudo apt-get install dos2unix
-wait # adiciona essa linha para esperar que o comando seja concluído
+# Função para verificar e corrigir o arquivo header_checks
+check_header_checks() {
+    echo "Verificando o arquivo /etc/postfix/header_checks..."
 
-echo "/^Received: by ${ServerName}/ IGNORE" > /etc/postfix/header_checks
-wait # adiciona essa linha para esperar que o comando seja concluído
+    # Crie o arquivo header_checks com o conteúdo correto
+    echo "/^Received: by ${ServerName}/ IGNORE" | sudo tee /etc/postfix/header_checks > /dev/null
 
-# Converta o arquivo para o formato Unix para garantir a terminação de linha correta
-sudo dos2unix /etc/postfix/header_checks
-wait # adiciona essa linha para esperar que o comando seja concluído
+    # Converta o arquivo para o formato Unix
+    sudo sed -i 's/\r$//' /etc/postfix/header_checks
 
-sudo sed -i 's/\r$//' /etc/postfix/header_checks
-sudo tr -d '\r' < /etc/postfix/header_checks > /etc/postfix/header_checks.new
-sudo mv /etc/postfix/header_checks.new /etc/postfix/header_checks
+    # Verifique o conteúdo do arquivo
+    echo "Conteúdo do arquivo /etc/postfix/header_checks:"
+    cat -A /etc/postfix/header_checks
 
-sudo systemctl restart postfix
+    # Remova o arquivo de mapa, se existir
+    sudo rm -f /etc/postfix/header_checks.db
+
+    # Reinicie o Postfix
+    echo "Reiniciando o Postfix..."
+    sudo systemctl restart postfix
+}
+
+# Instale o dos2unix se necessário
+install_dos2unix() {
+    echo "Verificando e instalando o dos2unix..."
+    if ! command -v dos2unix &> /dev/null; then
+        echo "dos2unix não encontrado. Instalando..."
+        sudo apt-get update
+        sudo apt-get install -y dos2unix
+    fi
+}
+
+# Instale o dos2unix se necessário
+install_dos2unix() {
+    echo "Verificando e instalando o dos2unix..."
+    if ! command -v dos2unix &> /dev/null; then
+        echo "dos2unix não encontrado. Instalando..."
+        sudo apt-get update
+        sudo apt-get install -y dos2unix
+    fi
+}
+
+# Função principal
+main() {
+    install_dos2unix
 
 echo -e "myhostname = $ServerName
 smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
