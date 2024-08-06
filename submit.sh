@@ -150,6 +150,9 @@ debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Si
 debconf-set-selections <<< "postfix postfix/destinations string $ServerName, localhost"
 sudo dpkg-reconfigure -f noninteractive postfix
 
+# Atualiza o arquivo access.recipients
+echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
+
 # Atualiza o arquivo main.cf
 sudo tee /etc/postfix/main.cf > /dev/null <<EOF
 myhostname = $ServerName
@@ -164,11 +167,12 @@ milter_default_action = accept
 smtpd_milters = inet:localhost:9982
 non_smtpd_milters = inet:localhost:9982
 
-# SPF Settings
-smtpd_recipient_restrictions = 
+# Login without Username and Password
+smtpd_recipient_restrictions =
   permit_mynetworks,
+  check_recipient_access hash:/etc/postfix/access.recipients,
   permit_sasl_authenticated,
-  permit
+  reject_unauth_destination
 
 # TLS parameters
 smtpd_tls_cert_file=/etc/letsencrypt/live/$ServerName/fullchain.pem
@@ -198,35 +202,7 @@ inet_protocols = all
 # Define o tempo máximo de inatividade para uma conexão SMTP. 
 # Neste caso, a conexão será encerrada após 1 segundo de inatividade.
 smtpd_client_idle_timeout = 10s
-
-# Exige que o cliente SMTP envie um comando HELO ou EHLO antes de enviar uma mensagem.
-# Isso ajuda a garantir que o cliente se identifique corretamente.
-smtpd_helo_required = yes
-
-# Define as restrições aplicáveis ao comando HELO. 
-# Com 'permit', qualquer cliente que envie um comando HELO será aceito.
-smtpd_helo_restrictions = 
-  permit
-
-# Define as restrições aplicáveis ao endereço do remetente.
-# Com 'permit', todos os endereços de remetente são aceitos sem restrições adicionais.
-smtpd_sender_restrictions = 
-  permit
-
-# Define as restrições aplicáveis ao cliente que está se conectando.
-# Com 'permit', todos os clientes são aceitos sem verificações adicionais.
-smtpd_client_restrictions = 
-  permit
-
-# Define as restrições aplicáveis ao corpo da mensagem durante a fase de envio de dados.
-# Com 'permit', não há restrições adicionais para o conteúdo das mensagens.
-smtpd_data_restrictions = 
-  permit
 EOF
-
-
-# Atualiza o arquivo access.recipients
-echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
 
 # Criação do arquivo de configuração do policyd-spf
 sudo tee /etc/postfix-policyd-spf-python/policyd-spf.conf > /dev/null <<EOF
