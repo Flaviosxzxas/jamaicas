@@ -2,6 +2,7 @@
 
 # Atualizar e atualizar pacotes
 sudo apt update && sudo apt full-upgrade
+wait # adicione essa linha para esperar que o comando seja concluído
 
 ServerName=$1
 CloudflareAPI=$2
