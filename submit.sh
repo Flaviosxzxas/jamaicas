@@ -66,7 +66,7 @@ EXTRAAFTER=" | sudo tee /etc/default/opendkim > /dev/null
 # Configuração do arquivo de configuração do OpenDKIM
 echo "AutoRestart             Yes
 AutoRestartRate         10/1h
-UMask                   007
+UMask                   002
 Syslog                  yes
 SyslogSuccess           Yes
 LogWhy                  Yes
@@ -137,10 +137,6 @@ sleep 3
 # Atualiza a lista de pacotes
 sudo apt-get update
 
-# Desativa a configuração automática do banco de dados do opendmarc
-echo "dbconfig-common dbconfig-common/dbconfig-install boolean false" | sudo debconf-set-selections
-echo "opendmarc opendmarc/dbconfig-install boolean false" | sudo debconf-set-selections
-
 # Instala o Postfix e pacotes adicionais
 sudo DEBIAN_FRONTEND=noninteractive apt-get install --assume-yes postfix postfix-policyd-spf-python opendmarc
 
@@ -158,9 +154,7 @@ sudo apt-get install --assume-yes postfix
 # Atualiza o arquivo access.recipients
 echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
 
-# Atualiza o arquivo main.cf
-sudo tee /etc/postfix/main.cf > /dev/null <<EOF
-myhostname = $ServerName
+echo -e "myhostname = $ServerName
 smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
 biff = no
 readme_directory = no
@@ -206,8 +200,8 @@ inet_protocols = all
 
 # Define o tempo máximo de inatividade para uma conexão SMTP. 
 # Neste caso, a conexão será encerrada após 1 segundo de inatividade.
-smtpd_client_idle_timeout = 10s
-EOF
+smtpd_client_idle_timeout = 10s" | sudo tee /etc/postfix/main.cf > /dev/null
+
 
 # Criação do arquivo de configuração do policyd-spf
 sudo tee /etc/postfix-policyd-spf-python/policyd-spf.conf > /dev/null <<EOF
