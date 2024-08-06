@@ -7,7 +7,9 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 # Atualizar a lista de pacotes e atualizar pacotes
+# Atualizar a lista de pacotes e atualizar pacotes
 apt-get update
+apt-get upgrade -y
 wait # adiciona essa linha para esperar que o comando seja concluído
 
 ServerName=$1
