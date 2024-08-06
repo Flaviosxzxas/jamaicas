@@ -161,19 +161,30 @@ debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", 
 
 # Instala o pacote postfix-policyd-spf-python, que é uma política de filtragem de SPF (Sender Policy Framework) para Postfix
 sudo apt install postfix-policyd-spf-python -y
+wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Instala o pacote postfix, que é o servidor de e-mail
 sudo apt-get install --assume-yes postfix
+wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Atualiza o arquivo access.recipients
 echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
 sudo postmap /etc/postfix/access.recipients
+
+echo "/^Received: by ${ServerName}/ DISCARD" > /etc/postfix/header_checks
+wait # adiciona essa linha para esperar que o comando seja concluído
+
+# Converta o arquivo para o formato Unix para garantir a terminação de linha correta
+sudo dos2unix /etc/postfix/header_checks
+wait # adiciona essa linha para esperar que o comando seja concluído
 
 echo -e "myhostname = $ServerName
 smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
 biff = no
 readme_directory = no
 compatibility_level = 3.6
+
+header_checks = regexp:/etc/postfix/header_checks
 
 # DKIM Settings
 milter_protocol = 2
@@ -211,12 +222,11 @@ mynetworks = $ServerName 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
 mailbox_size_limit = 0
 recipient_delimiter = +
 inet_interfaces = all
-inet_protocols = all
+inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 
-# Define o tempo máximo de inatividade para uma conexão SMTP. 
-# Neste caso, a conexão será encerrada após 1 segundo de inatividade.
-smtpd_client_idle_timeout = 10s" | sudo tee /etc/postfix/main.cf > /dev/null
-
+# Gere o arquivo de mapa para header_checks
+sudo postmap /etc/postfix/header_checks
+wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Criação do arquivo de configuração do policyd-spf
 sudo tee /etc/postfix-policyd-spf-python/policyd-spf.conf > /dev/null <<EOF
