@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Atualizar e atualizar pacotes
-sudo apt update && sudo apt full-upgrade
+sudo apt update
 wait # adicione essa linha para esperar que o comando seja concluído
 
 ServerName=$1
@@ -61,7 +61,7 @@ sudo chmod -R 750 /etc/opendkim/
 
 # Configuração do arquivo default do OpenDKIM
 echo "RUNDIR=/run/opendkim
-SOCKET=\"inet:9982@localhost\"
+SOCKET=\"inet:12301@localhost\"
 USER=opendkim
 GROUP=opendkim
 PIDFILE=\$RUNDIR/\$NAME.pid
@@ -86,7 +86,7 @@ UserID                  opendkim:opendkim
 Domain                  ${ServerName}
 KeyFile                 /etc/opendkim/keys/${DKIMSelector}.private
 Selector                ${DKIMSelector}
-Socket                  inet:9982@localhost
+Socket                  inet:12301@localhost
 RequireSafeKeys         false" | sudo tee /etc/opendkim.conf > /dev/null
 
 # Definição dos hosts confiáveis para o DKIM
@@ -103,11 +103,18 @@ sudo chown opendkim:opendkim /etc/opendkim/keys/${DKIMSelector}.private
 sudo chmod 640 /etc/opendkim/keys/${DKIMSelector}.private
 
 # Configuração da KeyTable e SigningTable
-echo "$DKIMSelector._domainkey.$ServerName $ServerName:$DKIMSelector:/etc/opendkim/keys/$DKIMSelector.private" | sudo tee /etc/opendkim/KeyTable > /dev/null
-echo "*@$ServerName $DKIMSelector._domainkey.$ServerName" | sudo tee /etc/opendkim/SigningTable > /dev/null
+echo "mail._domainkey.$ServerName $ServerName:$DKIMSelector:/etc/opendkim/keys/$DKIMSelector.private" | sudo tee /etc/opendkim/KeyTable > /dev/null
+echo "*@$ServerName mail._domainkey.$ServerName" | sudo tee /etc/opendkim/SigningTable > /dev/null
 
 # Ajuste de permissões e propriedade das chaves
 sudo chmod -R 750 /etc/opendkim/
+
+cd /etc/opendkim/keys/$ServerName; sudo opendkim-genkey -s mail -d $ServerName
+cd /etc/opendkim/keys/$ServerName; sudo chown opendkim:opendkim $DKIMSelector.private
+sudo chown -R opendkim:opendkim /etc/opendkim
+sudo chmod go-rw /etc/opendkim/keys
+sudo chmod 777 /etc/opendkim/keys/$ServerName/mail.private
+sudo chmod 777 /etc/opendkim/keys/$ServerName
 
 # Adiciona as chaves ao KeyTable e SigningTable
 sudo cp /etc/opendkim/keys/$DKIMSelector.txt /root/dkim.txt && sudo chmod 644 /root/dkim.txt
@@ -163,8 +170,8 @@ compatibility_level = 3.6
 # DKIM Settings
 milter_protocol = 2
 milter_default_action = accept
-smtpd_milters = inet:localhost:9982
-non_smtpd_milters = inet:localhost:9982
+smtpd_milters = inet:localhost:12301
+non_smtpd_milters = inet:localhost:12301
 
 # Login without Username and Password
 smtpd_recipient_restrictions =
@@ -320,7 +327,7 @@ curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$Cloudf
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
-     --data '{ "type": "TXT", "name": "'$DKIMSelector'._domainkey.'$ServerName'", "content": "v=DKIM1; h=sha256; k=rsa; p='$DKIMCode'", "ttl": 120, "proxied": false }'
+     --data '{ "type": "TXT", "name": "mail._domainkey.'$ServerName'", "content": "v=DKIM1; h=sha256; k=rsa; p='$DKIMCode'", "ttl": 120, "proxied": false }'
 
 echo "  -- Cadastrando MX"
 curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
