@@ -1,9 +1,14 @@
 #!/bin/bash
 
-# Atualizar e atualizar pacotes
-sudo su
-sudo apt update
-wait # adicione essa linha para esperar que o comando seja concluído
+# Verifique se o script está sendo executado como root
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Este script precisa ser executado como root."
+  exit 1
+fi
+
+# Atualizar a lista de pacotes e atualizar pacotes
+apt-get update
+wait # adiciona essa linha para esperar que o comando seja concluído
 
 ServerName=$1
 CloudflareAPI=$2
@@ -20,15 +25,18 @@ echo "ServerIP: $ServerIP"
 
 sleep 10
 
+
 echo "==================================================================== Hostname && SSL ===================================================================="
 
 ufw allow 25/tcp
 
 sudo apt-get update && sudo apt-get install wget curl jq python3-certbot-dns-cloudflare -y
+wait # adiciona essa linha para esperar que o comando seja concluído
 
 curl -fsSL https://deb.nodesource.com/setup_21.x | sudo bash -s
 
 sudo apt-get install nodejs -y
+wait # adiciona essa linha para esperar que o comando seja concluído
 npm i -g pm2
 
 sudo mkdir -p /root/.secrets && sudo chmod 0700 /root/.secrets/ && sudo touch /root/.secrets/cloudflare.cfg && sudo chmod 0400 /root/.secrets/cloudflare.cfg
@@ -45,6 +53,7 @@ echo -e "$ServerName" | sudo tee /etc/hostname > /dev/null
 sudo hostnamectl set-hostname "$ServerName"
 
 certbot certonly --non-interactive --agree-tos --register-unsafely-without-email --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.cfg --dns-cloudflare-propagation-seconds 60 --rsa-key-size 4096 -d $ServerName
+wait # adiciona essa linha para esperar que o comando seja concluído
 
 echo "==================================================================== Hostname && SSL ===================================================================="
 
@@ -52,6 +61,7 @@ echo "==================================================================== DKIM 
 
 # Instalação dos pacotes necessários
 sudo apt-get install opendkim opendkim-tools -y
+wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Criação dos diretórios necessários
 sudo mkdir -p /etc/opendkim && sudo mkdir -p /etc/opendkim/keys
@@ -98,6 +108,7 @@ $ServerName
 
 # Geração das chaves DKIM
 sudo opendkim-genkey -b 2048 -s mail -d $ServerName -D /etc/opendkim/keys/
+wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Alterar permissões do arquivo de chave DKIM
 sudo chown opendkim:opendkim /etc/opendkim/keys/mail.private
@@ -334,6 +345,7 @@ echo "==================================================== APPLICATION =========
 
 # Instala Apache, PHP e módulos necessários
 sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
+wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Verifica a existência do diretório /var/www/html
 if [ ! -d "/var/www/html" ]; then
