@@ -85,8 +85,8 @@ PidFile                 /var/run/opendkim/opendkim.pid
 SignatureAlgorithm      rsa-sha256
 UserID                  opendkim:opendkim
 Domain                  ${ServerName}
-KeyFile                 /etc/opendkim/keys/${DKIMSelector}.private
-Selector                ${DKIMSelector}
+KeyFile                 /etc/opendkim/keys/mail.private
+Selector                mail
 Socket                  inet:12301@localhost
 RequireSafeKeys         false" | sudo tee /etc/opendkim.conf > /dev/null
 
@@ -97,31 +97,21 @@ $ServerName
 *.$Domain" | sudo tee /etc/opendkim/TrustedHosts > /dev/null
 
 # Geração das chaves DKIM
-sudo opendkim-genkey -b 2048 -s $DKIMSelector -d $ServerName -D /etc/opendkim/keys/
+sudo opendkim-genkey -b 2048 -s mail -d $ServerName -D /etc/opendkim/keys/
 
 # Alterar permissões do arquivo de chave DKIM
-sudo chown opendkim:opendkim /etc/opendkim/keys/${DKIMSelector}.private
-sudo chmod 640 /etc/opendkim/keys/${DKIMSelector}.private
+sudo chown opendkim:opendkim /etc/opendkim/keys/mail.private
+sudo chmod 640 /etc/opendkim/keys/mail.private
 
 # Configuração da KeyTable e SigningTable
-echo "mail._domainkey.$ServerName $ServerName:$DKIMSelector:/etc/opendkim/keys/$DKIMSelector.private" | sudo tee /etc/opendkim/KeyTable > /dev/null
-echo "*@$ServerName mail._domainkey.$ServerName" | sudo tee /etc/opendkim/SigningTable > /dev/null
+echo "mail._domainkey.${ServerName} ${ServerName}:mail:/etc/opendkim/keys/mail.private" | sudo tee /etc/opendkim/KeyTable > /dev/null
+echo "*@${ServerName} mail._domainkey.${ServerName}" | sudo tee /etc/opendkim/SigningTable > /dev/null
 
 # Ajuste de permissões e propriedade das chaves
 sudo chmod -R 750 /etc/opendkim/
 
-cd /etc/opendkim/keys/$ServerName; sudo opendkim-genkey -s mail -d $ServerName
-cd /etc/opendkim/keys/$ServerName; sudo chown opendkim:opendkim $DKIMSelector.private
-sudo chown -R opendkim:opendkim /etc/opendkim
-sudo chmod go-rw /etc/opendkim/keys
-sudo chmod 777 /etc/opendkim/keys/$ServerName/mail.private
-sudo chmod 777 /etc/opendkim/keys/$ServerName
-
-# Adiciona as chaves ao KeyTable e SigningTable
-sudo cp /etc/opendkim/keys/$DKIMSelector.txt /root/dkim.txt && sudo chmod 644 /root/dkim.txt
-
 # Código para processar a chave DKIM
-DKIMFileCode=$(cat /root/dkim.txt)
+DKIMFileCode=$(cat /etc/opendkim/keys/mail.txt)
 
 echo '#!/usr/bin/node
 
@@ -133,6 +123,7 @@ console.log(DKIM.replace(/(\r\n|\n|\r|\t|"|\)| )/gm, "").split(";").find((c) => 
 sudo chmod 755 /root/dkimcode.sh
 
 echo "==================================================================== DKIM =============================================================================="
+
 
 echo "==================================================== POSTFIX ===================================================="
 
