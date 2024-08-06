@@ -203,19 +203,14 @@ install_dos2unix() {
     fi
 }
 
-# Instale o dos2unix se necessário
-install_dos2unix() {
-    echo "Verificando e instalando o dos2unix..."
-    if ! command -v dos2unix &> /dev/null; then
-        echo "dos2unix não encontrado. Instalando..."
-        sudo apt-get update
-        sudo apt-get install -y dos2unix
-    fi
-}
-
 # Função principal
 main() {
     install_dos2unix
+    check_header_checks
+}
+
+# Execute a função principal
+main
 
 echo -e "myhostname = $ServerName
 smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
