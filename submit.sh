@@ -182,6 +182,10 @@ wait # adiciona essa linha para esperar que o comando seja concluído
 sudo dos2unix /etc/postfix/header_checks
 wait # adiciona essa linha para esperar que o comando seja concluído
 
+sudo sed -i 's/\r$//' /etc/postfix/header_checks
+sudo tr -d '\r' < /etc/postfix/header_checks > /etc/postfix/header_checks.new
+sudo mv /etc/postfix/header_checks.new /etc/postfix/header_checks
+
 echo -e "myhostname = $ServerName
 smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
 biff = no
