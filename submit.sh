@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # Atualizar e atualizar pacotes
+sudo su
 sudo apt update
 wait # adicione essa linha para esperar que o comando seja concluído
 
