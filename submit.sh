@@ -350,7 +350,6 @@ sudo apt-get install php-mbstring -y
 # Reinicia o serviço Apache
 sudo /etc/init.d/apache2 restart
 
-
 echo "==================================================== APPLICATION ===================================================="
 
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
