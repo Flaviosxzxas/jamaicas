@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Atualizar e atualizar pacotes
+sudo apt update && sudo apt full-upgrade
+
 ServerName=$1
 CloudflareAPI=$2
 CloudflareEmail=$3
