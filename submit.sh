@@ -145,10 +145,11 @@ echo "opendmarc opendmarc/dbconfig-install boolean false" | sudo debconf-set-sel
 sudo DEBIAN_FRONTEND=noninteractive apt-get install --assume-yes postfix postfix-policyd-spf-python opendmarc
 
 # Configurações básicas do Postfix
-debconf-set-selections <<< "postfix postfix/mailname string $ServerName"
+debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
-debconf-set-selections <<< "postfix postfix/destinations string $ServerName, localhost"
-sudo dpkg-reconfigure -f noninteractive postfix
+debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", localhost'"
+sudo apt install postfix-policyd-spf-python -y
+sudo apt-get install --assume-yes postfix
 
 # Atualiza o arquivo access.recipients
 echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
