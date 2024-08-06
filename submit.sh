@@ -171,6 +171,10 @@ wait # adiciona essa linha para esperar que o comando seja concluído
 echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
 sudo postmap /etc/postfix/access.recipients
 
+# Instala o dos2unix
+sudo apt-get install dos2unix
+wait # adiciona essa linha para esperar que o comando seja concluído
+
 echo "/^Received: by ${ServerName}/ IGNORE" > /etc/postfix/header_checks
 wait # adiciona essa linha para esperar que o comando seja concluído
 
