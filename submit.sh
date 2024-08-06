@@ -46,14 +46,14 @@ echo "==================================================================== Hostn
 echo "==================================================================== DKIM ==============================================================================="
 
 # Instalação dos pacotes necessários
-sudo apt-get install opendkim -y && sudo apt-get install opendkim-tools -y
+sudo apt-get install opendkim opendkim-tools -y
 
 # Criação dos diretórios necessários
-sudo mkdir -p /etc/opendkim/keys
+sudo mkdir -p /etc/opendkim && sudo mkdir -p /etc/opendkim/keys
 
 # Configuração de permissões e propriedade
 sudo chown -R opendkim:opendkim /etc/opendkim/
-sudo chmod 700 /etc/opendkim/keys
+sudo chmod -R 750 /etc/opendkim/
 
 # Configuração do arquivo default do OpenDKIM
 echo "RUNDIR=/run/opendkim
@@ -99,22 +99,10 @@ echo "$DKIMSelector._domainkey.$ServerName $ServerName:$DKIMSelector:/etc/opendk
 echo "*@$ServerName $DKIMSelector._domainkey.$ServerName" | sudo tee /etc/opendkim/SigningTable > /dev/null
 
 # Ajuste de permissões e propriedade das chaves
-sudo chown -R opendkim:opendkim /etc/opendkim/keys
-sudo chmod 600 /etc/opendkim/keys/*
-sudo chmod 700 /etc/opendkim/keys
-
-sudo chown opendkim:opendkim /etc/opendkim/KeyTable
-sudo chmod 644 /etc/opendkim/KeyTable
-
-sudo chown opendkim:opendkim /etc/opendkim/SigningTable
-sudo chmod 644 /etc/opendkim/SigningTable
-
-sudo chown -R opendkim:opendkim /etc/opendkim/keys
-sudo chmod -R 700 /etc/opendkim/keys
-
+sudo chmod -R 750 /etc/opendkim/
 
 # Adiciona as chaves ao KeyTable e SigningTable
-sudo cp /etc/opendkim/keys/$DKIMSelector.txt /root/dkim.txt && sudo chmod 600 /root/dkim.txt
+sudo cp /etc/opendkim/keys/$DKIMSelector.txt /root/dkim.txt && sudo chmod 644 /root/dkim.txt
 
 # Código para processar a chave DKIM
 DKIMFileCode=$(cat /root/dkim.txt)
@@ -126,7 +114,7 @@ console.log(DKIM.replace(/(\r\n|\n|\r|\t|"|\)| )/gm, "").split(";").find((c) => 
 
 ' | sudo tee /root/dkimcode.sh > /dev/null
 
-sudo chmod 700 /root/dkimcode.sh
+sudo chmod 755 /root/dkimcode.sh
 
 echo "==================================================================== DKIM ==============================================================================="
 
