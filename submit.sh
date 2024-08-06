@@ -32,8 +32,7 @@ echo "==================================================================== Hostn
 
 ufw allow 25/tcp
 
-sudo apt-get update && sudo apt-get install wget curl jq python3-certbot-dns-cloudflare -y
-wait # adiciona essa linha para esperar que o comando seja concluído
+sudo apt-get install wget curl jq python3-certbot-dns-cloudflare -y
 
 curl -fsSL https://deb.nodesource.com/setup_21.x | sudo bash -s
 
