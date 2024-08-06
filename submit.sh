@@ -142,6 +142,7 @@ sleep 3
 
 # Atualiza a lista de pacotes
 sudo apt-get update
+wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Desativa a configuração automática do banco de dados do opendmarc
 echo "dbconfig-common dbconfig-common/dbconfig-install boolean false" | sudo debconf-set-selections
@@ -149,6 +150,7 @@ echo "opendmarc opendmarc/dbconfig-install boolean false" | sudo debconf-set-sel
 
 # Instala o Postfix e pacotes adicionais
 sudo DEBIAN_FRONTEND=noninteractive apt-get install --assume-yes postfix postfix-policyd-spf-python opendmarc
+wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Configurações básicas do Postfix
 debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
@@ -163,6 +165,7 @@ sudo apt-get install --assume-yes postfix
 
 # Atualiza o arquivo access.recipients
 echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
+sudo postmap /etc/postfix/access.recipients
 
 echo -e "myhostname = $ServerName
 smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
@@ -280,15 +283,16 @@ sudo chmod 600 /run/opendmarc/opendmarc.pid
 
 # Reiniciar os serviços do Postfix e Dovecot
 sudo systemctl restart postfix
-sudo systemctl enable postfix
+wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Configurar e reiniciar o OpenDKIM
 sudo systemctl restart opendkim
-sudo systemctl enable opendkim
+wait # adiciona essa linha para esperar que o comando seja concluído
+
 
 # Configurar e reiniciar o OpenDMARC
 sudo systemctl restart opendmarc
-sudo systemctl enable opendmarc
+wait # adiciona essa linha para esperar que o comando seja concluído
 
 echo "==================================================== POSTFIX ===================================================="
 
@@ -323,7 +327,7 @@ curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$Cloudf
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
-     --data '{ "type": "TXT", "name": "_dmarc.'$ServerName'", "content": "v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmarc-reports@'$ServerName'; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r", "ttl": 120, "proxied": false }'
+     --data '{ "type": "TXT", "name": "_dmarc.'$ServerName'", "content": "v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmark@'$ServerName'; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r", "ttl": 120, "proxied": false }'
 
 echo "  -- Cadastrando DKIM"
 curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
