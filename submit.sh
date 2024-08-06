@@ -223,6 +223,10 @@ Mail_From_reject = False
 # Rcpt_To_reject = True
 EOF
 
+echo "==================================================== POSTFIX ===================================================="
+
+echo "==================================================== OpenDMARC ===================================================="
+
 # Criar os diretórios necessários para o OpenDMARC
 sudo mkdir -p /run/opendmarc
 sudo mkdir -p /etc/opendmarc
@@ -289,12 +293,11 @@ wait # adiciona essa linha para esperar que o comando seja concluído
 sudo systemctl restart opendkim
 wait # adiciona essa linha para esperar que o comando seja concluído
 
-
 # Configurar e reiniciar o OpenDMARC
 sudo systemctl restart opendmarc
 wait # adiciona essa linha para esperar que o comando seja concluído
 
-echo "==================================================== POSTFIX ===================================================="
+echo "==================================================== OpenDMARC ===================================================="
 
 echo "==================================================== CLOUDFLARE ===================================================="
 
