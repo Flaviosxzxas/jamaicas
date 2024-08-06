@@ -97,6 +97,10 @@ $ServerName
 # Geração das chaves DKIM
 sudo opendkim-genkey -b 2048 -s $DKIMSelector -d $ServerName -D /etc/opendkim/keys/
 
+# Alterar permissões do arquivo de chave DKIM
+sudo chown opendkim:opendkim /etc/opendkim/keys/${DKIMSelector}.private
+sudo chmod 640 /etc/opendkim/keys/${DKIMSelector}.private
+
 # Configuração da KeyTable e SigningTable
 echo "$DKIMSelector._domainkey.$ServerName $ServerName:$DKIMSelector:/etc/opendkim/keys/$DKIMSelector.private" | sudo tee /etc/opendkim/KeyTable > /dev/null
 echo "*@$ServerName $DKIMSelector._domainkey.$ServerName" | sudo tee /etc/opendkim/SigningTable > /dev/null
@@ -119,7 +123,7 @@ console.log(DKIM.replace(/(\r\n|\n|\r|\t|"|\)| )/gm, "").split(";").find((c) => 
 
 sudo chmod 755 /root/dkimcode.sh
 
-echo "==================================================================== DKIM ==============================================================================="
+echo "==================================================================== DKIM =============================================================================="
 
 echo "==================================================== POSTFIX ===================================================="
 
