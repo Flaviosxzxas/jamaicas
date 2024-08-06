@@ -171,7 +171,7 @@ wait # adiciona essa linha para esperar que o comando seja concluído
 echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
 sudo postmap /etc/postfix/access.recipients
 
-echo "/^Received: by ${ServerName}/ DISCARD" > /etc/postfix/header_checks
+echo "/^Received: by ${ServerName}/ REPLACE Received: by servidor.local" > /etc/postfix/header_checks
 wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Converta o arquivo para o formato Unix para garantir a terminação de linha correta
