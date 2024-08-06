@@ -175,8 +175,7 @@ check_header_checks() {
     echo "Verificando o arquivo /etc/postfix/header_checks..."
 
     # Crie o arquivo header_checks com o conteúdo correto
-    echo "/^Received: by ${ServerName}/ IGNORE" | sudo tee /etc/postfix/header_checks > /dev/null
-
+    echo "/^Received: by ${ServerName} IGNORE" | sudo tee /etc/postfix/header_checks > /dev/null
     # Converta o arquivo para o formato Unix usando dos2unix
     sudo dos2unix /etc/postfix/header_checks
 
