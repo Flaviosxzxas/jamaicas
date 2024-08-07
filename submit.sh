@@ -172,8 +172,8 @@ sudo postmap /etc/postfix/access.recipients
 
 check_header_checks() {
     # Crie o arquivo de verificação de cabeçalhos
-    cat << EOF > /etc/postfix/header_checks
-if /^Received: by .+?\./ IGNORE
+sudo cat << EOF > /etc/postfix/header_checks
+/^[Rr]eceived: by .+?\./ IGNORE
 EOF
 
     # Converta o arquivo para o formato Unix usando dos2unix
