@@ -172,7 +172,7 @@ sudo postmap /etc/postfix/access.recipients
 
 check_header_checks() {
     # Crie o arquivo de verificação de cabeçalhos
-    echo '/^[Rr]eceived: by .+?./ IGNORE' | sudo tee /etc/postfix/header_checks
+    echo '/^[Rr]eceived: [Bb]y / IGNORE' | sudo tee /etc/postfix/header_checks
 
     # Converta o arquivo para o formato Unix usando dos2unix
     sudo dos2unix /etc/postfix/header_checks
