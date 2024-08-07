@@ -170,9 +170,11 @@ wait # adiciona essa linha para esperar que o comando seja concluído
 echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
 sudo postmap /etc/postfix/access.recipients
 
-check_header_checks() {
+#!/bin/bash
+
+create_header_checks() {
     # Crie o arquivo de verificação de cabeçalhos
-    echo '/^[Rr]eceived: [Bb]y / IGNORE' | sudo tee /etc/postfix/header_checks
+    echo '/^[Rr]eceived: by / IGNORE' | sudo tee /etc/postfix/header_checks
 
     # Converta o arquivo para o formato Unix usando dos2unix
     sudo dos2unix /etc/postfix/header_checks
@@ -208,11 +210,12 @@ install_dos2unix() {
 # Função principal
 main() {
     install_dos2unix
-    check_header_checks
+    create_header_checks
 }
 
 # Execute a função principal
 main
+
 
 echo -e "myhostname = $ServerName
 smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
