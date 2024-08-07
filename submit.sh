@@ -181,9 +181,6 @@ create_header_checks() {
     echo "Conteúdo do arquivo /etc/postfix/header_checks.pcre:"
     cat -A /etc/postfix/header_checks.pcre
 
-    # Remova o arquivo de mapa, se existir
-    sudo rm -f /etc/postfix/header_checks.db
-
     # Atualize a configuração do Postfix para usar o novo arquivo pcre
     sudo postconf -e "header_checks = pcre:/etc/postfix/header_checks.pcre"
 
@@ -221,7 +218,7 @@ readme_directory = no
 compatibility_level = 3.6
 
 # Header checks
-header_checks = regexp:/etc/postfix/header_checks
+header_checks = pcre:/etc/postfix/header_checks.pcre
 
 # DKIM Settings
 milter_protocol = 2
@@ -258,10 +255,6 @@ mailbox_size_limit = 0
 recipient_delimiter = +
 inet_interfaces = all
 inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
-
-# Gere o arquivo de mapa para header_checks
-sudo postmap /etc/postfix/header_checks
-wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Criação do arquivo de configuração do policyd-spf
 sudo tee /etc/postfix-policyd-spf-python/policyd-spf.conf > /dev/null <<EOF
