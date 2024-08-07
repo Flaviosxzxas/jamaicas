@@ -233,7 +233,7 @@ readme_directory = no
 compatibility_level = 3.6
 
 # Header checks
-header_checks = pcre:/etc/postfix/header_checks.pcre
+header_checks = pcre:/etc/postfix/header_checks
 
 # DKIM Settings
 milter_protocol = 2
