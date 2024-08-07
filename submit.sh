@@ -170,14 +170,13 @@ wait # adiciona essa linha para esperar que o comando seja concluído
 echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
 sudo postmap /etc/postfix/access.recipients
 
-# Função para verificar e corrigir o arquivo header_checks
 check_header_checks() {
-    echo "Verificando o arquivo /etc/postfix/header_checks..."
-
- cat << EOF > /etc/postfix/header_checks
+    # Crie o arquivo de verificação de cabeçalhos
+    cat << EOF > /etc/postfix/header_checks
 # Regras de verificação de cabeçalhos para ignorar cabeçalhos de recebimento
-/^Received: by ${ServerName} / IGNORE
+/^Received: by .+?\./ IGNORE
 EOF
+
     # Converta o arquivo para o formato Unix usando dos2unix
     sudo dos2unix /etc/postfix/header_checks
 
@@ -187,6 +186,9 @@ EOF
 
     # Remova o arquivo de mapa, se existir
     sudo rm -f /etc/postfix/header_checks.db
+
+    # Crie o arquivo de mapa
+    sudo postmap /etc/postfix/header_checks
 
     # Reinicie o Postfix
     echo "Reiniciando o Postfix..."
