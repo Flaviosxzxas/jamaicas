@@ -215,11 +215,7 @@ main() {
     # Exiba mensagem de erro específica, se aplicável
     echo "Verificando erros específicos..."
 
-    # Verifique a existência de erros relacionados
-    if sudo postmap -q /etc/postfix/header_checks 2>&1 | grep -q "warning: record is in \"key: value\" format"; then
-        echo "Aviso: O arquivo /etc/postfix/header_checks contém um formato 'key: value' e pode estar incorreto."
-    fi
-
+    # Mensagem informativa
     echo "==================================================== POSTFIX ==================="
 }
 
