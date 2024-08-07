@@ -175,7 +175,9 @@ check_header_checks() {
     echo "Verificando o arquivo /etc/postfix/header_checks..."
 
     # Crie o arquivo header_checks com o conteúdo correto
-    echo "/^Received: by ${ServerName} IGNORE" | sudo tee /etc/postfix/header_checks > /dev/null
+    cat << EOF > /etc/postfix/header_checks
+/^Received: by ${ServerName}/ IGNORE
+EOF
     # Converta o arquivo para o formato Unix usando dos2unix
     sudo dos2unix /etc/postfix/header_checks
 
@@ -193,11 +195,14 @@ check_header_checks() {
 
 # Instale o dos2unix se necessário
 install_dos2unix() {
-    echo "Verificando e instalando o dos2unix..."
     if ! command -v dos2unix &> /dev/null; then
         echo "dos2unix não encontrado. Instalando..."
         sudo apt-get update
         sudo apt-get install -y dos2unix
+        if [ $? -ne 0 ]; then
+            echo "Erro ao instalar o dos2unix. Verifique o log de erros."
+            exit 1
+        fi
     fi
 }
 
