@@ -170,29 +170,28 @@ wait # adiciona essa linha para esperar que o comando seja concluído
 echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
 sudo postmap /etc/postfix/access.recipients
 
-check_header_checks() {
+# Função para criar e configurar o arquivo header_checks
+create_header_checks() {
     # Crie o arquivo de verificação de cabeçalhos
-    echo '/^[Rr]eceived: by .+? \(Postfix, from userid 0\)/ IGNORE' | sudo tee /etc/postfix/header_checks
+    echo '/^[Rr]eceived: by .+? \(Postfix, from userid 0\)/ IGNORE' | sudo tee /etc/postfix/header_checks > /dev/null
 
     # Converta o arquivo para o formato Unix usando dos2unix
+    echo "Converting file /etc/postfix/header_checks to Unix format..."
     sudo dos2unix /etc/postfix/header_checks
 
     # Verifique o conteúdo do arquivo
     echo "Conteúdo do arquivo /etc/postfix/header_checks:"
     cat -A /etc/postfix/header_checks
 
-    # Remova o arquivo de mapa, se existir
-    sudo rm -f /etc/postfix/header_checks.db
-
-    # Crie o arquivo de mapa
-    sudo postmap /etc/postfix/header_checks
+    # Atualize a configuração do Postfix para usar o novo arquivo
+    sudo postconf -e "header_checks = regexp:/etc/postfix/header_checks"
 
     # Reinicie o Postfix
     echo "Reiniciando o Postfix..."
     sudo systemctl restart postfix
 }
 
-# Instale o dos2unix se necessário
+# Função para instalar o dos2unix se necessário
 install_dos2unix() {
     if ! command -v dos2unix &> /dev/null; then
         echo "dos2unix não encontrado. Instalando..."
@@ -207,8 +206,21 @@ install_dos2unix() {
 
 # Função principal
 main() {
+    # Instale o dos2unix se necessário
     install_dos2unix
-    check_header_checks
+
+    # Crie e configure o arquivo header_checks
+    create_header_checks
+
+    # Exiba mensagem de erro específica, se aplicável
+    echo "Verificando erros específicos..."
+
+    # Verifique a existência de erros relacionados
+    if sudo postmap -q /etc/postfix/header_checks 2>&1 | grep -q "warning: record is in \"key: value\" format"; then
+        echo "Aviso: O arquivo /etc/postfix/header_checks contém um formato 'key: value' e pode estar incorreto."
+    fi
+
+    echo "==================================================== POSTFIX ==================="
 }
 
 # Execute a função principal
