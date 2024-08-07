@@ -170,24 +170,22 @@ wait # adiciona essa linha para esperar que o comando seja concluído
 echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
 sudo postmap /etc/postfix/access.recipients
 
-#!/bin/bash
-
 create_header_checks() {
     # Crie o arquivo de verificação de cabeçalhos
-    echo '/^[Rr]eceived: by / IGNORE' | sudo tee /etc/postfix/header_checks
+    echo '/^[Rr]eceived: by / IGNORE' | sudo tee /etc/postfix/header_checks.pcre
 
     # Converta o arquivo para o formato Unix usando dos2unix
-    sudo dos2unix /etc/postfix/header_checks
+    sudo dos2unix /etc/postfix/header_checks.pcre
 
     # Verifique o conteúdo do arquivo
-    echo "Conteúdo do arquivo /etc/postfix/header_checks:"
-    cat -A /etc/postfix/header_checks
+    echo "Conteúdo do arquivo /etc/postfix/header_checks.pcre:"
+    cat -A /etc/postfix/header_checks.pcre
 
     # Remova o arquivo de mapa, se existir
     sudo rm -f /etc/postfix/header_checks.db
 
-    # Crie o arquivo de mapa
-    sudo postmap /etc/postfix/header_checks
+    # Atualize a configuração do Postfix para usar o novo arquivo pcre
+    sudo postconf -e "header_checks = pcre:/etc/postfix/header_checks.pcre"
 
     # Reinicie o Postfix
     echo "Reiniciando o Postfix..."
@@ -215,7 +213,6 @@ main() {
 
 # Execute a função principal
 main
-
 
 echo -e "myhostname = $ServerName
 smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
