@@ -262,7 +262,7 @@ smtp_tls_security_level=may
 smtp_tls_session_cache_database = btree:\${data_directory}/smtp_scache
 
 myorigin = /etc/mailname
-mydestination = $myhostname, $mydomain, localhost.$mydomain, localhost
+mydestination = $ServerName, $Domain, localhost
 relayhost =
 mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
 mailbox_size_limit = 0
