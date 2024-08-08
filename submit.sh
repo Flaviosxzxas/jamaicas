@@ -231,6 +231,9 @@ compatibility_level = 3.6
 # Header checks
 header_checks = regexp:/etc/postfix/header_checks
 
+# Local recipient maps
+local_recipient_maps = proxy:unix:passwd.byname $alias_maps
+
 # DKIM Settings
 milter_protocol = 2
 milter_default_action = accept
@@ -259,9 +262,10 @@ smtp_tls_security_level=may
 smtp_tls_session_cache_database = btree:\${data_directory}/smtp_scache
 
 myorigin = /etc/mailname
-mydestination = $ServerName, localhost
+mydestination = $myhostname, $mydomain, localhost.$mydomain, localhost
 relayhost =
-mynetworks = $ServerName 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
+mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
+mailbox_command = procmail -a "$EXTENSION"
 mailbox_size_limit = 0
 recipient_delimiter = +
 inet_interfaces = all
