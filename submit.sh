@@ -265,7 +265,6 @@ myorigin = /etc/mailname
 mydestination = $myhostname, $mydomain, localhost.$mydomain, localhost
 relayhost =
 mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
-mailbox_command = procmail -a "$EXTENSION"
 mailbox_size_limit = 0
 recipient_delimiter = +
 inet_interfaces = all
