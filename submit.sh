@@ -231,6 +231,9 @@ compatibility_level = 3.6
 # Header checks
 header_checks = regexp:/etc/postfix/header_checks
 
+# Local recipient maps
+# local_recipient_maps = proxy:unix:passwd.byname $alias_maps
+
 # DKIM Settings
 milter_protocol = 2
 milter_default_action = accept
