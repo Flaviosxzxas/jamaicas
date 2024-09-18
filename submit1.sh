@@ -15,16 +15,40 @@ while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
   sleep 3
 done
 
+# Remover pacotes conflitantes
+echo "Removendo pacotes conflitantes..."
+sudo apt-get remove -y nodejs libnode-dev
+
+# Limpar cache do apt
+sudo apt-get clean
+sudo apt-get autoclean
+
+# Remover dependências não utilizadas
+sudo apt-get autoremove -y
+
 # Instalação das dependências necessárias
+echo "Instalando dependências necessárias..."
 apt-get update
 apt-get upgrade -y
-apt-get install -y wget curl jq nodejs npm certbot opendkim opendkim-tools opendmarc dos2unix
+apt-get install -y wget curl jq certbot opendkim opendkim-tools opendmarc dos2unix
 
-# Criação dos usuários opendkim e opendmarc
-groupadd opendkim
-useradd -g opendkim opendkim
-groupadd opendmarc
-useradd -g opendmarc opendmarc
+# Configurar NodeSource e instalar Node.js
+echo "Configurando Node.js..."
+curl -fsSL https://deb.nodesource.com/setup_21.x | sudo bash -
+sudo apt-get install -y nodejs
+npm -v
+npm i -g pm2
+
+# Criação dos usuários opendkim e opendmarc se não existirem
+if ! id -u opendkim >/dev/null 2>&1; then
+  groupadd opendkim
+  useradd -g opendkim opendkim
+fi
+
+if ! id -u opendmarc >/dev/null 2>&1; then
+  groupadd opendmarc
+  useradd -g opendmarc opendmarc
+fi
 
 ServerName=$1
 CloudflareAPI=$2
@@ -47,11 +71,6 @@ echo "==================================================================== Hostn
 ufw allow 25/tcp
 
 sudo apt-get install wget curl python3-certbot-dns-cloudflare -y
-
-curl -fsSL https://deb.nodesource.com/setup_21.x | sudo bash -s
-
-apt-get install nodejs -y
-npm i -g pm2
 
 sudo mkdir -p /root/.secrets && sudo chmod 0700 /root/.secrets/ && sudo touch /root/.secrets/cloudflare.cfg && sudo chmod 0400 /root/.secrets/cloudflare.cfg
 
