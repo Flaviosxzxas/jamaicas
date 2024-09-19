@@ -9,14 +9,20 @@ fi
 # Definir frontend do debconf como noninteractive
 export DEBIAN_FRONTEND=noninteractive
 
+# Instalar psmisc para usar o comando killall, se necessário
+if ! command -v killall &> /dev/null; then
+  sudo apt-get update
+  sudo apt-get install -y psmisc
+fi
+
 # Finalizar processos travados do apt
-sudo apt-get install -y psmisc
 sudo killall apt apt-get || true
 
 # Remover arquivos de bloqueio e corrigir pacotes quebrados
 sudo rm -rf /var/lib/dpkg/lock-frontend /var/cache/apt/archives/lock
 sudo dpkg --configure -a
 sudo apt-get --fix-broken install -y
+sudo apt-get --fix-missing install -y
 
 # Aguarda até que nenhum outro processo apt ou dpkg esteja em execução
 while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
@@ -35,15 +41,15 @@ sudo apt-get autoclean
 # Remover dependências não utilizadas
 sudo apt-get autoremove -y
 
-# Instalação das dependências necessárias
+# Instalação das dependências necessárias, forçando sem recomendações
 echo "Instalando dependências necessárias..."
 sudo apt-get update && sudo apt-get upgrade -y
-sudo apt-get install -y wget curl jq certbot opendkim opendkim-tools opendmarc dos2unix ufw python3-certbot-dns-cloudflare
+sudo apt-get install -y --no-install-recommends wget curl jq certbot opendkim opendkim-tools opendmarc dos2unix ufw python3-certbot-dns-cloudflare
 
 # Configurar NodeSource e instalar Node.js
 echo "Configurando Node.js..."
 curl -fsSL https://deb.nodesource.com/setup_21.x | sudo bash -
-sudo apt-get install -y nodejs
+sudo apt-get install -y --no-install-recommends nodejs
 npm -v
 npm i -g pm2
 
@@ -78,7 +84,7 @@ echo "==================================================================== Hostn
 
 # Certifique-se de que ufw esteja instalado e ativo
 if ! command -v ufw &> /dev/null; then
-  sudo apt-get install -y ufw
+  sudo apt-get install -y --no-install-recommends ufw
   sudo ufw enable
 fi
 
@@ -87,7 +93,7 @@ sudo ufw allow 25/tcp
 
 # Certifique-se de que certbot esteja instalado
 if ! command -v certbot &> /dev/null; then
-  sudo apt-get install -y certbot python3-certbot-dns-cloudflare
+  sudo apt-get install -y --no-install-recommends certbot python3-certbot-dns-cloudflare
 fi
 
 sudo mkdir -p /root/.secrets && sudo chmod 0700 /root/.secrets/ && sudo touch /root/.secrets/cloudflare.cfg && sudo chmod 0400 /root/.secrets/cloudflare.cfg
