@@ -11,18 +11,28 @@ export DEBIAN_FRONTEND=noninteractive
 
 # Instalar psmisc para usar o comando killall, se necessário
 if ! command -v killall &> /dev/null; then
-  sudo apt-get update
   sudo apt-get install -y psmisc
 fi
 
-# Finalizar processos travados do apt
-sudo killall apt apt-get || true
+# Finalizar processos travados do apt e dpkg
+sudo killall apt apt-get dpkg || true
 
 # Remover arquivos de bloqueio e corrigir pacotes quebrados
-sudo rm -rf /var/lib/dpkg/lock-frontend /var/cache/apt/archives/lock
+sudo rm -rf /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock /var/cache/debconf/config.dat
 sudo dpkg --configure -a
 sudo apt --fix-broken install -y
-sudo apt-get --fix-missing install -y
+sudo apt-get update
+
+# Forçar a instalação de pacotes problemáticos
+sudo apt-get install -y postfix postfix-policyd-spf-python
+
+# Reinstalar pacotes críticos, caso tenham sido removidos
+sudo apt-get install --reinstall -y ufw dbconfig-common ssl-cert
+
+# Limpar pacotes conflitantes
+sudo apt-get remove --purge -y nodejs libnode-dev
+sudo apt-get autoremove -y
+sudo apt-get clean
 
 # Aguarda até que nenhum outro processo apt ou dpkg esteja em execução
 while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
