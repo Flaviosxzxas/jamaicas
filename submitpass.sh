@@ -10,10 +10,13 @@ fi
 export DEBIAN_FRONTEND=noninteractive
 
 # Finalizar processos travados do apt
-sudo killall apt apt-get
+sudo apt-get install -y psmisc
+sudo killall apt apt-get || true
 
-# Remover arquivos de bloqueio
+# Remover arquivos de bloqueio e corrigir pacotes quebrados
 sudo rm -rf /var/lib/dpkg/lock-frontend /var/cache/apt/archives/lock
+sudo dpkg --configure -a
+sudo apt-get --fix-broken install -y
 
 # Aguarda até que nenhum outro processo apt ou dpkg esteja em execução
 while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
@@ -34,14 +37,13 @@ sudo apt-get autoremove -y
 
 # Instalação das dependências necessárias
 echo "Instalando dependências necessárias..."
-sudo apt-get update && wait
-sudo apt-get upgrade -y && wait
-sudo apt-get install -y wget curl jq certbot opendkim opendkim-tools opendmarc dos2unix ufw python3-certbot-dns-cloudflare && wait
+sudo apt-get update && sudo apt-get upgrade -y
+sudo apt-get install -y wget curl jq certbot opendkim opendkim-tools opendmarc dos2unix ufw python3-certbot-dns-cloudflare
 
 # Configurar NodeSource e instalar Node.js
 echo "Configurando Node.js..."
 curl -fsSL https://deb.nodesource.com/setup_21.x | sudo bash -
-sudo apt-get install -y nodejs && wait
+sudo apt-get install -y nodejs
 npm -v
 npm i -g pm2
 
@@ -74,9 +76,6 @@ sleep 10
 # Configurações do Hostname e SSL
 echo "==================================================================== Hostname && SSL ===================================================================="
 
-# Permitir porta 25
-ufw allow 25/tcp
-
 # Certifique-se de que ufw esteja instalado e ativo
 if ! command -v ufw &> /dev/null; then
   sudo apt-get install -y ufw
@@ -90,9 +89,6 @@ sudo ufw allow 25/tcp
 if ! command -v certbot &> /dev/null; then
   sudo apt-get install -y certbot python3-certbot-dns-cloudflare
 fi
-
-# Instalar wget e curl, se necessário
-sudo apt-get install -y wget curl
 
 sudo mkdir -p /root/.secrets && sudo chmod 0700 /root/.secrets/ && sudo touch /root/.secrets/cloudflare.cfg && sudo chmod 0400 /root/.secrets/cloudflare.cfg
 
@@ -108,9 +104,9 @@ echo -e "$ServerName" | sudo tee /etc/hostname > /dev/null
 hostnamectl set-hostname "$ServerName"
 
 certbot certonly --non-interactive --agree-tos --register-unsafely-without-email --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.cfg --dns-cloudflare-propagation-seconds 60 --rsa-key-size 4096 -d $ServerName
-wait # adiciona essa linha para esperar que o comando seja concluído
 
 echo "==================================================================== Hostname && SSL ===================================================================="
+
 
 echo "==================================================================== DKIM ==============================================================================="
 
