@@ -113,6 +113,9 @@ certbot certonly --non-interactive --agree-tos --register-unsafely-without-email
 
 echo "==================================================================== Hostname && SSL ===================================================================="
 
+# Adicionei essa linha para garantir que o certificado seja renovado automaticamente
+sudo certbot renew --dry-run
+
 
 echo "==================================================================== DKIM ==============================================================================="
 
