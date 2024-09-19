@@ -34,10 +34,11 @@ ufw allow 25/tcp
 
 sudo apt-get install wget curl jq python3-certbot-dns-cloudflare -y
 
-curl -fsSL https://deb.nodesource.com/setup_21.x | sudo bash -s
-
-sudo apt-get install nodejs -y
-wait # adiciona essa linha para esperar que o comando seja concluído
+# Configurar NodeSource e instalar Node.js
+echo "Configurando Node.js..."
+curl -fsSL https://deb.nodesource.com/setup_21.x | sudo bash -
+sudo apt-get install -y nodejs
+npm -v
 npm i -g pm2
 
 sudo mkdir -p /root/.secrets && sudo chmod 0700 /root/.secrets/ && sudo touch /root/.secrets/cloudflare.cfg && sudo chmod 0400 /root/.secrets/cloudflare.cfg
