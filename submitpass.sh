@@ -21,7 +21,7 @@ sudo killall apt apt-get || true
 # Remover arquivos de bloqueio e corrigir pacotes quebrados
 sudo rm -rf /var/lib/dpkg/lock-frontend /var/cache/apt/archives/lock
 sudo dpkg --configure -a
-sudo apt-get --fix-broken install -y
+sudo apt --fix-broken install -y
 sudo apt-get --fix-missing install -y
 
 # Aguarda até que nenhum outro processo apt ou dpkg esteja em execução
@@ -29,6 +29,12 @@ while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
   echo "Aguardando liberação do bloqueio do dpkg..."
   sleep 3
 done
+
+# Verificar se o arquivo de configuração do debconf está bloqueado e liberar se necessário
+if sudo fuser /var/cache/debconf/config.dat >/dev/null 2>&1; then
+  echo "O arquivo config.dat está bloqueado. Tentando liberar..."
+  sudo rm -f /var/cache/debconf/config.dat
+fi
 
 # Remover pacotes conflitantes
 echo "Removendo pacotes conflitantes..."
@@ -116,7 +122,6 @@ echo "==================================================================== Hostn
 # Adicionei essa linha para garantir que o certificado seja renovado automaticamente
 sudo certbot renew --dry-run
 
-
 echo "==================================================================== DKIM ==============================================================================="
 
 # Instalação dos pacotes necessários
@@ -194,7 +199,6 @@ console.log(DKIM.replace(/(\r\n|\n|\r|\t|"|\)| )/gm, "").split(";").find((c) => 
 sudo chmod 755 /root/dkimcode.sh
 
 echo "==================================================================== DKIM =============================================================================="
-
 
 echo "==================================================== POSTFIX ===================================================="
 
