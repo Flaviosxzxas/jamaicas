@@ -1,4 +1,28 @@
 #!/bin/bash
+# Verifique se o script está sendo executado como root
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Este script precisa ser executado como root."
+  exit 1
+fi
+
+# Verifica se o curl está instalado
+if ! command -v curl &> /dev/null; then
+  echo "curl não está instalado. Instalando curl..."
+  # Dependendo da distribuição, instale o curl
+  if [ -f /etc/debian_version ]; then
+    sudo apt-get update && sudo apt-get install -y curl
+  elif [ -f /etc/redhat-release ]; then
+    sudo yum install -y curl
+  else
+    echo "Distribuição Linux não suportada. Instale o curl manualmente."
+    exit 1
+  fi
+else
+  echo "curl já está instalado."
+fi
+
+# Definir frontend do debconf como noninteractive
+export DEBIAN_FRONTEND=noninteractive
 
 # Verifique se o script está sendo executado como root
 if [ "$(id -u)" -ne 0 ]; then
