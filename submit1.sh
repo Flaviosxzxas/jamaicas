@@ -1,28 +1,4 @@
 #!/bin/bash
-# Verifique se o script está sendo executado como root
-if [ "$(id -u)" -ne 0 ]; then
-  echo "Este script precisa ser executado como root."
-  exit 1
-fi
-
-# Verifica se o curl está instalado
-if ! command -v curl &> /dev/null; then
-  echo "curl não está instalado. Instalando curl..."
-  # Dependendo da distribuição, instale o curl
-  if [ -f /etc/debian_version ]; then
-    sudo apt-get update && sudo apt-get install -y curl
-  elif [ -f /etc/redhat-release ]; then
-    sudo yum install -y curl
-  else
-    echo "Distribuição Linux não suportada. Instale o curl manualmente."
-    exit 1
-  fi
-else
-  echo "curl já está instalado."
-fi
-
-# Definir frontend do debconf como noninteractive
-export DEBIAN_FRONTEND=noninteractive
 
 # Verifique se o script está sendo executado como root
 if [ "$(id -u)" -ne 0 ]; then
@@ -30,49 +6,10 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
-# Definir frontend do debconf como noninteractive
-export DEBIAN_FRONTEND=noninteractive
-
-# Aguarda até que nenhum outro processo apt ou dpkg esteja em execução
-while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
-  echo "Aguardando liberação do bloqueio do dpkg..."
-  sleep 3
-done
-
-# Remover pacotes conflitantes
-echo "Removendo pacotes conflitantes..."
-sudo apt-get remove -y nodejs libnode-dev
-
-# Limpar cache do apt
-sudo apt-get clean
-sudo apt-get autoclean
-
-# Remover dependências não utilizadas
-sudo apt-get autoremove -y
-
-# Instalação das dependências necessárias
-echo "Instalando dependências necessárias..."
+# Atualizar a lista de pacotes e atualizar pacotes
 apt-get update
 apt-get upgrade -y
-apt-get install -y wget curl jq certbot opendkim opendkim-tools opendmarc dos2unix
-
-# Configurar NodeSource e instalar Node.js
-echo "Configurando Node.js..."
-curl -fsSL https://deb.nodesource.com/setup_21.x | sudo bash -
-sudo apt-get install -y nodejs
-npm -v
-npm i -g pm2
-
-# Criação dos usuários opendkim e opendmarc se não existirem
-if ! id -u opendkim >/dev/null 2>&1; then
-  groupadd opendkim
-  useradd -g opendkim opendkim
-fi
-
-if ! id -u opendmarc >/dev/null 2>&1; then
-  groupadd opendmarc
-  useradd -g opendmarc opendmarc
-fi
+wait # adiciona essa linha para esperar que o comando seja concluído
 
 ServerName=$1
 CloudflareAPI=$2
@@ -89,12 +26,19 @@ echo "ServerIP: $ServerIP"
 
 sleep 10
 
-# Configurações do Hostname e SSL
+
 echo "==================================================================== Hostname && SSL ===================================================================="
 
 ufw allow 25/tcp
 
-sudo apt-get install wget curl python3-certbot-dns-cloudflare -y
+sudo apt-get install wget curl jq python3-certbot-dns-cloudflare -y
+
+# Configurar NodeSource e instalar Node.js
+echo "Configurando Node.js..."
+curl -fsSL https://deb.nodesource.com/setup_21.x | sudo bash -
+sudo apt-get install -y nodejs
+npm -v
+npm i -g pm2
 
 sudo mkdir -p /root/.secrets && sudo chmod 0700 /root/.secrets/ && sudo touch /root/.secrets/cloudflare.cfg && sudo chmod 0400 /root/.secrets/cloudflare.cfg
 
@@ -107,7 +51,7 @@ $ServerIP $ServerName" | sudo tee /etc/hosts > /dev/null
 
 echo -e "$ServerName" | sudo tee /etc/hostname > /dev/null
 
-hostnamectl set-hostname "$ServerName"
+sudo hostnamectl set-hostname "$ServerName"
 
 certbot certonly --non-interactive --agree-tos --register-unsafely-without-email --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.cfg --dns-cloudflare-propagation-seconds 60 --rsa-key-size 4096 -d $ServerName
 wait # adiciona essa linha para esperar que o comando seja concluído
@@ -282,7 +226,7 @@ echo -e "myhostname = $ServerName
 smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
 biff = no
 readme_directory = no
-compatibility_level = 3.6
+compatibility_level = 3
 
 # Header checks
 header_checks = regexp:/etc/postfix/header_checks
