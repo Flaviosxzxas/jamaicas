@@ -1,5 +1,5 @@
 #!/bin/bash
-
+sudo -i
 # Verifique se o script está sendo executado como root
 if [ "$(id -u)" -ne 0 ]; then
   echo "Este script precisa ser executado como root."
@@ -7,8 +7,8 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 # Atualizar a lista de pacotes e atualizar pacotes
-apt-get update
-apt-get upgrade -y
+apt update
+apt upgrade -y
 wait # adiciona essa linha para esperar que o comando seja concluído
 
 ServerName=$1
@@ -31,16 +31,16 @@ echo "==================================================================== Hostn
 
 ufw allow 25/tcp
 
-sudo apt-get install wget curl jq python3-certbot-dns-cloudflare -y
+apt install wget curl jq python3-certbot-dns-cloudflare -y
 
 # Configurar NodeSource e instalar Node.js
 echo "Configurando Node.js..."
 curl -fsSL https://deb.nodesource.com/setup_21.x | sudo bash -
-sudo apt-get install -y nodejs
+apt install -y nodejs
 npm -v
 npm i -g pm2
 
-sudo mkdir -p /root/.secrets && sudo chmod 0700 /root/.secrets/ && sudo touch /root/.secrets/cloudflare.cfg && sudo chmod 0400 /root/.secrets/cloudflare.cfg
+mkdir -p /root/.secrets && chmod 0700 /root/.secrets/ && touch /root/.secrets/cloudflare.cfg && chmod 0400 /root/.secrets/cloudflare.cfg
 
 echo "dns_cloudflare_email = $CloudflareEmail
 dns_cloudflare_api_key = $CloudflareAPI" | sudo tee /root/.secrets/cloudflare.cfg > /dev/null
@@ -51,7 +51,7 @@ $ServerIP $ServerName" | sudo tee /etc/hosts > /dev/null
 
 echo -e "$ServerName" | sudo tee /etc/hostname > /dev/null
 
-sudo hostnamectl set-hostname "$ServerName"
+hostnamectl set-hostname "$ServerName"
 
 certbot certonly --non-interactive --agree-tos --register-unsafely-without-email --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.cfg --dns-cloudflare-propagation-seconds 60 --rsa-key-size 4096 -d $ServerName
 wait # adiciona essa linha para esperar que o comando seja concluído
@@ -61,15 +61,15 @@ echo "==================================================================== Hostn
 echo "==================================================================== DKIM ==============================================================================="
 
 # Instalação dos pacotes necessários
-sudo apt-get install opendkim opendkim-tools -y
+apt install opendkim opendkim-tools -y
 wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Criação dos diretórios necessários
-sudo mkdir -p /etc/opendkim && sudo mkdir -p /etc/opendkim/keys
+mkdir -p /etc/opendkim && mkdir -p /etc/opendkim/keys
 
 # Configuração de permissões e propriedade
-sudo chown -R opendkim:opendkim /etc/opendkim/
-sudo chmod -R 750 /etc/opendkim/
+chown -R opendkim:opendkim /etc/opendkim/
+chmod -R 750 /etc/opendkim/
 
 # Configuração do arquivo default do OpenDKIM
 echo "RUNDIR=/run/opendkim
@@ -282,20 +282,20 @@ echo "==================================================== POSTFIX =============
 echo "==================================================== OpenDMARC ===================================================="
 
 # Criar os diretórios necessários para o OpenDMARC
-sudo mkdir -p /run/opendmarc
-sudo mkdir -p /etc/opendmarc
-sudo mkdir -p /var/log/opendmarc
-sudo mkdir -p /var/lib/opendmarc
+mkdir -p /run/opendmarc
+mkdir -p /etc/opendmarc
+mkdir -p /var/log/opendmarc
+mkdir -p /var/lib/opendmarc
 
 # Ajustar permissões e propriedade dos diretórios
-sudo chown opendmarc:opendmarc /run/opendmarc
-sudo chmod 750 /run/opendmarc
-sudo chown opendmarc:opendmarc /etc/opendmarc
-sudo chmod 750 /etc/opendmarc
-sudo chown opendmarc:opendmarc /var/log/opendmarc
-sudo chmod 750 /var/log/opendmarc
-sudo chown opendmarc:opendmarc /var/lib/opendmarc
-sudo chmod 750 /var/lib/opendmarc
+chown opendmarc:opendmarc /run/opendmarc
+chmod 750 /run/opendmarc
+chown opendmarc:opendmarc /etc/opendmarc
+chmod 750 /etc/opendmarc
+chown opendmarc:opendmarc /var/log/opendmarc
+chmod 750 /var/log/opendmarc
+chown opendmarc:opendmarc /var/lib/opendmarc
+chmod 750 /var/lib/opendmarc
 
 # Criar o arquivo de configuração do OpenDMARC
 sudo tee /etc/opendmarc.conf > /dev/null <<EOF
@@ -325,30 +325,30 @@ HistoryFile /var/lib/opendmarc/opendmarc.dat
 EOF
 
 # Criar o arquivo de hosts a serem ignorados se não existir
-sudo touch /etc/opendmarc/ignore.hosts
-sudo chown opendmarc:opendmarc /etc/opendmarc/ignore.hosts
-sudo chmod 644 /etc/opendmarc/ignore.hosts
+touch /etc/opendmarc/ignore.hosts
+chown opendmarc:opendmarc /etc/opendmarc/ignore.hosts
+chmod 644 /etc/opendmarc/ignore.hosts
 
 # Criar o arquivo de histórico do OpenDMARC
-sudo touch /var/lib/opendmarc/opendmarc.dat
-sudo chown opendmarc:opendmarc /var/lib/opendmarc/opendmarc.dat
-sudo chmod 644 /var/lib/opendmarc/opendmarc.dat
+touch /var/lib/opendmarc/opendmarc.dat
+chown opendmarc:opendmarc /var/lib/opendmarc/opendmarc.dat
+chmod 644 /var/lib/opendmarc/opendmarc.dat
 
 # Criar o arquivo PID do OpenDMARC
-sudo touch /run/opendmarc/opendmarc.pid
-sudo chown opendmarc:opendmarc /run/opendmarc/opendmarc.pid
-sudo chmod 600 /run/opendmarc/opendmarc.pid
+touch /run/opendmarc/opendmarc.pid
+chown opendmarc:opendmarc /run/opendmarc/opendmarc.pid
+chmod 600 /run/opendmarc/opendmarc.pid
 
 # Reiniciar os serviços do Postfix e Dovecot
-sudo systemctl restart postfix
+systemctl restart postfix
 wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Configurar e reiniciar o OpenDKIM
-sudo systemctl restart opendkim
+systemctl restart opendkim
 wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Configurar e reiniciar o OpenDMARC
-sudo systemctl restart opendmarc
+systemctl restart opendmarc
 wait # adiciona essa linha para esperar que o comando seja concluído
 
 echo "==================================================== OpenDMARC ===================================================="
@@ -405,7 +405,7 @@ echo "==================================================== CLOUDFLARE ==========
 echo "==================================================== APPLICATION ===================================================="
 
 # Instala Apache, PHP e módulos necessários
-sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
+DEBIAN_FRONTEND=noninteractive apt -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
 wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Verifica a existência do diretório /var/www/html
@@ -415,7 +415,7 @@ if [ ! -d "/var/www/html" ]; then
 fi
 
 # Remove o arquivo index.html se existir
-sudo rm -f /var/www/html/index.html
+rm -f /var/www/html/index.html
 
 # Adiciona o código PHP ao arquivo index.php
 echo "<?php
@@ -425,10 +425,10 @@ exit();
 ?>" | sudo tee /var/www/html/index.php > /dev/null
 
 # Instala a extensão php-mbstring
-sudo apt-get install php-mbstring -y
+apt install php-mbstring -y
 
 # Reinicia o serviço Apache
-sudo /etc/init.d/apache2 restart
+/etc/init.d/apache2 restart
 
 echo "==================================================== APPLICATION ===================================================="
 
