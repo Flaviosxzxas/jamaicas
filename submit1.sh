@@ -7,9 +7,9 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 # Atualizar a lista de pacotes e atualizar pacotes
-# Atualizar a lista de pacotes e atualizar pacotes
-apt-get update
-apt-get upgrade -y
+echo "Atualizando a lista de pacotes..."
+sudo apt-get update
+sudo apt-get upgrade -y
 wait # adiciona essa linha para esperar que o comando seja concluído
 
 ServerName=$1
@@ -26,7 +26,6 @@ echo "DKIMSelector: $DKIMSelector"
 echo "ServerIP: $ServerIP"
 
 sleep 10
-
 
 echo "==================================================================== Hostname && SSL ===================================================================="
 
