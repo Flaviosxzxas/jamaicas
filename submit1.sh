@@ -56,6 +56,15 @@ sudo hostnamectl set-hostname "$ServerName"
 certbot certonly --non-interactive --agree-tos --register-unsafely-without-email --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.cfg --dns-cloudflare-propagation-seconds 60 --rsa-key-size 4096 -d $ServerName
 wait # adiciona essa linha para esperar que o comando seja concluído
 
+# Corrigir o SyntaxWarning no cloudflare.py
+echo "Corrigindo SyntaxWarning no cloudflare.py..."
+
+sed -i "s/self.email is ''/self.email == ''/g" /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
+sed -i "s/self.token is ''/self.token == ''/g" /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
+sed -i "s/self.certtoken is None/self.certtoken == None/g" /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
+
+echo "Correção aplicada com sucesso no arquivo cloudflare.py."
+
 echo "==================================================================== Hostname && SSL ===================================================================="
 
 echo "==================================================================== DKIM ==============================================================================="
