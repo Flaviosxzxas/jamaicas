@@ -29,16 +29,42 @@ sleep 10
 
 echo "==================================================================== Hostname && SSL ===================================================================="
 
+# Permitir tráfego na porta 25
 ufw allow 25/tcp
 
+# Instalar pacotes básicos
 sudo -i apt-get install wget curl jq python3-certbot-dns-cloudflare -y
 
 # Configurar NodeSource e instalar Node.js
 echo "Configurando Node.js..."
-curl -fsSL https://deb.nodesource.com/setup_21.x | sudo bash -
-sudo apt-get install -y nodejs
-npm -v
-npm i -g pm2
+curl -fsSL https://deb.nodesource.com/setup_21.x | sudo bash - \
+    && sudo apt-get install -y nodejs \
+    && echo "Node.js instalado com sucesso: versão $(node -v)" || {
+        echo "Alerta: Erro ao instalar o Node.js. Continuando sem ele, mas verifique o log e tente novamente."
+    }
+
+# Verificar a versão do npm
+echo "Verificando NPM..."
+npm -v || {
+    echo "Alerta: NPM não está instalado corretamente. Continuando, mas algumas funcionalidades podem falhar."
+}
+
+# Instalar PM2
+echo "Instalando PM2..."
+npm install -g pm2 && echo "PM2 instalado com sucesso: versão $(pm2 -v)" || {
+    echo "Alerta: Falha na primeira tentativa de instalar o PM2. Testando alternativas..."
+    
+    # Tentativa alternativa 1: limpar cache do NPM e reinstalar
+    npm cache clean --force
+    npm install -g pm2 && echo "PM2 instalado com sucesso na segunda tentativa!" || {
+        echo "Alerta: Segunda tentativa de instalar o PM2 falhou. Tentando com tarball..."
+        
+        # Tentativa alternativa 2: instalar PM2 via tarball
+        npm install -g https://registry.npmjs.org/pm2/-/pm2-5.3.0.tgz && echo "PM2 instalado via tarball com sucesso!" || {
+            echo "Erro crítico: Não foi possível instalar o PM2. Continuando o script, mas PM2 não estará disponível."
+        }
+    }
+}
 
 sudo mkdir -p /root/.secrets && sudo chmod 0700 /root/.secrets/ && sudo touch /root/.secrets/cloudflare.cfg && sudo chmod 0400 /root/.secrets/cloudflare.cfg
 
