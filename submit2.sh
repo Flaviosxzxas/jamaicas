@@ -230,7 +230,7 @@ inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 sleep 3
 service opendkim restart
 service postfix restart
-sudo systemctl restart postfix-policyd
+sudo systemctl restart postfix-policyd-spf
 
 echo "==================================================== POSTFIX ===================================================="
 
