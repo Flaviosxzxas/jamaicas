@@ -322,71 +322,9 @@ echo "==================================================== CLOUDFLARE ==========
 
 echo "==================================================== APPLICATION ===================================================="
 
-echo '{
-  "name": "sender",
-  "version": "1.0.0",
-  "dependencies": {
-    "body-parser": "^1.20.1",
-    "express": "^4.18.2",
-    "html-to-text": "^8.2.1",
-    "nodemailer": "^6.8.0"
-  }
-}' | sudo tee /root/package.json > /dev/null
-
-echo 'process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
-const express = require("express")
-const nodemailer = require("nodemailer")
-const bodyparser = require("body-parser")
-const { convert } = require("html-to-text")
-const app = express()
-app.use(bodyparser.json())
-app.post("/email-manager/tmt/sendmail", async (req,res) => {
-  let { to, fromName, fromUser, subject, html, attachments } = req.body
-  let toAddress = to.shift()
-  const transport = nodemailer.createTransport({
-    port: 25,
-    tls:{
-      rejectUnauthorized: false
-    }
-  })
-  html = html.replace(/(\r\n|\n|\r|\t)/gm, "")
-  html = html.replace(/\s+/g, " ") 
-  let message = {
-    encoding: "base64",
-    from: {
-      name: fromName,
-      address: `${fromUser}@'$ServerName'`
-    },
-    to: {
-      name: fromName,
-      address: toAddress
-    },
-    bcc: to,
-    subject,
-    attachments,
-    html,
-    list: {
-      unsubscribe: [{
-        url: "https://" + "'$ServerName'?action=unsubscribe&u=" + to,
-        comment: "Cancelar Inscrição"
-      }],
-    },
-    text: convert(html, { wordwrap: 85 })
-  }
-  if(attachments) message = { ...message, attachments }
-  const sendmail = await transport.sendMail(message)
-  return res.status(200).json(sendmail)
-})
-app.listen(4235)'  | tee /root/server.js > /dev/null
-
-cd /root && npm install && pm2 start server.js && pm2 startup && pm2 save
-
-npm install axios dotenv events
-
-echo "==================================================== APPLICATION ===================================================="
-
 # Instala Apache, PHP e módulos necessários
 sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php --assume-yes
+wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Verifica a existência do diretório /var/www/html
 if [ ! -d "/var/www/html" ]; then
@@ -394,11 +332,23 @@ if [ ! -d "/var/www/html" ]; then
     exit 1
 fi
 
-# Reinicia o Apache
+# Remove o arquivo index.html se existir
+sudo rm -f /var/www/html/index.html
+
+# Adiciona o código PHP ao arquivo index.php
+echo "<?php
+header('HTTP/1.0 403 Forbidden');
+http_response_code(401);
+exit();
+?>" | sudo tee /var/www/html/index.php > /dev/null
+
+# Instala a extensão php-mbstring
+sudo apt-get install php-mbstring -y
+
+# Reinicia o serviço Apache
 sudo /etc/init.d/apache2 restart
 
 echo "==================================================== APPLICATION ===================================================="
-
 
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
 
