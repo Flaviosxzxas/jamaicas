@@ -104,7 +104,15 @@ sleep 3
 debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
 debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", localhost'"
-sudo apt install postfix-policyd-spf-python -y
+
+if ! dpkg -l | grep -q postfix-policyd-spf-python; then
+    echo "Pacote postfix-policyd-spf-python não encontrado. Instalando..."
+    sudo apt update
+    sudo apt install postfix-policyd-spf-python -y
+else
+    echo "Pacote postfix-policyd-spf-python já está instalado."
+fi
+
 sudo apt-get install --assume-yes postfix
 
 # Adiciona regras do Policyd
@@ -229,8 +237,29 @@ inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 # Reinicia serviços
 sleep 3
 service opendkim restart
+if [ $? -ne 0 ]; then
+    echo "Falha ao reiniciar o serviço opendkim."
+fi
+
 service postfix restart
-sudo systemctl restart postfix-policyd-spf
+if [ $? -ne 0 ]; then
+    echo "Falha ao reiniciar o serviço postfix."
+fi
+
+# Verificar e reiniciar o serviço policyd-spf
+SERVICE_NAME=$(systemctl list-units --type=service | grep -o 'policyd-spf.service' || echo "postfix-policyd-spf.service")
+
+if systemctl list-units --type=service | grep -q "$SERVICE_NAME"; then
+    echo "Reiniciando o serviço $SERVICE_NAME..."
+    sudo systemctl restart "$SERVICE_NAME"
+    if [ $? -eq 0 ]; then
+        echo "Serviço $SERVICE_NAME reiniciado com sucesso."
+    else
+        echo "Falha ao reiniciar o serviço $SERVICE_NAME. Verifique os logs para mais detalhes."
+    fi
+else
+    echo "Serviço $SERVICE_NAME não encontrado. Verifique a instalação do postfix-policyd-spf-python."
+fi
 
 echo "==================================================== POSTFIX ===================================================="
 
