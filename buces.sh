@@ -5,3 +5,7 @@ if [ $? -eq 0 ]; then
 else
     echo "Falha ao reiniciar o serviço."
 fi
+
+# Aguarda interação do usuário para fechar o terminal
+echo "Pressione Enter para sair..."
+read
