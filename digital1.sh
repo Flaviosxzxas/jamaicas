@@ -233,7 +233,7 @@ compatibility_level = 3.6
 header_checks = regexp:/etc/postfix/header_checks
 
 # Local recipient maps
-# local_recipient_maps = proxy:unix:passwd.byname $alias_maps
+# local_recipient_maps = proxy:unix:passwd.byname \$alias_maps
 
 # DKIM Settings
 milter_protocol = 2
@@ -246,7 +246,8 @@ smtpd_recipient_restrictions =
   permit_mynetworks,
   check_recipient_access hash:/etc/postfix/access.recipients,
   permit_sasl_authenticated,
-  reject_unauth_destination
+  reject_unauth_destination,
+  check_policy_service inet:127.0.0.1:10031
 
 # TLS parameters
 smtpd_tls_cert_file=/etc/letsencrypt/live/$ServerName/fullchain.pem
