@@ -188,6 +188,10 @@ echo "opendmarc opendmarc/dbconfig-install boolean false" | sudo debconf-set-sel
 sudo DEBIAN_FRONTEND=noninteractive apt-get install --assume-yes postfix postfix-policyd-spf-python opendmarc
 wait # adiciona essa linha para esperar que o comando seja concluído
 
+# Instalação do pflogsumm para relatórios detalhados do Postfix
+sudo apt-get install pflogsumm -y
+wait # adiciona essa linha para esperar que o comando seja concluído
+
 # Configurações básicas do Postfix
 debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
