@@ -258,6 +258,15 @@ smtpd_client_connection_rate_limit = 5
 smtpd_client_connection_count_limit = 10
 anvil_rate_time_unit = 60s
 
+
+# Configurações para lidar com erros temporários e definitivos no Postfix
+# smtpd_error_sleep_time = 5
+#   Define o tempo de espera (em segundos) após um erro para evitar sobrecarga do servidor.
+# smtpd_soft_error_limit = 10
+#   Define o número máximo de erros temporários (4xx) permitidos antes de encerrar a conexão.
+# smtpd_hard_error_limit = 20
+#   Define o número máximo de erros definitivos (5xx) permitidos antes de encerrar a conexão.
+
 # TLS parameters
 smtpd_tls_cert_file=/etc/letsencrypt/live/$ServerName/fullchain.pem
 smtpd_tls_key_file=/etc/letsencrypt/live/$ServerName/privkey.pem
