@@ -283,6 +283,12 @@ smtpd_recipient_restrictions =
   reject_unauth_destination,
   check_policy_service inet:127.0.0.1:10031
 
+# Limites de conexão para proteção e controle de envio
+smtpd_client_connection_rate_limit = 5
+smtpd_client_connection_count_limit = 10
+anvil_rate_time_unit = 60s
+
+
 # TLS parameters
 smtpd_tls_cert_file=/etc/letsencrypt/live/$ServerName/fullchain.pem
 smtpd_tls_key_file=/etc/letsencrypt/live/$ServerName/privkey.pem
@@ -311,7 +317,7 @@ inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 sudo tee /etc/postfix-policyd-spf-python/policyd-spf.conf > /dev/null <<EOF
 HELO_reject = False
 Mail_From_reject = False
-# Rcpt_To_reject = True
+Rcpt_To_reject = True
 EOF
 
 # Adiciona regras de controle de limites
