@@ -204,6 +204,9 @@ fi
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postfix postfix-policyd-spf-python opendmarc pflogsumm
 wait # adiciona essa linha para esperar que o comando seja concluído
 
+# Garantir que policyd-spf seja executável
+sudo chmod +x /usr/bin/policyd-spf
+
 # Configurações básicas do Postfix
 debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
