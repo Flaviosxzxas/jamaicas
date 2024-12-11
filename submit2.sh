@@ -201,14 +201,6 @@ debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", 
 sudo apt install postfix-policyd-spf-python -y
 wait # adiciona essa linha para esperar que o comando seja concluído
 
-# Função para capturar logs em caso de erro
-capture_logs() {
-    echo "Capturando logs do serviço..."
-    sudo systemctl status postfix-policyd-spf-python > /tmp/postfix-policyd-spf-python.log
-    journalctl -u postfix-policyd-spf-python >> /tmp/postfix-policyd-spf-python.log
-    echo "Logs capturados em /tmp/postfix-policyd-spf-python.log"
-}
-
 # Configura o serviço postfix-policyd-spf-python
 echo "Configurando o serviço postfix-policyd-spf-python..."
 sudo tee /etc/systemd/system/postfix-policyd-spf-python.service > /dev/null <<EOF
@@ -229,41 +221,30 @@ echo "Recarregando configurações do systemd..."
 sudo systemctl daemon-reload
 sleep 2  # Garante que o systemd processe as mudanças
 
-# Função para localizar o binário do policyd-spf
-find_policyd_spf_binary() {
-    if [ -f /usr/bin/policyd-spf ]; then
-        echo "/usr/bin/policyd-spf"
-    else
-        which policyd-spf || find /usr -name policyd-spf 2>/dev/null | head -n 1
-    fi
-}
-
-# Localiza o binário do policyd-spf
-POLICYD_SPF_BIN=$(find_policyd_spf_binary)
-if [ -z "$POLICYD_SPF_BIN" ]; then
-    echo "Erro: Não foi possível localizar o binário do policyd-spf."
-    capture_logs
-    fi
-
-# Ajusta o arquivo de serviço caso necessário
-echo "Ajustando o arquivo de serviço com o caminho correto para o binário..."
-sudo sed -i "s|ExecStart=.*|ExecStart=$POLICYD_SPF_BIN|" /etc/systemd/system/postfix-policyd-spf-python.service
-
 # Ativa o serviço
 echo "Ativando o serviço postfix-policyd-spf-python..."
 sudo systemctl enable postfix-policyd-spf-python
 
-# Verifica a existência e validação do arquivo de configuração
+# Garante que o diretório e o arquivo tenham as permissões adequadas
+sudo chmod 755 /etc/postfix-policyd-spf-python
+sudo chmod 644 /etc/postfix-policyd-spf-python/policyd-spf.conf
+
+# Verifica a existência do arquivo de configuração
 if ! sudo test -f /etc/postfix-policyd-spf-python/policyd-spf.conf; then
     echo "Erro: Arquivo /etc/postfix-policyd-spf-python/policyd-spf.conf não encontrado."
     capture_logs
+    exit 1
 fi
 
 # Verifica o conteúdo do arquivo de configuração
 if ! grep -q "HELO_reject" /etc/postfix-policyd-spf-python/policyd-spf.conf; then
     echo "Erro: Configuração incompleta em /etc/postfix-policyd-spf-python/policyd-spf.conf."
     capture_logs
+    exit 1
 fi
+
+echo "Arquivo de configuração verificado e válido."
+
 
 # Tenta iniciar o serviço
 echo "Tentando iniciar o serviço postfix-policyd-spf-python..."
