@@ -197,9 +197,12 @@ debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
 debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", localhost'"
 
+#!/bin/bash
+
 # Instala o pacote postfix-policyd-spf-python
+echo "Instalando o pacote postfix-policyd-spf-python..."
 sudo apt install postfix-policyd-spf-python -y
-wait  # Aguarda o comando ser concluído
+wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Configura o serviço postfix-policyd-spf-python
 echo "Configurando o serviço postfix-policyd-spf-python..."
@@ -235,10 +238,27 @@ if [ -d "/etc/postfix-policyd-spf-python" ]; then
     sudo chmod -R 755 /etc/postfix-policyd-spf-python
 fi
 
+# Aguarda para garantir que todas as dependências do sistema estejam disponíveis
+sleep 5
+
 # Tenta iniciar o serviço
 echo "Iniciando o serviço postfix-policyd-spf-python..."
 sudo systemctl restart postfix-policyd-spf-python
 sleep 2
+
+# Verifica o status do serviço
+echo "Verificando o status do serviço postfix-policyd-spf-python..."
+sudo systemctl is-active --quiet postfix-policyd-spf-python
+
+if [ $? -eq 0 ]; then
+    echo "Serviço postfix-policyd-spf-python está ativo e funcionando. Continuando..."
+else
+    echo "Erro: Serviço postfix-policyd-spf-python falhou ao iniciar. Interrompendo o script."
+    exit 1
+fi
+
+# Próximas configurações...
+echo "Executando próximas configurações..."
 
 # Adicionar configuração para policyd-spf no master.cf
 sudo tee -a /etc/postfix/master.cf > /dev/null <<EOF
