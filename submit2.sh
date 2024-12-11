@@ -205,13 +205,12 @@ wait # adiciona essa linha para esperar que o comando seja concluído
 # Configura o serviço postfix-policyd-spf-python
 sudo tee /etc/systemd/system/postfix-policyd-spf-python.service > /dev/null <<EOF
 [Unit]
-Description=Postfix SPF Policy Daemon
+Description=Postfix Policyd SPF Python
 After=network.target
 
 [Service]
-Type=forking
-ExecStart=/usr/bin/policyd-spf --daemonize
-Restart=on-failure
+ExecStart=/usr/bin/policyd-spf --inet=127.0.0.1:10031
+Restart=always
 
 [Install]
 WantedBy=multi-user.target
@@ -504,7 +503,8 @@ inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 sudo tee /etc/postfix-policyd-spf-python/policyd-spf.conf > /dev/null <<EOF
 HELO_reject = False
 Mail_From_reject = False
-Rcpt_To_reject = True
+PermError_reject = False
+TempError_Defer = False
 EOF
 
 # Adiciona regras de controle de limites
