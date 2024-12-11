@@ -414,14 +414,17 @@ recipient_delimiter = +
 inet_interfaces = all
 inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 
-# Criação do arquivo de configuração do policyd-spf
-# Atualiza o arquivo de configuração do policyd-spf
+# Certifica-se de que o diretório para o policyd-spf existe
+sudo mkdir -p /etc/postfix-policyd-spf-python
+
+# Configura o arquivo policyd-spf.conf
 sudo tee /etc/postfix-policyd-spf-python/policyd-spf.conf > /dev/null <<EOF
 HELO_reject = False
 Mail_From_reject = False
 PermError_reject = False
 TempError_Defer = False
 EOF
+
 
 # Adiciona regras de controle de limites
 echo "#######################################################
