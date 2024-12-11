@@ -457,6 +457,7 @@ non_smtpd_milters = inet:localhost:12301
 # Login without Username and Password
 smtpd_recipient_restrictions =
   permit_mynetworks,
+  check_recipient_access hash:/etc/postfix/access.recipients,
   permit_sasl_authenticated,
   reject_unauth_destination,
   check_policy_service inet:127.0.0.1:10031
