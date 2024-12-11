@@ -237,12 +237,13 @@ Description=Postfix Policyd SPF Python
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/policyd-spf --inet=127.0.0.1:$FREE_PORT
+ExecStart=/usr/bin/policyd-spf --inet=127.0.0.1:10031
 Restart=always
 User=root
 Group=root
-StartLimitIntervalSec=0
-RestartSec=5
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=policyd-spf
 
 [Install]
 WantedBy=multi-user.target
