@@ -201,6 +201,175 @@ debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", 
 sudo apt install postfix-policyd-spf-python -y
 wait # adiciona essa linha para esperar que o comando seja concluído
 
+# Configura o serviço postfix-policyd-spf-python
+# Configura o serviço postfix-policyd-spf-python
+sudo tee /etc/systemd/system/postfix-policyd-spf-python.service > /dev/null <<EOF
+[Unit]
+Description=Postfix SPF Policy Daemon
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/policyd-spf
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Recarrega as configurações do systemd
+sudo systemctl daemon-reload
+sleep 2  # Garante que o systemd processe as mudanças
+
+# Função para localizar o binário do policyd-spf
+find_policyd_spf_binary() {
+    if [ -f /usr/bin/policyd-spf ]; then
+        echo "/usr/bin/policyd-spf"
+    else
+        which policyd-spf || find /usr -name policyd-spf 2>/dev/null | head -n 1
+    fi
+}
+
+# Localiza o binário do policyd-spf
+POLICYD_SPF_BIN=$(find_policyd_spf_binary)
+if [ -z "$POLICYD_SPF_BIN" ]; then
+    echo "Erro: Não foi possível localizar o binário do policyd-spf."
+    exit 1
+fi
+
+# Ajusta o arquivo de serviço caso necessário
+sudo sed -i "s|ExecStart=.*|ExecStart=$POLICYD_SPF_BIN|" /etc/systemd/system/postfix-policyd-spf-python.service
+
+# Ativa o serviço
+sudo systemctl enable postfix-policyd-spf-python
+
+# Verifica a existência e validação do arquivo de configuração
+if ! sudo test -f /etc/postfix-policyd-spf-python/policyd-spf.conf; then
+    echo "Erro: Arquivo /etc/postfix-policyd-spf-python/policyd-spf.conf não encontrado."
+    exit 1
+fi
+
+# Função para capturar logs em caso de erro
+capture_logs() {
+    echo "Capturando logs do serviço..."
+    sudo systemctl status postfix-policyd-spf-python > /tmp/postfix-policyd-spf-python.log
+    journalctl -u postfix-policyd-spf-python >> /tmp/postfix-policyd-spf-python.log
+    echo "Logs capturados em /tmp/postfix-policyd-spf-python.log"
+}
+
+# Tenta iniciar o serviço com múltiplas tentativas
+attempt=0
+max_attempts=3
+
+while [ $attempt -lt $max_attempts ]; do
+    echo "Tentativa $((attempt + 1)) de $max_attempts para iniciar o serviço postfix-policyd-spf-python..."
+    sudo systemctl restart postfix-policyd-spf-python
+    sleep 5
+    sudo systemctl status postfix-policyd-spf-python
+    if [ $? -eq 0 ]; then
+        echo "Serviço postfix-policyd-spf-python iniciado com sucesso na tentativa $((attempt + 1))."
+        break
+    fi
+    attempt=$((attempt + 1))
+done
+
+# Reinstala o pacote se as tentativas falharem
+if [ $attempt -eq $max_attempts ]; then
+    echo "Falha ao iniciar o serviço postfix-policyd-spf-python após $max_attempts tentativas. Tentando reinstalar o pacote..."
+    sudo apt-get install --reinstall postfix-policyd-spf-python -y
+    sudo systemctl daemon-reload
+    sleep 2  # Garante a propagação do systemd
+    sudo systemctl restart postfix-policyd-spf-python
+    sleep 5
+    sudo systemctl status postfix-policyd-spf-python
+    if [ $? -ne 0 ]; then
+        echo "Falha ao iniciar o serviço postfix-policyd-spf-python mesmo após reinstalação."
+        capture_logs
+        exit 1
+    else
+        echo "Serviço postfix-policyd-spf-python reinstalado e iniciado com sucesso."
+    fi
+fi
+
+# Verifica novamente o binário após reinstalação
+if [ ! -f /usr/bin/policyd-spf ]; then
+    echo "Erro crítico: O binário policyd-spf ainda não foi encontrado após reinstalação."
+    capture_logs
+    exit 1
+fi
+
+# Função para capturar logs em caso de erro
+capture_logs() {
+    echo "Capturando logs do serviço..."
+    sudo systemctl status postfix-policyd-spf-python > /tmp/postfix-policyd-spf-python.log
+    journalctl -u postfix-policyd-spf-python >> /tmp/postfix-policyd-spf-python.log
+    echo "Logs capturados em /tmp/postfix-policyd-spf-python.log"
+}
+
+# Verifica a existência e validação do arquivo de configuração
+if ! sudo test -f /etc/postfix-policyd-spf-python/policyd-spf.conf; then
+    echo "Erro: Arquivo /etc/postfix-policyd-spf-python/policyd-spf.conf não encontrado."
+    exit 1
+fi
+
+# Valida o conteúdo do arquivo de configuração
+if ! grep -q "HELO_reject" /etc/postfix-policyd-spf-python/policyd-spf.conf; then
+    echo "Erro: Configuração incompleta em /etc/postfix-policyd-spf-python/policyd-spf.conf."
+    exit 1
+fi
+
+# Tenta iniciar o serviço com múltiplas tentativas
+attempt=0
+max_attempts=3
+
+while [ $attempt -lt $max_attempts ]; do
+    echo "Tentativa $((attempt + 1)) de $max_attempts para iniciar o serviço postfix-policyd-spf-python..."
+    sudo systemctl restart postfix-policyd-spf-python
+    sleep 5
+    sudo systemctl status postfix-policyd-spf-python
+    if [ $? -eq 0 ]; then
+        echo "Serviço postfix-policyd-spf-python iniciado com sucesso na tentativa $((attempt + 1))."
+        break
+    fi
+    attempt=$((attempt + 1))
+done
+
+# Reinstala o pacote se as tentativas falharem
+if [ $attempt -eq $max_attempts ]; then
+    echo "Falha ao iniciar o serviço postfix-policyd-spf-python após $max_attempts tentativas. Tentando reinstalar o pacote..."
+    sudo apt-get install --reinstall postfix-policyd-spf-python -y
+    sudo systemctl daemon-reload
+    sleep 5  # Garante a propagação do systemd
+    sudo systemctl restart postfix-policyd-spf-python
+    sleep 5
+    sudo systemctl status postfix-policyd-spf-python
+    if [ $? -ne 0 ]; then
+        echo "Falha ao iniciar o serviço postfix-policyd-spf-python mesmo após reinstalação."
+        capture_logs
+        exit 1
+    else
+        echo "Serviço postfix-policyd-spf-python reinstalado e iniciado com sucesso."
+    fi
+fi
+
+# Verifica novamente o binário após reinstalação
+if [ ! -f /usr/bin/policyd-spf ]; then
+    echo "Erro crítico: O binário policyd-spf ainda não foi encontrado após reinstalação."
+    capture_logs
+    exit 1
+fi
+
+# Confirmação final do status do serviço
+sudo systemctl status postfix-policyd-spf-python
+if [ $? -ne 0 ]; then
+    echo "Erro ao ativar o serviço postfix-policyd-spf-python. Verifique os logs."
+    capture_logs
+    exit 1
+else
+    echo "Serviço postfix-policyd-spf-python ativado com sucesso."
+fi
+
+
 # Adicionar configuração para policyd-spf no master.cf
 sudo tee -a /etc/postfix/master.cf > /dev/null <<EOF
 policyd-spf  unix  -       n       n       -       0       spawn
