@@ -209,8 +209,8 @@ Description=Postfix SPF Policy Daemon
 After=network.target
 
 [Service]
-Type=simple
-ExecStart=/usr/bin/policyd-spf
+Type=forking
+ExecStart=/usr/bin/policyd-spf --daemonize
 Restart=on-failure
 
 [Install]
@@ -457,10 +457,10 @@ non_smtpd_milters = inet:localhost:12301
 # Login without Username and Password
 smtpd_recipient_restrictions =
   permit_mynetworks,
-  check_recipient_access hash:/etc/postfix/access.recipients,
   permit_sasl_authenticated,
   reject_unauth_destination,
   check_policy_service inet:127.0.0.1:10031
+
 
 # Limites de conexão para proteção e controle de envio
 smtpd_client_connection_rate_limit = 5
