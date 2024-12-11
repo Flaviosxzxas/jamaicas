@@ -197,10 +197,12 @@ debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
 debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", localhost'"
 
-# Instala o pacote postfix-policyd-spf-python
-echo "Instalando o pacote postfix-policyd-spf-python..."
-sudo apt install postfix-policyd-spf-python -y
-wait # adiciona essa linha para esperar que o comando seja concluído
+#!/bin/bash
+
+# Atualizando pacotes e instalando dependências
+echo "Atualizando pacotes e instalando dependências necessárias..."
+sudo apt update
+sudo apt install -y python3 python3-policyd-spf
 
 # Define o intervalo de portas a serem testadas
 START_PORT=10031
@@ -237,13 +239,10 @@ Description=Postfix Policyd SPF Python
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/policyd-spf --inet=127.0.0.1:10031
+ExecStart=/usr/bin/policyd-spf --inet=127.0.0.1:$FREE_PORT
 Restart=always
 User=root
 Group=root
-StandardOutput=syslog
-StandardError=syslog
-SyslogIdentifier=policyd-spf
 
 [Install]
 WantedBy=multi-user.target
@@ -267,9 +266,7 @@ echo "Configurando Postfix para usar a porta $FREE_PORT..."
 sudo sed -i "s|check_policy_service inet:127.0.0.1:[0-9]*|check_policy_service inet:127.0.0.1:$FREE_PORT|" /etc/postfix/main.cf
 sudo systemctl restart postfix
 
-# Confirmação final
 echo "Configuração concluída. Postfix e postfix-policyd-spf-python estão configurados para usar a porta $FREE_PORT."
-
 
 # Próximas configurações...
 echo "Executando próximas configurações..."
