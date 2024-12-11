@@ -211,6 +211,8 @@ After=network.target
 [Service]
 ExecStart=/usr/bin/policyd-spf --inet=127.0.0.1:10031
 Restart=always
+User=root
+Group=root
 
 [Install]
 WantedBy=multi-user.target
