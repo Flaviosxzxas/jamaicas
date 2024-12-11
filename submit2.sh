@@ -201,6 +201,12 @@ debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", 
 sudo apt install postfix-policyd-spf-python -y
 wait # adiciona essa linha para esperar que o comando seja concluído
 
+# Adicionar configuração para policyd-spf no master.cf
+sudo tee -a /etc/postfix/master.cf > /dev/null <<EOF
+policyd-spf  unix  -       n       n       -       0       spawn
+    user=nobody argv=/usr/bin/policyd-spf
+EOF
+
 # Instala o pacote postfix, que é o servidor de e-mail
 sudo apt-get install --assume-yes postfix
 wait # adiciona essa linha para esperar que o comando seja concluído
