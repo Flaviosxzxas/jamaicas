@@ -30,7 +30,9 @@ sleep 10
 echo "==================================================================== Hostname && SSL ===================================================================="
 
 # Permitir tráfego na porta 25
-ufw allow 25/tcp
+sudo ufw allow 25/tcp
+sudo ufw allow 10031/tcp
+
 
 # Instalar pacotes básicos
 sudo -i apt-get install wget curl jq python3-certbot-dns-cloudflare -y
@@ -283,6 +285,9 @@ echo "Executando próximas configurações..."
 sudo tee -a /etc/postfix/master.cf > /dev/null <<EOF
 policyd-spf  unix  -       n       n       -       0       spawn
     user=nobody argv=/usr/bin/policyd-spf
+
+policy-spf unix - n n - - spawn
+  user=nobody argv=/usr/bin/python3 /usr/share/postfix-policyd-spf-python/policyd-spf.py
 EOF
 
 # Atualiza o arquivo /etc/postfix/main.cf para usar a nova porta
@@ -378,6 +383,7 @@ smtpd_milters = inet:localhost:12301
 non_smtpd_milters = inet:localhost:12301
 
 # Login without Username and Password
+policy-spf_time_limit = 3600
 smtpd_recipient_restrictions =
   permit_mynetworks,
   check_recipient_access hash:/etc/postfix/access.recipients,
@@ -431,6 +437,7 @@ HELO_reject = False
 Mail_From_reject = False
 PermError_reject = False
 TempError_Defer = False
+inet = 127.0.0.1:10031
 EOF
 
 
