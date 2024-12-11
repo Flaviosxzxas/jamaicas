@@ -197,65 +197,78 @@ debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
 debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", localhost'"
 
-#!/bin/bash
-
 # Instala o pacote postfix-policyd-spf-python
 echo "Instalando o pacote postfix-policyd-spf-python..."
 sudo apt install postfix-policyd-spf-python -y
 wait # adiciona essa linha para esperar que o comando seja concluído
 
-# Configura o serviço postfix-policyd-spf-python
-echo "Configurando o serviço postfix-policyd-spf-python..."
+# Define o intervalo de portas a serem testadas
+START_PORT=10031
+END_PORT=10100
+
+# Função para verificar se a porta está em uso
+is_port_in_use() {
+    ss -tuln | grep -q ":$1"
+    return $?
+}
+
+# Encontra uma porta livre
+find_free_port() {
+    for ((port=$START_PORT; port<=$END_PORT; port++)); do
+        if ! is_port_in_use $port; then
+            echo $port
+            return 0
+        fi
+    done
+    echo "Nenhuma porta livre encontrada no intervalo $START_PORT-$END_PORT" >&2
+    exit 1
+}
+
+# Encontra uma porta livre
+FREE_PORT=$(find_free_port)
+
+echo "Porta livre encontrada: $FREE_PORT"
+
+# Configura o serviço postfix-policyd-spf-python com a porta encontrada
+echo "Configurando postfix-policyd-spf-python com a porta $FREE_PORT..."
 sudo tee /etc/systemd/system/postfix-policyd-spf-python.service > /dev/null <<EOF
 [Unit]
 Description=Postfix Policyd SPF Python
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/policyd-spf --inet=127.0.0.1:10031
+ExecStart=/usr/bin/policyd-spf --inet=127.0.0.1:$FREE_PORT
 Restart=always
 User=root
 Group=root
+StartLimitIntervalSec=0
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# Ajusta as permissões para o arquivo do serviço
-sudo chmod 644 /etc/systemd/system/postfix-policyd-spf-python.service
-
-# Recarrega as configurações do systemd
-echo "Recarregando configurações do systemd..."
+# Recarrega o systemd e reinicia o serviço
 sudo systemctl daemon-reload
-sleep 2  # Aguarda o systemd processar as alterações
-
-# Ativa o serviço
-echo "Ativando o serviço postfix-policyd-spf-python..."
 sudo systemctl enable postfix-policyd-spf-python
-
-# Ajusta permissões específicas para o diretório ou arquivos relacionados, se necessário
-if [ -d "/etc/postfix-policyd-spf-python" ]; then
-    sudo chmod -R 755 /etc/postfix-policyd-spf-python
-fi
-
-# Aguarda para garantir que todas as dependências do sistema estejam disponíveis
-sleep 5
-
-# Tenta iniciar o serviço
-echo "Iniciando o serviço postfix-policyd-spf-python..."
 sudo systemctl restart postfix-policyd-spf-python
-sleep 2
 
-# Verifica o status do serviço
-echo "Verificando o status do serviço postfix-policyd-spf-python..."
-sudo systemctl is-active --quiet postfix-policyd-spf-python
-
-if [ $? -eq 0 ]; then
-    echo "Serviço postfix-policyd-spf-python está ativo e funcionando. Continuando..."
+# Verifica se o serviço está ativo
+if sudo systemctl is-active --quiet postfix-policyd-spf-python; then
+    echo "Serviço postfix-policyd-spf-python configurado e ativo na porta $FREE_PORT."
 else
-    echo "Erro: Serviço postfix-policyd-spf-python falhou ao iniciar. Interrompendo o script."
+    echo "Erro: Serviço postfix-policyd-spf-python não conseguiu iniciar na porta $FREE_PORT."
     exit 1
 fi
+
+# Configura o Postfix para usar a porta encontrada
+echo "Configurando Postfix para usar a porta $FREE_PORT..."
+sudo sed -i "s|check_policy_service inet:127.0.0.1:[0-9]*|check_policy_service inet:127.0.0.1:$FREE_PORT|" /etc/postfix/main.cf
+sudo systemctl restart postfix
+
+# Confirmação final
+echo "Configuração concluída. Postfix e postfix-policyd-spf-python estão configurados para usar a porta $FREE_PORT."
+
 
 # Próximas configurações...
 echo "Executando próximas configurações..."
@@ -265,6 +278,20 @@ sudo tee -a /etc/postfix/master.cf > /dev/null <<EOF
 policyd-spf  unix  -       n       n       -       0       spawn
     user=nobody argv=/usr/bin/policyd-spf
 EOF
+
+# Atualiza o arquivo /etc/postfix/main.cf para usar a nova porta
+echo "Atualizando o arquivo /etc/postfix/main.cf..."
+
+# Remove a linha existente de check_policy_service (se existir)
+sudo sed -i '/check_policy_service inet:127.0.0.1:[0-9]*/d' /etc/postfix/main.cf
+
+# Adiciona a nova linha com a porta dinâmica
+sudo sed -i "/smtpd_recipient_restrictions =/a\    check_policy_service inet:127.0.0.1:$FREE_PORT" /etc/postfix/main.cf
+
+# Reinicia o Postfix para aplicar as alterações
+echo "Reiniciando o Postfix..."
+sudo systemctl restart postfix
+
 
 # Instala o pacote postfix, que é o servidor de e-mail
 sudo apt-get install --assume-yes postfix
@@ -350,7 +377,7 @@ smtpd_recipient_restrictions =
   check_recipient_access hash:/etc/postfix/access.recipients,
   permit_sasl_authenticated,
   reject_unauth_destination,
-  check_policy_service inet:127.0.0.1:10031
+  #check_policy_service inet:127.0.0.1:10031
 
 
 # Limites de conexão para proteção e controle de envio
