@@ -378,7 +378,7 @@ smtpd_recipient_restrictions =
   check_recipient_access hash:/etc/postfix/access.recipients,
   permit_sasl_authenticated,
   reject_unauth_destination,
-  #check_policy_service inet:127.0.0.1:10031
+  check_policy_service inet:127.0.0.1:10031
 
 
 # Limites de conexão para proteção e controle de envio
