@@ -243,8 +243,7 @@ POLICYD_SPF_BIN=$(find_policyd_spf_binary)
 if [ -z "$POLICYD_SPF_BIN" ]; then
     echo "Erro: Não foi possível localizar o binário do policyd-spf."
     capture_logs
-    exit 1
-fi
+    fi
 
 # Ajusta o arquivo de serviço caso necessário
 echo "Ajustando o arquivo de serviço com o caminho correto para o binário..."
@@ -258,14 +257,12 @@ sudo systemctl enable postfix-policyd-spf-python
 if ! sudo test -f /etc/postfix-policyd-spf-python/policyd-spf.conf; then
     echo "Erro: Arquivo /etc/postfix-policyd-spf-python/policyd-spf.conf não encontrado."
     capture_logs
-    exit 1
 fi
 
 # Verifica o conteúdo do arquivo de configuração
 if ! grep -q "HELO_reject" /etc/postfix-policyd-spf-python/policyd-spf.conf; then
     echo "Erro: Configuração incompleta em /etc/postfix-policyd-spf-python/policyd-spf.conf."
     capture_logs
-    exit 1
 fi
 
 # Tenta iniciar o serviço
@@ -279,7 +276,6 @@ if sudo systemctl status postfix-policyd-spf-python | grep -q 'active (running)'
 else
     echo "Falha ao iniciar o serviço postfix-policyd-spf-python."
     capture_logs
-    exit 1
 fi
 
 # Reinstala o pacote se o serviço falhar
@@ -309,8 +305,7 @@ if [ $attempt -eq $max_attempts ]; then
     else
         echo "Falha ao iniciar o serviço postfix-policyd-spf-python mesmo após reinstalação."
         capture_logs
-        exit 1
-    fi
+            fi
 fi
 
 # Confirmação final do status do serviço
@@ -318,7 +313,7 @@ echo "Verificando o status final do serviço..."
 if ! sudo systemctl status postfix-policyd-spf-python | grep -q 'active (running)'; then
     echo "Erro ao ativar o serviço postfix-policyd-spf-python. Verifique os logs."
     capture_logs
-    exit 1
+
 else
     echo "Serviço postfix-policyd-spf-python ativado com sucesso."
 fi
