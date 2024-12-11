@@ -199,6 +199,7 @@ debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", 
 
 # Instala o pacote postfix-policyd-spf-python
 sudo apt install postfix-policyd-spf-python -y
+wait  # Aguarda o comando ser concluído
 
 # Configura o serviço postfix-policyd-spf-python
 echo "Configurando o serviço postfix-policyd-spf-python..."
@@ -206,14 +207,12 @@ sudo tee /etc/systemd/system/postfix-policyd-spf-python.service > /dev/null <<EO
 [Unit]
 Description=Postfix Policyd SPF Python
 After=network.target
-Requires=network.target
 
 [Service]
 ExecStart=/usr/bin/policyd-spf --inet=127.0.0.1:10031
-Restart=on-failure
+Restart=always
 User=root
 Group=root
-Type=simple
 
 [Install]
 WantedBy=multi-user.target
@@ -225,35 +224,21 @@ sudo chmod 644 /etc/systemd/system/postfix-policyd-spf-python.service
 # Recarrega as configurações do systemd
 echo "Recarregando configurações do systemd..."
 sudo systemctl daemon-reload
+sleep 2  # Aguarda o systemd processar as alterações
 
 # Ativa o serviço
 echo "Ativando o serviço postfix-policyd-spf-python..."
 sudo systemctl enable postfix-policyd-spf-python
 
+# Ajusta permissões específicas para o diretório ou arquivos relacionados, se necessário
+if [ -d "/etc/postfix-policyd-spf-python" ]; then
+    sudo chmod -R 755 /etc/postfix-policyd-spf-python
+fi
+
 # Tenta iniciar o serviço
 echo "Iniciando o serviço postfix-policyd-spf-python..."
-sudo systemctl start postfix-policyd-spf-python
-sleep 5
-
-# Verifica se o serviço foi iniciado corretamente
-if sudo systemctl is-active --quiet postfix-policyd-spf-python; then
-    echo "Serviço postfix-policyd-spf-python iniciado com sucesso."
-else
-    echo "Falha ao iniciar o serviço postfix-policyd-spf-python. Verificando logs..."
-    journalctl -u postfix-policyd-spf-python.service -n 20
-    exit 1
-fi
-
-# Confirmação final do status
-echo "Verificando o status final do serviço..."
-if sudo systemctl is-active --quiet postfix-policyd-spf-python; then
-    echo "Serviço postfix-policyd-spf-python ativado e funcionando corretamente."
-else
-    echo "Erro ao ativar o serviço postfix-policyd-spf-python. Verifique os logs."
-    journalctl -u postfix-policyd-spf-python.service -n 20
-    exit 1
-fi
-
+sudo systemctl restart postfix-policyd-spf-python
+sleep 2
 
 # Adicionar configuração para policyd-spf no master.cf
 sudo tee -a /etc/postfix/master.cf > /dev/null <<EOF
