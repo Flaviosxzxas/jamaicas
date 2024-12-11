@@ -184,25 +184,30 @@ wait # adiciona essa linha para esperar que o comando seja concluído
 echo "dbconfig-common dbconfig-common/dbconfig-install boolean false" | sudo debconf-set-selections
 echo "opendmarc opendmarc/dbconfig-install boolean false" | sudo debconf-set-selections
 
-# Instala o Postfix e pacotes adicionais
-sudo DEBIAN_FRONTEND=noninteractive apt-get install --assume-yes postfix postfix-policyd-spf-python opendmarc
-wait # adiciona essa linha para esperar que o comando seja concluído
+# Atualizando pacotes
+sudo apt update
+sudo apt upgrade -y
 
-# Instalação do pflogsumm para relatórios detalhados do Postfix
-sudo apt-get install pflogsumm -y
+# Instalar dependências para policyd-spf
+echo "Instalando python3-pip e dnspython..."
+sudo apt install -y python3-pip
+pip3 install dnspython
+
+if [ $? -eq 0 ]; then
+  echo "python3-pip e dnspython instalados com sucesso!"
+else
+  echo "Erro ao instalar python3-pip ou dnspython. Verifique os logs."
+  exit 1
+fi
+
+# Instalar Postfix e outros pacotes necessários
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postfix postfix-policyd-spf-python opendmarc pflogsumm
 wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Configurações básicas do Postfix
 debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
 debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", localhost'"
-
-#!/bin/bash
-
-# Atualizando pacotes e instalando dependências
-echo "Atualizando pacotes e instalando dependências necessárias..."
-sudo apt update
-sudo apt install -y python3 python3-policyd-spf
 
 # Define o intervalo de portas a serem testadas
 START_PORT=10031
