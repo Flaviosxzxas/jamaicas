@@ -229,9 +229,12 @@ ExecStart=/usr/bin/python3 /usr/bin/policyd-spf
 Restart=always
 User=root
 Group=root
-RestartSec=10s
-StartLimitInterval=300
+RestartSec=10
+StartLimitIntervalSec=300
 StartLimitBurst=5
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=postfix-policyd-spf-python
 
 [Install]
 WantedBy=multi-user.target
