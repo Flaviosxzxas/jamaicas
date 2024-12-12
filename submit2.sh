@@ -232,7 +232,7 @@ ExecStart=/usr/bin/python3 /usr/bin/policyd-spf
 Restart=always
 User=root
 Group=root
-RestartSec=5
+RestartSec=10s
 StartLimitInterval=300
 StartLimitBurst=5
 
