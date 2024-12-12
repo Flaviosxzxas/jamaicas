@@ -560,13 +560,6 @@ get_record_details() {
     -H "Content-Type: application/json"
 }
 
-# Função para verificar a existência de um registro
-record_exists() {
-  local record_name=$1
-  local record_type=$2
-  get_record_details "$record_name" "$record_type" | jq -r '.result | length'
-}
-
 # Função para criar ou atualizar registros DNS
 create_or_update_record() {
   local record_name=$1
@@ -617,10 +610,10 @@ create_or_update_record() {
 # Criar ou atualizar registros DNS
 echo "  -- Configurando registros DNS"
 create_or_update_record "$DKIMSelector" "A" "$ServerIP" ""
-create_or_update_record "$ServerName" "TXT" "\"v=spf1 a:$ServerName ~all\"" ""
-create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmarc@$ServerName; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r\"" ""
+create_or_update_record "$ServerName" "TXT" "v=spf1 a:$ServerName ~all" ""
+create_or_update_record "_dmarc.$ServerName" "TXT" "v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmarc@$ServerName; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r" ""
 EscapedDKIMCode=$(printf '%s' "$DKIMCode" | sed 's/\"/\\\"/g')
-create_or_update_record "mail._domainkey.$ServerName" "TXT" "\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\"" ""
+create_or_update_record "mail._domainkey.$ServerName" "TXT" "v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode" ""
 create_or_update_record "$ServerName" "MX" "$ServerName" "10"
 
 
