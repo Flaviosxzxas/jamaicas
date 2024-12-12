@@ -217,6 +217,29 @@ debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
 debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", localhost'"
 
+# Criar o daemon policyd-spf para execução contínua
+sudo tee /usr/bin/policyd-spf-daemon > /dev/null << 'EOF'
+#!/usr/bin/python3
+
+import subprocess
+import time
+
+while True:
+    try:
+        # Executa o script original
+        subprocess.run(['/usr/bin/python3', '/usr/bin/policyd-spf'], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Erro ao executar policyd-spf: {e}")
+    # Aguarda 10 segundos antes de reiniciar
+    time.sleep(10)
+EOF
+
+# Ajustar permissões para o daemon
+sudo chmod +x /usr/bin/policyd-spf-daemon
+
+echo "Arquivo /usr/bin/policyd-spf-daemon criado e configurado para execução contínua."
+
+
 # Configura o serviço postfix-policyd-spf-python com a porta encontrada
 echo "Configurando postfix-policyd-spf-python com a porta 49151..."
 sudo tee /etc/systemd/system/postfix-policyd-spf-python.service > /dev/null <<EOF
@@ -225,7 +248,7 @@ Description=Postfix Policyd SPF Python
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/python3 /usr/bin/policyd-spf
+ExecStart=/usr/bin/python3 /usr/bin/policyd-spf-daemon
 Type=oneshot
 RemainAfterExit=yes
 User=root
