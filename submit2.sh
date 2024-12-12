@@ -291,7 +291,7 @@ main() {
     echo "Verificando erros específicos..."
 
     # Mensagem informativa
-    echo "==================================================== POSTFIX ==================="
+    echo "==================================================== POSTFIX ===================================================="
 }
 
 # Execute a função principal
@@ -610,14 +610,11 @@ create_or_update_record() {
 # Criar ou atualizar registros DNS
 echo "  -- Configurando registros DNS"
 create_or_update_record "$DKIMSelector" "A" "$ServerIP" ""
-create_or_update_record "$ServerName" "TXT" "v=spf1 a:$ServerName ~all" ""
-create_or_update_record "_dmarc.$ServerName" "TXT" "v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmarc@$ServerName; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r" ""
+create_or_update_record "$ServerName" "TXT" "\"v=spf1 a:$ServerName ~all\"" ""
+create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmarc@$ServerName; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r\"" ""
 EscapedDKIMCode=$(printf '%s' "$DKIMCode" | sed 's/\"/\\\"/g')
-create_or_update_record "mail._domainkey.$ServerName" "TXT" "v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode" ""
+create_or_update_record "mail._domainkey.$ServerName" "TXT" "\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\"" ""
 create_or_update_record "$ServerName" "MX" "$ServerName" "10"
-
-
-
 echo "==================================================== APPLICATION ===================================================="
 
 # Instala Apache, PHP e módulos necessários
