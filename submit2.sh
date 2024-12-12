@@ -206,50 +206,33 @@ fi
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postfix postfix-policyd-spf-python opendmarc pflogsumm
 wait # adiciona essa linha para esperar que o comando seja concluído
 
+# Adicionar configuração para policyd-spf no master.cf
+sudo tee -a /etc/postfix/master.cf > /dev/null <<EOF
+policyd-spf  unix  -       n       n       -       0       spawn
+    user=nobody argv=/usr/bin/policyd-spf
+
+policy-spf unix - n n - - spawn
+  user=nobody argv=/usr/bin/python3 /usr/share/postfix-policyd-spf-python/policyd-spf.py
+EOF
+
 # Garantir que policyd-spf seja executável
 sudo chmod +x /usr/bin/policyd-spf
+sudo chmod +x /usr/share/postfix-policyd-spf-python/policyd-spf.py
 
 # Configurações básicas do Postfix
 debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
 debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", localhost'"
 
-# Define o intervalo de portas a serem testadas
-START_PORT=10031
-END_PORT=10100
-
-# Função para verificar se a porta está em uso
-is_port_in_use() {
-    ss -tuln | grep -q ":$1"
-    return $?
-}
-
-# Encontra uma porta livre
-find_free_port() {
-    for ((port=$START_PORT; port<=$END_PORT; port++)); do
-        if ! is_port_in_use $port; then
-            echo $port
-            return 0
-        fi
-    done
-    echo "Nenhuma porta livre encontrada no intervalo $START_PORT-$END_PORT" >&2
-    exit 1
-}
-
-# Encontra uma porta livre
-FREE_PORT=$(find_free_port)
-
-echo "Porta livre encontrada: $FREE_PORT"
-
 # Configura o serviço postfix-policyd-spf-python com a porta encontrada
-echo "Configurando postfix-policyd-spf-python com a porta $FREE_PORT..."
+echo "Configurando postfix-policyd-spf-python com a porta 8080..."
 sudo tee /etc/systemd/system/postfix-policyd-spf-python.service > /dev/null <<EOF
 [Unit]
 Description=Postfix Policyd SPF Python
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/policyd-spf --inet=127.0.0.1:$FREE_PORT
+ExecStart=/usr/bin/policyd-spf --inet=127.0.0.1:8080
 Restart=always
 User=root
 Group=root
@@ -262,46 +245,6 @@ EOF
 sudo systemctl daemon-reload
 sudo systemctl enable postfix-policyd-spf-python
 sudo systemctl restart postfix-policyd-spf-python
-
-# Verifica se o serviço está ativo
-if sudo systemctl is-active --quiet postfix-policyd-spf-python; then
-    echo "Serviço postfix-policyd-spf-python configurado e ativo na porta $FREE_PORT."
-else
-    echo "Erro: Serviço postfix-policyd-spf-python não conseguiu iniciar na porta $FREE_PORT."
-    exit 1
-fi
-
-# Configura o Postfix para usar a porta encontrada
-echo "Configurando Postfix para usar a porta $FREE_PORT..."
-sudo sed -i "s|check_policy_service inet:127.0.0.1:[0-9]*|check_policy_service inet:127.0.0.1:$FREE_PORT|" /etc/postfix/main.cf
-sudo systemctl restart postfix
-
-echo "Configuração concluída. Postfix e postfix-policyd-spf-python estão configurados para usar a porta $FREE_PORT."
-
-# Próximas configurações...
-echo "Executando próximas configurações..."
-
-# Adicionar configuração para policyd-spf no master.cf
-sudo tee -a /etc/postfix/master.cf > /dev/null <<EOF
-policyd-spf  unix  -       n       n       -       0       spawn
-    user=nobody argv=/usr/bin/policyd-spf
-
-policy-spf unix - n n - - spawn
-  user=nobody argv=/usr/bin/python3 /usr/share/postfix-policyd-spf-python/policyd-spf.py
-EOF
-
-# Atualiza o arquivo /etc/postfix/main.cf para usar a nova porta
-echo "Atualizando o arquivo /etc/postfix/main.cf..."
-
-# Remove a linha existente de check_policy_service (se existir)
-sudo sed -i '/check_policy_service inet:127.0.0.1:[0-9]*/d' /etc/postfix/main.cf
-
-# Adiciona a nova linha com a porta dinâmica
-sudo sed -i "/smtpd_recipient_restrictions =/a\    check_policy_service inet:127.0.0.1:$FREE_PORT" /etc/postfix/main.cf
-
-# Reinicia o Postfix para aplicar as alterações
-echo "Reiniciando o Postfix..."
-sudo systemctl restart postfix
 
 
 # Instala o pacote postfix, que é o servidor de e-mail
@@ -389,7 +332,7 @@ smtpd_recipient_restrictions =
   check_recipient_access hash:/etc/postfix/access.recipients,
   permit_sasl_authenticated,
   reject_unauth_destination,
-  check_policy_service inet:127.0.0.1:10031
+  check_policy_service inet:127.0.0.1:8080
 
 
 # Limites de conexão para proteção e controle de envio
@@ -437,7 +380,7 @@ HELO_reject = False
 Mail_From_reject = False
 PermError_reject = False
 TempError_Defer = False
-inet = 127.0.0.1:10031
+inet = 127.0.0.1:8080
 EOF
 
 
