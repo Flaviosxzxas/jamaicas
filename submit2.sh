@@ -228,18 +228,17 @@ Description=Postfix Policyd SPF Python
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/python3 /usr/bin/policyd-spf --inet=127.0.0.1:49151
+ExecStart=/usr/bin/python3 /usr/bin/policyd-spf
 Restart=always
 User=root
 Group=root
+RestartSec=5
+StartLimitInterval=300
+StartLimitBurst=5
 
 [Install]
 WantedBy=multi-user.target
 EOF
-
-# Instala o pacote postfix, que é o servidor de e-mail
-sudo apt-get install --assume-yes postfix
-wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Atualiza o arquivo access.recipients
 echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
@@ -370,7 +369,8 @@ HELO_reject = False
 Mail_From_reject = False
 PermError_reject = False
 TempError_Defer = False
-inet = 127.0.0.1:49151
+skip_addresses = 127.0.0.0/8,::ffff:127.0.0.0/104,::1
+debugLevel = 0
 EOF
 
 
