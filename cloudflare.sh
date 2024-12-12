@@ -39,59 +39,49 @@ CloudflareZoneID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?na
   -H "Content-Type: application/json" | jq -r '.result[0].id')
 
 if [ -z "$CloudflareZoneID" ]; then
-  echo "Erro: Não foi possível obter o ID da zona do Cloudflare." >&2
+  echo "Erro: Não foi possível obter o ID da zona do Cloudflare."
   exit 1
 fi
 
-# Criar registro A
 echo "  -- Cadastrando A"
-response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
      --data "$(jq -n --arg type "A" --arg name "$DKIMSelector" --arg content "$ServerIP" --argjson ttl 120 --argjson proxied false \
-        '{type: $type, name: $name, content: $content, ttl: $ttl, proxied: $proxied}')")
-echo "Response (A): $response" >> /root/cloudflare_logs.txt
+       '{type: $type, name: $name, content: $content, ttl: $ttl, proxied: $proxied}')"
 
-# Criar registro SPF
 echo "  -- Cadastrando SPF"
-response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
      --data "$(jq -n --arg type "TXT" --arg name "$ServerName" --arg content "v=spf1 a:$ServerName ~all" --argjson ttl 120 --argjson proxied false \
-        '{type: $type, name: $name, content: $content, ttl: $ttl, proxied: $proxied}')")
-echo "Response (SPF): $response" >> /root/cloudflare_logs.txt
+       '{type: $type, name: $name, content: $content, ttl: $ttl, proxied: $proxied}')"
 
-# Criar registro DMARC
 echo "  -- Cadastrando DMARC"
-response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
      --data "$(jq -n --arg type "TXT" --arg name "_dmarc.$ServerName" --arg content "v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmark@$ServerName; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r" --argjson ttl 120 --argjson proxied false \
-        '{type: $type, name: $name, content: $content, ttl: $ttl, proxied: $proxied}')")
-echo "Response (DMARC): $response" >> /root/cloudflare_logs.txt
+       '{type: $type, name: $name, content: $content, ttl: $ttl, proxied: $proxied}')"
 
-# Criar registro DKIM
 echo "  -- Cadastrando DKIM"
-EscapedDKIMCode=$(printf '%s' "$DKIMCode" | sed 's/\"/\\\\\"/g')
-response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
-     --data "$(jq -n --arg type "TXT" --arg name "mail._domainkey.$ServerName" --arg content "v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode" --argjson ttl 120 --argjson proxied false \
-        '{type: $type, name: $name, content: $content, ttl: $ttl, proxied: $proxied}')")
-echo "Response (DKIM): $response" >> /root/cloudflare_logs.txt
+     --data "$(jq -n --arg type "TXT" --arg name "mail._domainkey.$ServerName" --arg content "v=DKIM1; h=sha256; k=rsa; p=$DKIMCode" --argjson ttl 120 --argjson proxied false \
+       '{type: $type, name: $name, content: $content, ttl: $ttl, proxied: $proxied}')"
 
-# Criar registro MX
 echo "  -- Cadastrando MX"
-response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
      --data "$(jq -n --arg type "MX" --arg name "$ServerName" --arg content "$ServerName" --argjson ttl 120 --argjson priority 10 --argjson proxied false \
-        '{type: $type, name: $name, content: $content, ttl: $ttl, priority: $priority, proxied: $proxied}')")
-echo "Response (MX): $response" >> /root/cloudflare_logs.txt
+       '{type: $type, name: $name, content: $content, ttl: $ttl, priority: $priority, proxied: $proxied}')"
 
 echo "==================================================== CLOUDFLARE ===================================================="
+
