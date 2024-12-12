@@ -212,9 +212,6 @@ policy-spf unix - n n - - spawn
   user=nobody argv=/usr/bin/python3 /usr/bin/policyd-spf
 EOF
 
-# Garantir que policyd-spf seja executável
-sudo chmod +x /usr/bin/policyd-spf
-
 # Configurações básicas do Postfix
 debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
@@ -260,10 +257,7 @@ create_header_checks() {
     # Atualize a configuração do Postfix para usar o novo arquivo
     sudo postconf -e "header_checks = regexp:/etc/postfix/header_checks"
 
-    # Reinicie o Postfix
-    echo "Reiniciando o Postfix..."
-    sudo systemctl restart postfix
-}
+    }
 
 # Função para instalar o dos2unix se necessário
 install_dos2unix() {
@@ -452,11 +446,6 @@ pattern=recipient
 action=permit
 " | sudo tee /etc/postfix-policyd.conf > /dev/null
 
-# Recarrega o systemd e reinicia o serviço
-sudo systemctl daemon-reload
-sudo systemctl enable postfix-policyd-spf-python
-sudo systemctl restart postfix-policyd-spf-python
-
 echo "==================================================== POSTFIX ===================================================="
 
 echo "==================================================== OpenDMARC ===================================================="
@@ -519,10 +508,6 @@ sudo touch /run/opendmarc/opendmarc.pid
 sudo chown opendmarc:opendmarc /run/opendmarc/opendmarc.pid
 sudo chmod 600 /run/opendmarc/opendmarc.pid
 
-# Reiniciar os serviços do Postfix e Dovecot
-sudo systemctl restart postfix
-wait # adiciona essa linha para esperar que o comando seja concluído
-
 # Configurar e reiniciar o OpenDKIM
 sudo systemctl restart opendkim
 wait # adiciona essa linha para esperar que o comando seja concluído
@@ -530,6 +515,13 @@ wait # adiciona essa linha para esperar que o comando seja concluído
 # Configurar e reiniciar o OpenDMARC
 sudo systemctl restart opendmarc
 wait # adiciona essa linha para esperar que o comando seja concluído
+
+# Consolidar reinicializações ao final do script
+echo "Recarregando e reiniciando os serviços..."
+sudo systemctl daemon-reload
+sudo systemctl enable postfix-policyd-spf-python
+sudo systemctl restart postfix-policyd-spf-python
+sudo systemctl restart postfix
 
 echo "==================================================== OpenDMARC ===================================================="
 
