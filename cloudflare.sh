@@ -19,7 +19,7 @@ if [ $(record_exists "_dmarc.$ServerName" "TXT") -eq 0 ]; then
        -H "X-Auth-Email: $CloudflareEmail" \
        -H "X-Auth-Key: $CloudflareAPI" \
        -H "Content-Type: application/json" \
-       --data "$(jq -n --arg type "TXT" --arg name "_dmarc.$ServerName" --arg content "v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmark@$ServerName; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r" --arg ttl "120" --argjson proxied false \
+       --data "$(jq -n --arg type "TXT" --arg name "_dmarc.$ServerName" --arg content "v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmarc@$ServerName; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r" --arg ttl "120" --argjson proxied false \
           '{type: $type, name: $name, content: $content, ttl: ($ttl | tonumber), proxied: $proxied}')")
   echo "Response (DMARC): $response" >> /root/cloudflare_logs.txt
 else
@@ -40,3 +40,4 @@ if [ $(record_exists "mail._domainkey.$ServerName" "TXT") -eq 0 ]; then
 else
   echo "Registro DKIM já existe. Pulando." >> /root/cloudflare_logs.txt
 fi
+
