@@ -31,7 +31,7 @@ echo "==================================================================== Hostn
 
 # Permitir tráfego na porta 25
 sudo ufw allow 25/tcp
-sudo ufw allow 8080/tcp
+sudo ufw allow 49151/tcp
 
 
 # Instalar pacotes básicos
@@ -221,14 +221,14 @@ debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Si
 debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", localhost'"
 
 # Configura o serviço postfix-policyd-spf-python com a porta encontrada
-echo "Configurando postfix-policyd-spf-python com a porta 8080..."
+echo "Configurando postfix-policyd-spf-python com a porta 49151..."
 sudo tee /etc/systemd/system/postfix-policyd-spf-python.service > /dev/null <<EOF
 [Unit]
 Description=Postfix Policyd SPF Python
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/python3 /usr/bin/policyd-spf --inet=127.0.0.1:8080
+ExecStart=/usr/bin/python3 /usr/bin/policyd-spf --inet=127.0.0.1:49151
 Restart=always
 User=root
 Group=root
@@ -322,7 +322,7 @@ smtpd_recipient_restrictions =
   check_recipient_access hash:/etc/postfix/access.recipients,
   permit_sasl_authenticated,
   reject_unauth_destination,
-  check_policy_service inet:127.0.0.1:8080
+  check_policy_service inet:127.0.0.1:49151
 
 
 # Limites de conexão para proteção e controle de envio
@@ -370,7 +370,6 @@ HELO_reject = False
 Mail_From_reject = False
 PermError_reject = False
 TempError_Defer = False
-inet = 127.0.0.1:8080
 EOF
 
 
