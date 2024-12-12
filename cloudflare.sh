@@ -30,6 +30,7 @@ echo "==================================================== CLOUDFLARE ==========
 
 DKIMCode=$(/root/dkimcode.sh)
 
+# Obter o ID da zona do Cloudflare
 echo "  -- Obtendo Zona"
 CloudflareZoneID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$Domain&status=active" \
   -H "X-Auth-Email: $CloudflareEmail" \
@@ -72,7 +73,7 @@ if [ $(record_exists "$ServerName" "TXT") -eq 0 ]; then
        -H "X-Auth-Email: $CloudflareEmail" \
        -H "X-Auth-Key: $CloudflareAPI" \
        -H "Content-Type: application/json" \
-       --data "$(jq -n --arg type "TXT" --arg name "$ServerName" --arg content "v=spf1 a:$ServerName ~all" --argjson ttl 120 --argjson proxied false \
+       --data "$(jq -n --arg type "TXT" --arg name "$ServerName" --arg content \"v=spf1 a:$ServerName ~all\" --argjson ttl 120 --argjson proxied false \
           '{type: $type, name: $name, content: $content, ttl: $ttl, proxied: $proxied}')")
   echo "Response (SPF): $response" >> /root/cloudflare_logs.txt
 else
@@ -86,7 +87,7 @@ if [ $(record_exists "_dmarc.$ServerName" "TXT") -eq 0 ]; then
        -H "X-Auth-Email: $CloudflareEmail" \
        -H "X-Auth-Key: $CloudflareAPI" \
        -H "Content-Type: application/json" \
-       --data "$(jq -n --arg type "TXT" --arg name "_dmarc.$ServerName" --arg content "v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmark@$ServerName; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r" --argjson ttl 120 --argjson proxied false \
+       --data "$(jq -n --arg type "TXT" --arg name "_dmarc.$ServerName" --arg content \"v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmark@$ServerName; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r\" --argjson ttl 120 --argjson proxied false \
           '{type: $type, name: $name, content: $content, ttl: $ttl, proxied: $proxied}')")
   echo "Response (DMARC): $response" >> /root/cloudflare_logs.txt
 else
@@ -96,12 +97,12 @@ fi
 # Criar registro DKIM
 if [ $(record_exists "mail._domainkey.$ServerName" "TXT") -eq 0 ]; then
   echo "  -- Cadastrando DKIM"
-  EscapedDKIMCode=$(printf '%s' "$DKIMCode" | sed 's/\"/\\\\\"/g')
+  EscapedDKIMCode=$(printf '%s' "$DKIMCode" | sed 's/\"/\\\"/g')
   response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
        -H "X-Auth-Email: $CloudflareEmail" \
        -H "X-Auth-Key: $CloudflareAPI" \
        -H "Content-Type: application/json" \
-       --data "$(jq -n --arg type "TXT" --arg name "mail._domainkey.$ServerName" --arg content "v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode" --argjson ttl 120 --argjson proxied false \
+       --data "$(jq -n --arg type "TXT" --arg name "mail._domainkey.$ServerName" --arg content \"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\" --argjson ttl 120 --argjson proxied false \
           '{type: $type, name: $name, content: $content, ttl: $ttl, proxied: $proxied}')")
   echo "Response (DKIM): $response" >> /root/cloudflare_logs.txt
 else
