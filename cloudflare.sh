@@ -77,12 +77,21 @@ create_or_update_record() {
     echo "Registro $record_type para $record_name já está atualizado. Pulando."
   else
     echo "  -- Criando ou atualizando registro $record_type para $record_name"
-    curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
-         -H "X-Auth-Email: $CloudflareEmail" \
-         -H "X-Auth-Key: $CloudflareAPI" \
-         -H "Content-Type: application/json" \
-         --data "$(jq -n --arg type "$record_type" --arg name "$record_name" --arg content "$record_content" --arg ttl "$record_ttl" --argjson proxied "$record_proxied" --arg priority "$record_priority" \
-            '{type: $type, name: $name, content: $content, ttl: ($ttl | tonumber), proxied: $proxied, priority: ($priority | tonumber)}')"
+    if [ "$record_type" == "MX" ]; then
+      curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+           -H "X-Auth-Email: $CloudflareEmail" \
+           -H "X-Auth-Key: $CloudflareAPI" \
+           -H "Content-Type: application/json" \
+           --data "$(jq -n --arg type "$record_type" --arg name "$record_name" --arg content "$record_content" --arg ttl "$record_ttl" --argjson proxied "$record_proxied" --arg priority "$record_priority" \
+              '{type: $type, name: $name, content: $content, ttl: ($ttl | tonumber), proxied: $proxied, priority: ($priority | tonumber)}')"
+    else
+      curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+           -H "X-Auth-Email: $CloudflareEmail" \
+           -H "X-Auth-Key: $CloudflareAPI" \
+           -H "Content-Type: application/json" \
+           --data "$(jq -n --arg type "$record_type" --arg name "$record_name" --arg content "$record_content" --arg ttl "$record_ttl" --argjson proxied "$record_proxied" \
+              '{type: $type, name: $name, content: $content, ttl: ($ttl | tonumber), proxied: $proxied}')"
+    fi
   fi
 }
 
