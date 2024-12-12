@@ -45,39 +45,50 @@ if [ -z "$CloudflareZoneID" ]; then
 fi
 
 echo "  -- Cadastrando A"
-curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
-     --data "{\"type\": \"A\", \"name\": \"$DKIMSelector\", \"content\": \"$ServerIP\", \"ttl\": 120, \"proxied\": false}"
+     --data "{\"type\": \"A\", \"name\": \"$DKIMSelector\", \"content\": \"$ServerIP\", \"ttl\": 120, \"proxied\": false}")
+
+echo "Response (A): $response"
 
 echo "  -- Cadastrando SPF"
-curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
-     --data "{\"type\": \"TXT\", \"name\": \"$ServerName\", \"content\": \\\"v=spf1 a:$ServerName ~all\\\", \"ttl\": 120, \"proxied\": false}"
+     --data "{\"type\": \"TXT\", \"name\": \"$ServerName\", \"content\": \\\"v=spf1 a:$ServerName ~all\\\", \"ttl\": 120, \"proxied\": false}")
+
+echo "Response (SPF): $response"
 
 echo "  -- Cadastrando DMARK"
-curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
-     --data "{\"type\": \"TXT\", \"name\": \"_dmarc.$ServerName\", \"content\": \\\"v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmark@$ServerName; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r\\\", \"ttl\": 120, \"proxied\": false}"
+     --data "{\"type\": \"TXT\", \"name\": \"_dmarc.$ServerName\", \"content\": \\\"v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmark@$ServerName; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r\\\", \"ttl\": 120, \"proxied\": false}")
+
+echo "Response (DMARC): $response"
 
 echo "  -- Cadastrando DKIM"
 EscapedDKIMCode=$(printf '%s' "$DKIMCode" | sed 's/\"/\\\\\"/g')
-curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
-     --data "{\"type\": \"TXT\", \"name\": \"mail._domainkey.$ServerName\", \"content\": \\\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\\\", \"ttl\": 120, \"proxied\": false}"
+     --data "{\"type\": \"TXT\", \"name\": \"mail._domainkey.$ServerName\", \"content\": \\\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\\\", \"ttl\": 120, \"proxied\": false}")
+
+echo "Response (DKIM): $response"
 
 echo "  -- Cadastrando MX"
-curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
-     --data "{\"type\": \"MX\", \"name\": \"$ServerName\", \"content\": \"$ServerName\", \"ttl\": 120, \"priority\": 10, \"proxied\": false}"
+     --data "{\"type\": \"MX\", \"name\": \"$ServerName\", \"content\": \"$ServerName\", \"ttl\": 120, \"priority\": 10, \"proxied\": false}")
+
+echo "Response (MX): $response"
 
 echo "==================================================== CLOUDFLARE ===================================================="
+
