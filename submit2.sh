@@ -208,6 +208,7 @@ wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Adicionar configuração para policyd-spf no master.cf
 sudo tee -a /etc/postfix/master.cf > /dev/null <<EOF
+#SPF 
 policy-spf unix - n n - - spawn
   user=nobody argv=/usr/bin/python3 /usr/bin/policyd-spf
 EOF
