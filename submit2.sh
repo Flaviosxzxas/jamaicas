@@ -321,7 +321,7 @@ smtpd_recipient_restrictions =
   check_recipient_access hash:/etc/postfix/access.recipients,
   permit_sasl_authenticated,
   reject_unauth_destination,
-  check_policy_service inet:127.0.0.1:49151
+  check_policy_service unix:policy-spf
 
 
 # Limites de conexão para proteção e controle de envio
@@ -370,7 +370,7 @@ Mail_From_reject = False
 PermError_reject = False
 TempError_Defer = False
 skip_addresses = 127.0.0.0/8,::ffff:127.0.0.0/104,::1
-debugLevel = 0
+debugLevel = 5
 EOF
 
 
