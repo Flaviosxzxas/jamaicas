@@ -318,10 +318,34 @@ smtpd_recipient_restrictions =
   check_policy_service unix:policy-spf
 
 
-# Limites de conexão para proteção e controle de envio
-smtpd_client_connection_rate_limit = 5
+# Limites de conexão
+smtpd_client_connection_rate_limit = 20
 smtpd_client_connection_count_limit = 10
 anvil_rate_time_unit = 60s
+
+# Gerenciamento de filas
+# Limites de conexão
+smtpd_client_connection_rate_limit = 20
+smtpd_client_connection_count_limit = 10
+anvil_rate_time_unit = 60s
+
+# Gerenciamento de filas
+message_size_limit = 10485760
+default_destination_concurrency_limit = 20
+maximal_queue_lifetime = 1d
+
+# Retransmissão controlada
+smtp_destination_rate_delay = 2s
+
+# Protocolos seguros
+smtpd_tls_protocols =!SSLv2,!SSLv3,!TLSv1,!TLSv1.1, TLSv1.2
+smtpd_tls_ciphers = medium
+ = 10485760
+default_destination_concurrency_limit = 20
+maximal_queue_lifetime = 1d
+
+# Retransmissão controlada
+smtp_destination_rate_delay = 2s
 
 # Configurações para lidar com erros temporários e definitivos no Postfix
 # smtpd_error_sleep_time = 5
@@ -330,6 +354,10 @@ anvil_rate_time_unit = 60s
 #   Define o número máximo de erros temporários (4xx) permitidos antes de encerrar a conexão.
 # smtpd_hard_error_limit = 20
 #   Define o número máximo de erros definitivos (5xx) permitidos antes de encerrar a conexão.
+
+
+# Desabilita o suporte a NIS (Network Information Service).
+nis_domain_name =
 
 # TLS parameters
 smtpd_tls_cert_file=/etc/letsencrypt/live/$ServerName/fullchain.pem
@@ -362,7 +390,7 @@ sudo tee /etc/postfix-policyd-spf-python/policyd-spf.conf > /dev/null <<EOF
 HELO_reject = False
 Mail_From_reject = False
 PermError_reject = False
-TempError_Defer = False
+TempError_Defer = True
 skip_addresses = 127.0.0.0/8,::ffff:127.0.0.0/104,::1
 debugLevel = 5
 EOF
