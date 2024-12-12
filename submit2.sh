@@ -226,12 +226,10 @@ After=network.target
 
 [Service]
 ExecStart=/usr/bin/python3 /usr/bin/policyd-spf
-Restart=always
+Type=oneshot
+RemainAfterExit=yes
 User=root
 Group=root
-RestartSec=10
-StartLimitIntervalSec=300
-StartLimitBurst=5
 StandardOutput=syslog
 StandardError=syslog
 SyslogIdentifier=postfix-policyd-spf-python
