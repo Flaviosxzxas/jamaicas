@@ -208,16 +208,12 @@ wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Adicionar configuração para policyd-spf no master.cf
 sudo tee -a /etc/postfix/master.cf > /dev/null <<EOF
-policyd-spf  unix  -       n       n       -       0       spawn
-    user=nobody argv=/usr/bin/policyd-spf
-
 policy-spf unix - n n - - spawn
-  user=nobody argv=/usr/bin/python3 /usr/share/postfix-policyd-spf-python/policyd-spf.py
+  user=nobody argv=/usr/bin/python3 /usr/bin/policyd-spf
 EOF
 
 # Garantir que policyd-spf seja executável
 sudo chmod +x /usr/bin/policyd-spf
-sudo chmod +x /usr/share/postfix-policyd-spf-python/policyd-spf.py
 
 # Configurações básicas do Postfix
 debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
@@ -232,7 +228,7 @@ Description=Postfix Policyd SPF Python
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/policyd-spf --inet=127.0.0.1:8080
+ExecStart=/usr/bin/python3 /usr/bin/policyd-spf --inet=127.0.0.1:8080
 Restart=always
 User=root
 Group=root
