@@ -44,6 +44,26 @@ if [ -z "$CloudflareZoneID" ]; then
   exit 1
 fi
 
+# Função para excluir registros existentes
+delete_record() {
+  local record_name=$1
+  local record_type=$2
+  local record_id=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records?name=$record_name&type=$record_type" \
+    -H "X-Auth-Email: $CloudflareEmail" \
+    -H "X-Auth-Key: $CloudflareAPI" \
+    -H "Content-Type: application/json" | jq -r '.result[0].id')
+
+  if [ "$record_id" != "null" ]; then
+    curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records/$record_id" \
+      -H "X-Auth-Email: $CloudflareEmail" \
+      -H "X-Auth-Key: $CloudflareAPI" \
+      -H "Content-Type: application/json"
+    echo "Registro $record_name ($record_type) removido." >> /root/cloudflare_logs.txt
+  fi
+}
+
+# Excluir e criar registro A
+delete_record "$DKIMSelector" "A"
 echo "  -- Cadastrando A"
 response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
      -H "X-Auth-Email: $CloudflareEmail" \
@@ -52,31 +72,39 @@ response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$Cloudfla
      --data "{\"type\": \"A\", \"name\": \"$DKIMSelector\", \"content\": \"$ServerIP\", \"ttl\": 120, \"proxied\": false}")
 echo "Response (A): $response" >> /root/cloudflare_logs.txt
 
+# Excluir e criar registro SPF
+delete_record "$ServerName" "TXT"
 echo "  -- Cadastrando SPF"
 response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
-     --data "{\"type\": \"TXT\", \"name\": \"$ServerName\", \"content\": \"v=spf1 a:$ServerName ~all\", \"ttl\": 120, \"proxied\": false}")
+     --data "{\"type\": \"TXT\", \"name\": \"$ServerName\", \"content\": \\\"v=spf1 a:$ServerName ~all\\\", \"ttl\": 120, \"proxied\": false}")
 echo "Response (SPF): $response" >> /root/cloudflare_logs.txt
 
-echo "  -- Cadastrando DMARK"
+# Excluir e criar registro DMARC
+delete_record "_dmarc.$ServerName" "TXT"
+echo "  -- Cadastrando DMARC"
 response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
-     --data "{\"type\": \"TXT\", \"name\": \"_dmarc.$ServerName\", \"content\": \"v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmark@$ServerName; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r\", \"ttl\": 120, \"proxied\": false}")
+     --data "{\"type\": \"TXT\", \"name\": \"_dmarc.$ServerName\", \"content\": \\\"v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmark@$ServerName; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r\\\", \"ttl\": 120, \"proxied\": false}")
 echo "Response (DMARC): $response" >> /root/cloudflare_logs.txt
 
+# Excluir e criar registro DKIM
+delete_record "mail._domainkey.$ServerName" "TXT"
 echo "  -- Cadastrando DKIM"
-EscapedDKIMCode=$(printf '%s' "$DKIMCode" | sed 's/\"/\\\"/g')
+EscapedDKIMCode=$(printf '%s' "$DKIMCode" | sed 's/\"/\\\\\"/g')
 response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
      -H "X-Auth-Email: $CloudflareEmail" \
      -H "X-Auth-Key: $CloudflareAPI" \
      -H "Content-Type: application/json" \
-     --data "{\"type\": \"TXT\", \"name\": \"mail._domainkey.$ServerName\", \"content\": \"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\", \"ttl\": 120, \"proxied\": false}")
+     --data "{\"type\": \"TXT\", \"name\": \"mail._domainkey.$ServerName\", \"content\": \\\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\\\", \"ttl\": 120, \"proxied\": false}")
 echo "Response (DKIM): $response" >> /root/cloudflare_logs.txt
 
+# Excluir e criar registro MX
+delete_record "$ServerName" "MX"
 echo "  -- Cadastrando MX"
 response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
      -H "X-Auth-Email: $CloudflareEmail" \
@@ -86,3 +114,4 @@ response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$Cloudfla
 echo "Response (MX): $response" >> /root/cloudflare_logs.txt
 
 echo "==================================================== CLOUDFLARE ===================================================="
+
