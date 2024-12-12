@@ -31,7 +31,7 @@ echo "==================================================================== Hostn
 
 # Permitir tráfego na porta 25
 sudo ufw allow 25/tcp
-sudo ufw allow 10031/tcp
+sudo ufw allow 8080/tcp
 
 
 # Instalar pacotes básicos
@@ -240,12 +240,6 @@ Group=root
 [Install]
 WantedBy=multi-user.target
 EOF
-
-# Recarrega o systemd e reinicia o serviço
-sudo systemctl daemon-reload
-sudo systemctl enable postfix-policyd-spf-python
-sudo systemctl restart postfix-policyd-spf-python
-
 
 # Instala o pacote postfix, que é o servidor de e-mail
 sudo apt-get install --assume-yes postfix
@@ -462,6 +456,10 @@ pattern=recipient
 action=permit
 " | sudo tee /etc/postfix-policyd.conf > /dev/null
 
+# Recarrega o systemd e reinicia o serviço
+sudo systemctl daemon-reload
+sudo systemctl enable postfix-policyd-spf-python
+sudo systemctl restart postfix-policyd-spf-python
 
 echo "==================================================== POSTFIX ===================================================="
 
