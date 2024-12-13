@@ -240,6 +240,13 @@ SyslogIdentifier=postfix-policyd-spf-python
 WantedBy=multi-user.target
 EOF
 
+# Remover o serviço postfix-policyd-spf-python (caso necessário)
+echo "Removendo o serviço postfix-policyd-spf-python para evitar reinicializações desnecessárias..."
+sudo systemctl stop postfix-policyd-spf-python
+sudo systemctl disable postfix-policyd-spf-python
+sudo rm /etc/systemd/system/postfix-policyd-spf-python.service
+sudo systemctl daemon-reload
+
 # Atualiza o arquivo access.recipients
 echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
 sudo postmap /etc/postfix/access.recipients
