@@ -312,7 +312,7 @@ smtpd_milters = inet:localhost:12301
 non_smtpd_milters = inet:localhost:12301
 
 # Login without Username and Password
-policy-spf_time_limit = 3600
+policy-spf_time_limit = 30
 smtpd_recipient_restrictions =
   permit_mynetworks,
   check_recipient_access hash:/etc/postfix/access.recipients,
@@ -341,9 +341,6 @@ maximal_queue_lifetime = 1d
 smtp_destination_rate_delay = 2s
 
 # Protocolos seguros
-smtpd_tls_protocols =!SSLv2,!SSLv3,!TLSv1,!TLSv1.1, TLSv1.2
-smtpd_tls_ciphers = medium
- = 10485760
 default_destination_concurrency_limit = 20
 maximal_queue_lifetime = 1d
 
