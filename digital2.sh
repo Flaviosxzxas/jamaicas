@@ -670,7 +670,12 @@ echo "================================= Todos os comandos foram executados com s
 
 echo "======================================================= FIM =========================================================="
 
-# Reiniciar servidor
-echo "Reiniciando o servidor em 5 segundos..."
-sleep 5
-sudo reboot
+echo "================================================= Reiniciar servidor ================================================="
+# Verificar se o reboot é necessário
+if [ -f /var/run/reboot-required ]; then
+  echo "Reiniciando o servidor em 5 segundos devido a atualizações críticas..."
+  sleep 5
+  sudo reboot
+else
+  echo "Reboot não necessário. Finalizando o script."
+fi
