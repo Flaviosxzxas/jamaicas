@@ -229,7 +229,7 @@ After=network.target
 ExecStart=/usr/bin/python3 /usr/bin/policyd-spf
 Type=simple
 Restart=always
-RestartSec=10
+RestartSec=5
 User=root
 Group=root
 StandardOutput=syslog
@@ -393,7 +393,7 @@ Mail_From_reject = False
 PermError_reject = False
 TempError_Defer = True
 skip_addresses = 127.0.0.0/8,::ffff:127.0.0.0/104,::1
-debugLevel = 5
+debugLevel = 10
 EOF
 
 
