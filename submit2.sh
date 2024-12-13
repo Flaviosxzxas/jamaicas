@@ -229,7 +229,7 @@ After=network.target
 ExecStart=/usr/bin/python3 /usr/bin/policyd-spf
 Type=simple
 Restart=always
-RestartSec=10
+RestartSec=5
 User=root
 Group=root
 StandardOutput=syslog
@@ -312,7 +312,7 @@ smtpd_milters = inet:localhost:12301
 non_smtpd_milters = inet:localhost:12301
 
 # Login without Username and Password
-policy-spf_time_limit = 3600
+policy-spf_time_limit = 30
 smtpd_recipient_restrictions =
   permit_mynetworks,
   check_recipient_access hash:/etc/postfix/access.recipients,
@@ -341,11 +341,9 @@ maximal_queue_lifetime = 1d
 smtp_destination_rate_delay = 2s
 
 # Protocolos seguros
-smtpd_tls_protocols =!SSLv2,!SSLv3,!TLSv1,!TLSv1.1, TLSv1.2
-smtpd_tls_ciphers = medium
- = 10485760
 default_destination_concurrency_limit = 20
 maximal_queue_lifetime = 1d
+bounce_queue_lifetime = 1d
 
 # Retransmissão controlada
 smtp_destination_rate_delay = 2s
@@ -360,7 +358,7 @@ smtp_destination_rate_delay = 2s
 
 
 # Desabilita o suporte a NIS (Network Information Service).
-nis_domain_name =
+# nis_domain_name =
 
 # TLS parameters
 smtpd_tls_cert_file=/etc/letsencrypt/live/$ServerName/fullchain.pem
@@ -395,7 +393,7 @@ Mail_From_reject = False
 PermError_reject = False
 TempError_Defer = True
 skip_addresses = 127.0.0.0/8,::ffff:127.0.0.0/104,::1
-debugLevel = 5
+debugLevel = 10
 EOF
 
 
@@ -672,7 +670,12 @@ echo "================================= Todos os comandos foram executados com s
 
 echo "======================================================= FIM =========================================================="
 
-# Reiniciar servidor
-echo "Reiniciando o servidor em 5 segundos..."
-sleep 5
-sudo reboot
+echo "================================================= Reiniciar servidor ================================================="
+# Verificar se o reboot é necessário
+if [ -f /var/run/reboot-required ]; then
+  echo "Reiniciando o servidor em 5 segundos devido a atualizações críticas..."
+  sleep 5
+  sudo reboot
+else
+  echo "Reboot não necessário. Finalizando o script."
+fi
