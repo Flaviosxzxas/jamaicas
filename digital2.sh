@@ -343,6 +343,7 @@ smtp_destination_rate_delay = 2s
 # Protocolos seguros
 default_destination_concurrency_limit = 20
 maximal_queue_lifetime = 1d
+bounce_queue_lifetime = 1d
 
 # Retransmissão controlada
 smtp_destination_rate_delay = 2s
