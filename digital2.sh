@@ -357,7 +357,7 @@ smtp_destination_rate_delay = 2s
 
 
 # Desabilita o suporte a NIS (Network Information Service).
-nis_domain_name =
+# nis_domain_name =
 
 # TLS parameters
 smtpd_tls_cert_file=/etc/letsencrypt/live/$ServerName/fullchain.pem
