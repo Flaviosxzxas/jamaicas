@@ -367,6 +367,42 @@ smtp_destination_rate_delay = 2s
 # Desabilita o suporte a NIS (Network Information Service).
 # nis_domain_name =
 
+# Habilita a autenticação SASL para enviar e-mails. Necessário para autenticação segura.
+smtpd_sasl_auth_enable = yes
+
+# Define o método de autenticação SASL (aqui usamos Dovecot).
+smtpd_sasl_type = dovecot
+
+# Especifica o caminho para o serviço de autenticação do Dovecot.
+smtpd_sasl_path = private/auth
+
+# Define opções de segurança para autenticação SASL:
+# - noanonymous: Não permite autenticação anônima.
+# - noplaintext: Exige que as credenciais sejam transmitidas de forma segura.
+smtpd_sasl_security_options = noanonymous, noplaintext
+
+# Adiciona mais restrições de segurança no SASL quando TLS é usado.
+smtpd_sasl_tls_security_options = noanonymous
+
+# Força o uso de TLS para autenticação. Garantia de que os dados de login estão criptografados.
+smtpd_tls_auth_only = yes
+
+# Restrições para remetentes:
+# - permite remetentes autenticados ou da rede confiável.
+# - rejeita remetentes com domínio ou hostname inválido.
+smtpd_sender_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_sender_login_mismatch, reject_unknown_reverse_client_hostname, reject_unknown_sender_domain
+
+# Restrições para destinatários:
+# - permite destinatários autenticados ou da rede confiável.
+# - rejeita destinatários com domínio inválido ou sem autorização de envio.
+smtpd_recipient_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination, reject_unknown_recipient_domain
+
+# Restrições para o comando HELO/EHLO:
+# - valida o hostname enviado no comando.
+# - rejeita conexões de servidores com hostname inválido, não qualificado (FQDN) ou desconhecido.
+smtpd_helo_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_invalid_helo_hostname, reject_non_fqdn_helo_hostname, reject_unknown_helo_hostname
+
+
 # TLS parameters
 smtpd_tls_cert_file=/etc/letsencrypt/live/$ServerName/fullchain.pem
 smtpd_tls_key_file=/etc/letsencrypt/live/$ServerName/privkey.pem
