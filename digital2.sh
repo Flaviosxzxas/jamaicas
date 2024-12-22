@@ -206,13 +206,17 @@ fi
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postfix postfix-policyd-spf-python opendmarc pflogsumm
 wait # adiciona essa linha para esperar que o comando seja concluído
 
-echo "Adicionando configuração para policyd-spf no master.cf..."
-
-sudo bash -c 'cat >> /etc/postfix/master.cf <<EOF
+# Atualizar o arquivo master.cf para configurar o policyd-spf
+if ! grep -q "policy-spf" /etc/postfix/master.cf; then
+    echo "Adicionando configuração para policyd-spf no master.cf..."
+    sudo bash -c 'cat >> /etc/postfix/master.cf <<EOF
 #SPF 
 policy-spf unix - n n - - spawn
   user=nobody argv=/usr/bin/python3 /usr/bin/policyd-spf
 EOF'
+else
+    echo "Configuração para policyd-spf já existe no master.cf, pulando esta etapa."
+fi
 
 # Configurações básicas do Postfix
 debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
@@ -221,33 +225,6 @@ debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", 
 
 # Configura o serviço postfix-policyd-spf-python com a porta encontrada
 echo "Configurando postfix-policyd-spf-python"
-
-sudo bash -c 'cat > /etc/systemd/system/postfix-policyd-spf-python.service <<EOF
-[Unit]
-Description=Postfix Policyd SPF Python
-After=network.target
-
-[Service]
-ExecStart=/usr/bin/python3 /usr/bin/policyd-spf
-Type=simple
-Restart=always
-RestartSec=5
-User=root
-Group=root
-StandardOutput=syslog
-StandardError=syslog
-SyslogIdentifier=postfix-policyd-spf-python
-
-[Install]
-WantedBy=multi-user.target
-EOF'
-
-# Remover o serviço postfix-policyd-spf-python (caso necessário)
-echo "Removendo o serviço postfix-policyd-spf-python para evitar reinicializações desnecessárias..."
-sudo systemctl stop postfix-policyd-spf-python
-sudo systemctl disable postfix-policyd-spf-python
-sudo rm /etc/systemd/system/postfix-policyd-spf-python.service
-sudo systemctl daemon-reload
 
 # Atualiza o arquivo access.recipients
 echo -e "$ServerName OK" | sudo tee /etc/postfix/access.recipients > /dev/null
@@ -584,9 +561,6 @@ wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Consolidar reinicializações ao final do script
 echo "Recarregando e reiniciando os serviços..."
-sudo systemctl daemon-reload
-sudo systemctl enable postfix-policyd-spf-python
-sudo systemctl restart postfix-policyd-spf-python
 sudo systemctl restart postfix
 
 echo "==================================================== OpenDMARC ===================================================="
