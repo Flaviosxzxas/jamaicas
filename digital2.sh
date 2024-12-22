@@ -320,13 +320,13 @@ non_smtpd_milters = inet:localhost:12301
 
 # Login without Username and Password
 policy-spf_time_limit = 30
-smtpd_recipient_restrictions =
+smtpd_recipient_restrictions = 
   permit_mynetworks,
   check_recipient_access hash:/etc/postfix/access.recipients,
   permit_sasl_authenticated,
   reject_unauth_destination,
-  check_policy_service unix:policy-spf
-
+  check_policy_service unix:policy-spf,
+  reject_unknown_recipient_domain
 
 # Limites de conexão
 smtpd_client_connection_rate_limit = 20
@@ -391,11 +391,6 @@ smtpd_tls_auth_only = yes
 # - permite remetentes autenticados ou da rede confiável.
 # - rejeita remetentes com domínio ou hostname inválido.
 smtpd_sender_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_sender_login_mismatch, reject_unknown_reverse_client_hostname, reject_unknown_sender_domain
-
-# Restrições para destinatários:
-# - permite destinatários autenticados ou da rede confiável.
-# - rejeita destinatários com domínio inválido ou sem autorização de envio.
-smtpd_recipient_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination, reject_unknown_recipient_domain
 
 # Restrições para o comando HELO/EHLO:
 # - valida o hostname enviado no comando.
