@@ -306,6 +306,7 @@ smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
 biff = no
 readme_directory = no
 compatibility_level = 3
+nis_domain_name =
 
 # Header checks
 header_checks = regexp:/etc/postfix/header_checks
@@ -363,10 +364,6 @@ smtp_destination_rate_delay = 2s
 #   Define o número máximo de erros temporários (4xx) permitidos antes de encerrar a conexão.
 # smtpd_hard_error_limit = 20
 #   Define o número máximo de erros definitivos (5xx) permitidos antes de encerrar a conexão.
-
-
-# Desabilita o suporte a NIS (Network Information Service).
-# nis_domain_name =
 
 # Habilita a autenticação SASL para enviar e-mails. Necessário para autenticação segura.
 smtpd_sasl_auth_enable = yes
