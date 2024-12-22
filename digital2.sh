@@ -206,12 +206,13 @@ fi
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postfix postfix-policyd-spf-python opendmarc pflogsumm
 wait # adiciona essa linha para esperar que o comando seja concluído
 
-# Adicionar configuração para policyd-spf no master.cf
-sudo tee -a /etc/postfix/master.cf > /dev/null <<EOF
+echo "Adicionando configuração para policyd-spf no master.cf..."
+
+sudo bash -c 'cat >> /etc/postfix/master.cf <<EOF
 #SPF 
 policy-spf unix - n n - - spawn
   user=nobody argv=/usr/bin/python3 /usr/bin/policyd-spf
-EOF
+EOF'
 
 # Configurações básicas do Postfix
 debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
