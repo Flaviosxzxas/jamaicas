@@ -282,7 +282,7 @@ smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
 biff = no
 readme_directory = no
 compatibility_level = 3.6
-nis_domain_name =
+#nis_domain_name =
 
 # Header checks
 header_checks = regexp:/etc/postfix/header_checks
