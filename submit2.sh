@@ -314,20 +314,7 @@ smtpd_client_connection_count_limit = 10
 anvil_rate_time_unit = 60s
 
 # Gerenciamento de filas
-# Limites de conexão
-smtpd_client_connection_rate_limit = 20
-smtpd_client_connection_count_limit = 10
-anvil_rate_time_unit = 60s
-
-# Gerenciamento de filas
 message_size_limit = 10485760
-default_destination_concurrency_limit = 20
-maximal_queue_lifetime = 1d
-
-# Retransmissão controlada
-smtp_destination_rate_delay = 2s
-
-# Protocolos seguros
 default_destination_concurrency_limit = 20
 maximal_queue_lifetime = 1d
 bounce_queue_lifetime = 1d
