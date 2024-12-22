@@ -31,8 +31,6 @@ echo "==================================================================== Hostn
 
 # Permitir tráfego na porta 25
 sudo ufw allow 25/tcp
-sudo ufw allow 49151/tcp
-
 
 # Instalar pacotes básicos
 sudo -i apt-get install wget curl jq python3-certbot-dns-cloudflare -y
