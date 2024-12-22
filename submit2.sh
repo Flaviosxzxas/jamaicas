@@ -399,8 +399,84 @@ EOF
 
 
 # Adiciona regras de controle de limites
+echo "#######################################################
+# Regras de Controle de Limites por Servidor
+#######################################################
 
+# KingHost
+id=limit-kinghost
+pattern=recipient mx=.*kinghost.net
+action=rate(global/300/3600) defer_if_permit "Limite de 300 e-mails por hora atingido para KingHost."
 
+# UOL Host
+id=limit-uolhost
+pattern=recipient mx=.*uhserver
+action=rate(global/300/3600) defer_if_permit "Limite de 300 e-mails por hora atingido para UOL Host."
+
+# LocaWeb
+id=limit-locaweb
+pattern=recipient mx=.*locaweb.com.br
+action=rate(global/500/3600) defer_if_permit "Limite de 500 e-mails por hora atingido para LocaWeb."
+
+# Mandic
+id=limit-mandic
+pattern=recipient mx=.*mandic.com.br
+action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Mandic."
+
+# Titan
+id=limit-titan
+pattern=recipient mx=.*titan.email
+action=rate(global/500/3600) defer_if_permit "Limite de 500 e-mails por hora atingido para Titan."
+
+# Google
+id=limit-google
+pattern=recipient mx=.*google
+action=rate(global/2000/3600) defer_if_permit "Limite de 2000 e-mails por hora atingido para Google."
+
+# Outlook
+id=limit-outlook
+pattern=recipient mx=.*outlook
+action=rate(global/1500/3600) defer_if_permit "Limite de 1500 e-mails por hora atingido para Outlook."
+
+# Secureserver (GoDaddy)
+id=limit-secureserver
+pattern=recipient mx=.*secureserver.net
+action=rate(global/300/3600) defer_if_permit "Limite de 300 e-mails por hora atingido para GoDaddy."
+
+# Zimbra
+id=limit-zimbra
+pattern=recipient mx=.*zimbra
+action=rate(global/400/3600) defer_if_permit "Limite de 400 e-mails por hora atingido para Zimbra."
+
+# Provedores na Argentina
+# Fibertel
+id=limit-fibertel
+pattern=recipient mx=.*fibertel.com.ar
+action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Fibertel."
+
+# Speedy
+id=limit-speedy
+pattern=recipient mx=.*speedy.com.ar
+action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Speedy."
+
+# Provedores no México
+# Telmex
+id=limit-telmex
+pattern=recipient mx=.*prodigy.net.mx
+action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Telmex."
+
+# Axtel
+id=limit-axtel
+pattern=recipient mx=.*axtel.net
+action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Axtel."
+
+# Outros (Sem Limite)
+id=no-limit
+pattern=recipient
+action=permit
+" | sudo tee /etc/postfix-policyd.conf > /dev/null
+
+echo "==================================================== POSTFIX ===================================================="
 
 echo "==================================================== OpenDMARC ===================================================="
 
