@@ -219,8 +219,9 @@ debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Si
 debconf-set-selections <<< "postfix postfix/destinations string '"$ServerName", localhost'"
 
 # Configura o serviço postfix-policyd-spf-python com a porta encontrada
-echo "Configurando postfix-policyd-spf-python com a porta 49151..."
-sudo tee /etc/systemd/system/postfix-policyd-spf-python.service > /dev/null <<EOF
+echo "Configurando postfix-policyd-spf-python"
+
+sudo bash -c 'cat > /etc/systemd/system/postfix-policyd-spf-python.service <<EOF
 [Unit]
 Description=Postfix Policyd SPF Python
 After=network.target
@@ -238,7 +239,7 @@ SyslogIdentifier=postfix-policyd-spf-python
 
 [Install]
 WantedBy=multi-user.target
-EOF
+EOF'
 
 # Remover o serviço postfix-policyd-spf-python (caso necessário)
 echo "Removendo o serviço postfix-policyd-spf-python para evitar reinicializações desnecessárias..."
