@@ -388,7 +388,7 @@ smtpd_tls_auth_only = yes
 # Restrições para remetentes:
 # - permite remetentes autenticados ou da rede confiável.
 # - rejeita remetentes com domínio ou hostname inválido.
-smtpd_sender_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_sender_login_mismatch, reject_unknown_reverse_client_hostname, reject_unknown_sender_domain
+#  smtpd_sender_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_sender_login_mismatch, reject_unknown_reverse_client_hostname, reject_unknown_sender_domain
 
 # Restrições para o comando HELO/EHLO:
 # - valida o hostname enviado no comando.
