@@ -36,10 +36,6 @@ sudo ufw allow 587/tcp
 # Instalar pacotes básicos
 sudo apt-get install wget curl jq python3-certbot-dns-cloudflare openssl -y
 
-# Instalar pacotes básicos
-sudo apt-get install wget curl jq python3-certbot-dns-cloudflare openssl -y
-
-
 # Configurar NodeSource e instalar Node.js
 echo "Configurando Node.js..."
 curl -fsSL https://deb.nodesource.com/setup_21.x | sudo bash - \
