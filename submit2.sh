@@ -270,6 +270,44 @@ main() {
     # Exiba mensagem de erro específica, se aplicável
     echo "Verificando erros específicos..."
 
+# Instalar pacotes necessários para Dovecot
+echo "Instalando pacotes do Dovecot..."
+sudo apt-get install dovecot-core dovecot-imapd dovecot-pop3d dovecot-sasl -y
+
+# Iniciar e habilitar o serviço Dovecot
+echo "Iniciando e habilitando o serviço Dovecot..."
+sudo systemctl start dovecot
+sudo systemctl enable dovecot
+
+# Configura o arquivo 10-auth.conf para habilitar SASL no Dovecot
+echo "Configurando o arquivo 10-auth.conf para habilitar SASL..."
+
+sudo tee /etc/dovecot/conf.d/10-auth.conf > /dev/null <<EOF
+# /etc/dovecot/conf.d/10-auth.conf
+disable_plaintext_auth = yes
+auth_mechanisms = plain login
+
+!include auth-system.conf.ext
+
+service auth {
+  unix_listener /var/spool/postfix/private/auth {
+    mode = 0660
+    user = postfix
+    group = postfix
+  }
+}
+EOF
+
+# Corrigir permissões no arquivo de autenticação
+echo "Ajustando permissões para o arquivo de autenticação..."
+sudo chown postfix:postfix /var/spool/postfix/private/auth
+sudo chmod 660 /var/spool/postfix/private/auth
+
+# Reiniciar o serviço Dovecot para aplicar as configurações
+echo "Reiniciando o serviço Dovecot..."
+sudo systemctl restart dovecot
+
+
     # Mensagem informativa
     echo "==================================================== POSTFIX ===================================================="
 }
