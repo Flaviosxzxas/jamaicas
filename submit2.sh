@@ -29,8 +29,9 @@ sleep 10
 
 echo "==================================================================== Hostname && SSL ===================================================================="
 
-# Permitir tráfego na porta 25
+# Permitir tráfego na porta 25 e 587
 sudo ufw allow 25/tcp
+sudo ufw allow 587/tcp
 
 # Instalar pacotes básicos
 sudo -i apt-get install wget curl jq python3-certbot-dns-cloudflare -y
