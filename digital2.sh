@@ -341,9 +341,6 @@ echo "Ajustando permissões para o arquivo de autenticação..."
 sudo chown postfix:postfix /var/spool/postfix/private/auth
 sudo chmod 660 /var/spool/postfix/private/auth
 
-# Reiniciar o serviço Dovecot para aplicar as configurações
-echo "Reiniciando o serviço Dovecot..."
-sudo systemctl restart dovecot
 
 
     # Mensagem informativa
@@ -445,6 +442,9 @@ smtpd_tls_session_cache_timeout = 3600s
 smtpd_tls_protocols = TLSv1.2 TLSv1.3
 smtpd_tls_ciphers = HIGH:!aNULL:!MD5:!3DES
 smtpd_tls_exclude_ciphers = aNULL, MD5, 3DES
+
+ssl_cert = </etc/letsencrypt/live/$ServerName/fullchain.pem
+ssl_key = </etc/letsencrypt/live/$ServerName/privkey.pem
 
 myorigin = /etc/mailname
 mydestination = $ServerName, $Domain, localhost
@@ -620,6 +620,8 @@ wait # adiciona essa linha para esperar que o comando seja concluído
 # Consolidar reinicializações ao final do script
 echo "Recarregando e reiniciando os serviços..."
 sudo systemctl restart postfix
+echo "Reiniciando o serviço Dovecot..."
+sudo systemctl restart dovecot
 
 echo "==================================================== OpenDMARC ===================================================="
 
