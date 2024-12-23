@@ -179,15 +179,11 @@ sleep 3
 
 # Atualiza a lista de pacotes
 sudo apt-get update
-wait # adiciona essa linha para esperar que o comando seja concluído
+sudo apt upgrade -y
 
 # Desativa a configuração automática do banco de dados do opendmarc
 echo "dbconfig-common dbconfig-common/dbconfig-install boolean false" | sudo debconf-set-selections
 echo "opendmarc opendmarc/dbconfig-install boolean false" | sudo debconf-set-selections
-
-# Atualizando pacotes
-sudo apt update
-sudo apt upgrade -y
 
 # Instalar dependências para policyd-spf
 echo "Instalando python3-pip e dnspython..."
