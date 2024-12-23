@@ -279,9 +279,25 @@ echo "Iniciando e habilitando o serviço Dovecot..."
 sudo systemctl start dovecot
 sudo systemctl enable dovecot
 
+# Criar diretório necessário para a autenticação do Postfix
+echo "Criando diretório /var/spool/postfix/private e ajustando permissões..."
+sudo mkdir -p /var/spool/postfix/private
+sudo chown postfix:postfix /var/spool/postfix/private
+sudo chmod 700 /var/spool/postfix/private
+
+# Verificar se o arquivo de autenticação existe e criar manualmente se necessário
+echo "Verificando se o arquivo de autenticação existe..."
+if [ ! -f /var/spool/postfix/private/auth ]; then
+  echo "Criando arquivo de autenticação..."
+  sudo touch /var/spool/postfix/private/auth
+  sudo chown postfix:postfix /var/spool/postfix/private/auth
+  sudo chmod 660 /var/spool/postfix/private/auth
+else
+  echo "Arquivo de autenticação já existe."
+fi
+
 # Configura o arquivo 10-auth.conf para habilitar SASL no Dovecot
 echo "Configurando o arquivo 10-auth.conf para habilitar SASL..."
-
 sudo tee /etc/dovecot/conf.d/10-auth.conf > /dev/null <<EOF
 # /etc/dovecot/conf.d/10-auth.conf
 disable_plaintext_auth = yes
