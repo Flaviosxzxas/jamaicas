@@ -493,9 +493,9 @@ smtpd_tls_exclude_ciphers = aNULL, MD5, 3DES
 smtp_tls_security_level = encrypt
 smtp_tls_loglevel = 2
 smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
-smtp_tls_protocols = TLSv1.2 TLSv1.3
+smtp_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
 smtp_tls_ciphers = high
-smtp_tls_exclude_ciphers = aNULL, MD5, 3DES
+smtp_tls_exclude_ciphers = aNULL, MD5, 3DES, RC4, eNULL
 
 # SASL Authentication
 smtpd_sasl_auth_enable = yes
