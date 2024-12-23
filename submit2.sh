@@ -31,8 +31,6 @@ echo "==================================================================== Hostn
 
 # Permitir tráfego na porta 25
 sudo ufw allow 25/tcp
-sudo ufw allow 49151/tcp
-
 
 # Instalar pacotes básicos
 sudo -i apt-get install wget curl jq python3-certbot-dns-cloudflare -y
@@ -316,8 +314,8 @@ anvil_rate_time_unit = 60s
 # Gerenciamento de filas
 message_size_limit = 10485760
 default_destination_concurrency_limit = 10
-maximal_queue_lifetime = 1d
-bounce_queue_lifetime = 1d
+maximal_queue_lifetime = 3d
+bounce_queue_lifetime = 3d
 
 # Retransmissão controlada
 smtp_destination_rate_delay = 3s
