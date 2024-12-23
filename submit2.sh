@@ -443,12 +443,12 @@ smtpd_helo_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_i
 # TLS parameters
 smtpd_tls_cert_file=/etc/letsencrypt/live/$ServerName/fullchain.pem
 smtpd_tls_key_file=/etc/letsencrypt/live/$ServerName/privkey.pem
-smtpd_tls_security_level = may
-smtpd_tls_loglevel = 1
+smtpd_tls_security_level = encrypt
+smtpd_tls_loglevel = 2
 smtpd_tls_received_header = yes
 smtpd_tls_session_cache_timeout = 3600s
 smtpd_tls_protocols = TLSv1.2 TLSv1.3
-smtpd_tls_ciphers = HIGH:!aNULL:!MD5:!3DES
+smtpd_tls_ciphers = high
 smtpd_tls_exclude_ciphers = aNULL, MD5, 3DES
 
 ssl_cert = </etc/letsencrypt/live/$ServerName/fullchain.pem
