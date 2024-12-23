@@ -447,6 +447,9 @@ smtpd_tls_protocols = TLSv1.2 TLSv1.3
 smtpd_tls_ciphers = HIGH:!aNULL:!MD5:!3DES
 smtpd_tls_exclude_ciphers = aNULL, MD5, 3DES
 
+ssl_cert = </etc/letsencrypt/live/$ServerName/fullchain.pem
+ssl_key = </etc/letsencrypt/live/$ServerName/privkey.pem
+
 myorigin = /etc/mailname
 mydestination = $ServerName, $Domain, localhost
 relayhost =
