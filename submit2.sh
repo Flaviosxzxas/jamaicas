@@ -272,7 +272,7 @@ main() {
 
 # Instalar pacotes necessários para Dovecot
 echo "Instalando pacotes do Dovecot..."
-sudo apt-get install dovecot-core dovecot-imapd dovecot-pop3d dovecot-sasl -y
+sudo apt-get install dovecot-core dovecot-imapd dovecot-pop3d -y
 
 # Iniciar e habilitar o serviço Dovecot
 echo "Iniciando e habilitando o serviço Dovecot..."
