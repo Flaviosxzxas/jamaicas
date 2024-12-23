@@ -423,9 +423,6 @@ smtpd_tls_session_cache_timeout = 3600s
 smtpd_tls_protocols = TLSv1.2 TLSv1.3
 smtpd_tls_ciphers = HIGH:!aNULL:!MD5:!3DES
 smtpd_tls_exclude_ciphers = aNULL, MD5, 3DES
-smtp_tls_CApath = /etc/ssl/certs
-smtp_tls_security_level = may
-smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
 
 myorigin = /etc/mailname
 mydestination = $ServerName, $Domain, localhost
