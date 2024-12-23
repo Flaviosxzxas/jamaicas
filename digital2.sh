@@ -349,7 +349,44 @@ echo "Ajustando permissões para o arquivo de autenticação..."
 sudo chown postfix:postfix /var/spool/postfix/private/auth
 sudo chmod 660 /var/spool/postfix/private/auth
 
+# Configura o arquivo 10-ssl.conf para usar certificados Let's Encrypt
+echo "Configurando SSL/TLS no Dovecot..."
+sudo tee /etc/dovecot/conf.d/10-ssl.conf > /dev/null <<EOF
+##
+## SSL settings
+##
 
+# Habilita suporte SSL/TLS
+ssl = yes
+
+# Caminhos para o certificado e a chave privada emitidos pelo Let's Encrypt
+ssl_cert = </etc/letsencrypt/live/violetgreykb.vanthewebpro.com/fullchain.pem
+ssl_key = </etc/letsencrypt/live/violetgreykb.vanthewebpro.com/privkey.pem
+
+# Define o protocolo mínimo como TLSv1.2 para evitar o uso de protocolos inseguros
+ssl_min_protocol = TLSv1.2
+
+# Define as cifras seguras a serem usadas, excluindo cifras obsoletas
+ssl_cipher_list = HIGH:!aNULL:!MD5:!3DES
+
+# Prefere as cifras do servidor em vez das do cliente
+ssl_prefer_server_ciphers = yes
+
+# Caminho para os parâmetros DH
+ssl_dh = </usr/share/dovecot/dh.pem
+
+# Diretório de CAs confiáveis para validação de certificados de clientes, se necessário
+ssl_client_ca_dir = /etc/ssl/certs
+
+# Evita o uso de tickets de sessão SSL para maior segurança
+ssl_options = no_ticket
+EOF
+
+# Gerar DH params se necessário
+echo "Verificando e gerando DH params..."
+if [ ! -f /usr/share/dovecot/dh.pem ]; then
+  openssl dhparam -out /usr/share/dovecot/dh.pem 4096
+fi
 
     # Mensagem informativa
     echo "==================================================== POSTFIX ===================================================="
