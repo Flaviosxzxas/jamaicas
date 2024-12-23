@@ -315,12 +315,12 @@ anvil_rate_time_unit = 60s
 
 # Gerenciamento de filas
 message_size_limit = 10485760
-default_destination_concurrency_limit = 20
+default_destination_concurrency_limit = 10
 maximal_queue_lifetime = 1d
 bounce_queue_lifetime = 1d
 
 # Retransmissão controlada
-smtp_destination_rate_delay = 2s
+smtp_destination_rate_delay = 3s
 
 # Configurações para lidar com erros temporários e definitivos no Postfix
 # smtpd_error_sleep_time = 5
