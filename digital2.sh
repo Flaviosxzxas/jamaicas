@@ -220,7 +220,7 @@ if ! grep -q "submission" /etc/postfix/master.cf; then
 # Porta 587 para envio de e-mails com STARTTLS
 submission inet n - n - - smtpd
   -o smtpd_tls_security_level=encrypt
-  -o smtpd_tls_protocols=TLSv1.2,TLSv1.3
+  -o smtpd_tls_protocols=!SSLv2,!SSLv3,!TLSv1,!TLSv1.1
   -o smtpd_tls_ciphers=HIGH:!aNULL:!MD5:!3DES
   -o smtpd_tls_exclude_ciphers=aNULL,MD5,3DES
   -o smtpd_tls_loglevel=1
