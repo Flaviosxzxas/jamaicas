@@ -307,18 +307,18 @@ smtpd_recipient_restrictions =
   reject_unknown_recipient_domain
 
 # Limites de conexão
-smtpd_client_connection_rate_limit = 20
-smtpd_client_connection_count_limit = 10
+smtpd_client_connection_rate_limit = 100
+smtpd_client_connection_count_limit = 50
 anvil_rate_time_unit = 60s
 
 # Gerenciamento de filas
 message_size_limit = 10485760
-default_destination_concurrency_limit = 20
-maximal_queue_lifetime = 1d
-bounce_queue_lifetime = 1d
+default_destination_concurrency_limit = 50
+maximal_queue_lifetime = 3d
+bounce_queue_lifetime = 3d
 
 # Retransmissão controlada
-smtp_destination_rate_delay = 2s
+smtp_destination_rate_delay = 1s
 
 # Configurações para lidar com erros temporários e definitivos no Postfix
 # smtpd_error_sleep_time = 5
