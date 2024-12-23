@@ -34,7 +34,7 @@ sudo ufw allow 25/tcp
 sudo ufw allow 587/tcp
 
 # Instalar pacotes básicos
-sudo -i apt-get install wget curl jq python3-certbot-dns-cloudflare -y
+sudo apt-get install wget curl jq python3-certbot-dns-cloudflare openssl -y
 
 # Configurar NodeSource e instalar Node.js
 echo "Configurando Node.js..."
