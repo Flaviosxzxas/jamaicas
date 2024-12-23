@@ -464,7 +464,7 @@ smtp_tls_exclude_ciphers = aNULL, MD5, 3DES
 smtpd_sasl_auth_enable = yes
 smtpd_sasl_type = dovecot
 smtpd_sasl_path = private/auth
-smtpd_sasl_security_options = noanonymous
+smtpd_sasl_security_options = noanonymous, noplaintext
 smtpd_sasl_tls_security_options = noanonymous
 smtpd_tls_auth_only = yes
 
