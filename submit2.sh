@@ -451,6 +451,24 @@ smtpd_tls_protocols = TLSv1.2 TLSv1.3
 smtpd_tls_ciphers = high
 smtpd_tls_exclude_ciphers = aNULL, MD5, 3DES
 
+# Forçar TLS para conexões de saída
+smtp_tls_security_level = encrypt
+smtp_tls_loglevel = 2
+smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
+smtp_tls_protocols = TLSv1.2 TLSv1.3
+smtp_tls_ciphers = high
+smtp_tls_exclude_ciphers = aNULL, MD5, 3DES
+
+# SASL Authentication
+smtpd_sasl_auth_enable = yes
+smtpd_sasl_type = dovecot
+smtpd_sasl_path = private/auth
+smtpd_sasl_security_options = noanonymous
+smtpd_sasl_tls_security_options = noanonymous
+smtpd_tls_auth_only = yes
+
+# Parâmetros de SSL para o Dovecot
+ssl = yes
 ssl_cert = </etc/letsencrypt/live/$ServerName/fullchain.pem
 ssl_key = </etc/letsencrypt/live/$ServerName/privkey.pem
 
