@@ -209,7 +209,7 @@ wait # adiciona essa linha para esperar que o comando seja concluído
 if ! grep -q "policy-spf" /etc/postfix/master.cf; then
     echo "Adicionando configuração para policyd-spf no master.cf..."
     sudo bash -c 'cat >> /etc/postfix/master.cf <<EOF
-# SPF
+# SPF 
 policy-spf unix - n n - - spawn
   user=nobody argv=/usr/bin/python3 /usr/bin/policyd-spf
 EOF'
@@ -237,6 +237,17 @@ EOF'
 else
     echo "Configuração para a porta 587 já existe no master.cf, pulando esta etapa."
 fi
+
+# Função para configurar aliases
+echo "Removendo comentário e atualizando o arquivo de aliases"
+# Remover o comentário caso exista
+sudo sed -i '/^# See man 5 aliases for format/d' /etc/aliases
+
+# Adicionar o alias
+echo "contato@$ServerName: user1" | sudo tee -a /etc/aliases
+
+# Atualizar aliases
+sudo newaliases
 
 
 # Configurações básicas do Postfix
