@@ -341,11 +341,6 @@ echo "Ajustando permissões para o arquivo de autenticação..."
 sudo chown postfix:postfix /var/spool/postfix/private/auth
 sudo chmod 660 /var/spool/postfix/private/auth
 
-# Reiniciar o serviço Dovecot para aplicar as configurações
-echo "Reiniciando o serviço Dovecot..."
-sudo systemctl restart dovecot
-
-
 
     # Mensagem informativa
     echo "==================================================== POSTFIX ===================================================="
@@ -624,6 +619,8 @@ wait # adiciona essa linha para esperar que o comando seja concluído
 # Consolidar reinicializações ao final do script
 echo "Recarregando e reiniciando os serviços..."
 sudo systemctl restart postfix
+echo "Reiniciando o serviço Dovecot..."
+sudo systemctl restart dovecot
 
 echo "==================================================== OpenDMARC ===================================================="
 
