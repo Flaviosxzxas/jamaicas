@@ -208,13 +208,35 @@ wait # adiciona essa linha para esperar que o comando seja concluído
 if ! grep -q "policy-spf" /etc/postfix/master.cf; then
     echo "Adicionando configuração para policyd-spf no master.cf..."
     sudo bash -c 'cat >> /etc/postfix/master.cf <<EOF
-#SPF 
+# SPF
 policy-spf unix - n n - - spawn
   user=nobody argv=/usr/bin/python3 /usr/bin/policyd-spf
 EOF'
 else
     echo "Configuração para policyd-spf já existe no master.cf, pulando esta etapa."
 fi
+
+# Verificar e adicionar a configuração da porta 587, se necessário
+if ! grep -q "submission" /etc/postfix/master.cf; then
+    echo "Adicionando configuração para a porta 587 no master.cf..."
+    sudo bash -c 'cat >> /etc/postfix/master.cf <<EOF
+# Porta 587 para envio de e-mails com STARTTLS
+submission inet n - n - - smtpd
+  -o smtpd_tls_security_level=encrypt
+  -o smtpd_tls_protocols=TLSv1.2,TLSv1.3
+  -o smtpd_tls_ciphers=HIGH:!aNULL:!MD5:!3DES
+  -o smtpd_tls_exclude_ciphers=aNULL,MD5,3DES
+  -o smtpd_tls_loglevel=1
+  -o smtpd_tls_received_header=yes
+  -o smtpd_tls_session_cache_timeout=3600s
+  -o smtpd_sasl_auth_enable=yes
+  -o smtpd_sender_restrictions=permit_sasl_authenticated,reject
+  -o smtpd_recipient_restrictions=permit_sasl_authenticated,permit_mynetworks,reject_unauth_destination
+EOF'
+else
+    echo "Configuração para a porta 587 já existe no master.cf, pulando esta etapa."
+fi
+
 
 # Configurações básicas do Postfix
 debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
