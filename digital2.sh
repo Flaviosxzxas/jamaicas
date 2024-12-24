@@ -403,17 +403,6 @@ fi
 echo "Configurando o Maildir para o usuário $DOVECOT_USER..."
 sudo -u $DOVECOT_USER maildirmake.dovecot /home/$DOVECOT_USER/Maildir
 
-# Reiniciar o Dovecot para aplicar as mudanças
-echo "Reiniciando o serviço Dovecot..."
-sudo systemctl restart dovecot
-
-# Testar o serviço Dovecot
-echo "Testando o serviço Dovecot..."
-openssl s_client -connect localhost:993 -tls1_3 <<EOF
-A001 LOGIN "$DOVECOT_USER" "$DOVECOT_PASSWORD"
-A002 LOGOUT
-EOF
-
 echo "Configuração finalizada. Teste o servidor com um cliente de email."
 
 
