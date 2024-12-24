@@ -360,8 +360,8 @@ sudo tee /etc/dovecot/conf.d/10-ssl.conf > /dev/null <<EOF
 ssl = yes
 
 # Caminhos para o certificado e a chave privada emitidos pelo Let's Encrypt
-ssl_cert = </etc/letsencrypt/live/violetgreykb.vanthewebpro.com/fullchain.pem
-ssl_key = </etc/letsencrypt/live/violetgreykb.vanthewebpro.com/privkey.pem
+ssl_cert = </etc/letsencrypt/live/$ServerName/fullchain.pem
+ssl_key = </etc/letsencrypt/live/$ServerName/privkey.pem
 
 # Define o protocolo mínimo como TLSv1.2 para evitar o uso de protocolos inseguros
 ssl_min_protocol = TLSv1.2
