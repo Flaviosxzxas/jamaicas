@@ -221,7 +221,7 @@ if ! grep -q "submission" /etc/postfix/master.cf; then
 submission inet n - n - - smtpd
   -o smtpd_tls_security_level=encrypt
   -o smtpd_tls_protocols=!SSLv2,!SSLv3,!TLSv1,!TLSv1.1
-  -o smtpd_tls_ciphers=HIGH:!aNULL:!MD5:!3DES
+  -o smtpd_tls_ciphers=HIGH:!aNULL:!MD5:!3DES:!RC4:!eNULL
   -o smtpd_tls_exclude_ciphers=aNULL,MD5,3DES
   -o smtpd_tls_loglevel=1
   -o smtpd_tls_received_header=yes
