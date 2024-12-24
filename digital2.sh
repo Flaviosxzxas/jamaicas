@@ -300,15 +300,9 @@ main() {
     # Exiba mensagem de erro específica, se aplicável
     echo "Verificando erros específicos..."
 
-#!/bin/bash
-
-# Variável para nome do usuário
-DOVECOT_USER="dovecotuser"
-DOVECOT_PASSWORD="senha123" # Substitua pela senha desejada
-
-# Instalar pacotes necessários para Dovecot
+# Instalar pacotes necessários para Dovecot (sem IMAP e POP3)
 echo "Instalando pacotes do Dovecot..."
-sudo apt-get install dovecot-core dovecot-imapd dovecot-pop3d -y
+sudo apt-get install dovecot-core -y
 
 # Iniciar e habilitar o serviço Dovecot
 echo "Iniciando e habilitando o serviço Dovecot..."
@@ -350,6 +344,11 @@ service auth {
 }
 EOF
 
+# Corrigir permissões no arquivo de autenticação
+echo "Ajustando permissões para o arquivo de autenticação..."
+sudo chown postfix:postfix /var/spool/postfix/private/auth
+sudo chmod 660 /var/spool/postfix/private/auth
+
 # Configura o arquivo 10-ssl.conf para usar certificados Let's Encrypt
 echo "Configurando SSL/TLS no Dovecot..."
 sudo tee /etc/dovecot/conf.d/10-ssl.conf > /dev/null <<EOF
@@ -368,7 +367,7 @@ ssl_key = </etc/letsencrypt/live/$ServerName/privkey.pem
 ssl_min_protocol = TLSv1.2
 
 # Define as cifras seguras a serem usadas, excluindo cifras obsoletas
-ssl_cipher_list = HIGH:!aNULL:!MD5:!RC4:!3DES
+ssl_cipher_list = HIGH:!aNULL:!MD5:!3DES
 
 # Prefere as cifras do servidor em vez das do cliente
 ssl_prefer_server_ciphers = yes
@@ -389,21 +388,17 @@ if [ ! -f /usr/share/dovecot/dh.pem ]; then
   openssl dhparam -out /usr/share/dovecot/dh.pem 4096
 fi
 
-# Criar um novo usuário para o Dovecot
-echo "Criando usuário para autenticação no Dovecot..."
-if id "$DOVECOT_USER" &>/dev/null; then
-  echo "Usuário $DOVECOT_USER já existe."
-else
-  sudo adduser --disabled-password --gecos "" $DOVECOT_USER
-  echo "$DOVECOT_USER:$DOVECOT_PASSWORD" | sudo chpasswd
-  echo "Usuário $DOVECOT_USER criado com sucesso!"
-fi
+# Configuração adicional no arquivo principal de configuração do Dovecot
+echo "Adicionando configuração SSL no arquivo principal de configuração do Dovecot..."
+sudo tee -a /etc/dovecot/dovecot.conf > /dev/null <<EOF
+# /etc/dovecot/dovecot.conf
 
-# Configurar o Maildir para o novo usuário
-echo "Configurando o Maildir para o usuário $DOVECOT_USER..."
-sudo -u $DOVECOT_USER maildirmake.dovecot /home/$DOVECOT_USER/Maildir
+# Habilitar SSL/TLS diretamente no arquivo principal de configuração
+ssl = yes
+ssl_cert = </etc/letsencrypt/live/$ServerName/fullchain.pem
+ssl_key = </etc/letsencrypt/live/$ServerName/privkey.pem
+EOF
 
-echo "Configuração finalizada. Teste o servidor com um cliente de email."
 
 
     # Mensagem informativa
