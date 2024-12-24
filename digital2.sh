@@ -371,7 +371,8 @@ ssl_protocols = TLSv1.2 TLSv1.3
 
 
 # Define as cifras seguras a serem usadas, excluindo cifras obsoletas
-ssl_cipher_list = EECDH+AESGCM:EDH+AESGCM:EECDH+CHACHA20:EDH+CHACHA20:!ADH:!AECDH:!RC4:!MD5
+#ssl_cipher_list = EECDH+AESGCM:EDH+AESGCM:EECDH+CHACHA20:EDH+CHACHA20:!ADH:!AECDH:!RC4:!MD5
+ssl_cipher_list = HIGH:!aNULL:!MD5:!RC4:!3DES
 
 # Prefere as cifras do servidor em vez das do cliente
 ssl_prefer_server_ciphers = yes
