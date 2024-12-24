@@ -529,11 +529,6 @@ smtpd_sasl_security_options = noanonymous, noplaintext
 smtpd_sasl_tls_security_options = noanonymous
 smtpd_tls_auth_only = yes
 
-# Parâmetros de SSL para o Dovecot
-ssl = yes
-ssl_cert = </etc/letsencrypt/live/$ServerName/fullchain.pem
-ssl_key = </etc/letsencrypt/live/$ServerName/privkey.pem
-
 myorigin = /etc/mailname
 mydestination = $ServerName, $Domain, localhost
 relayhost =
