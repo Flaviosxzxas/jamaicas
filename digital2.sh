@@ -366,8 +366,12 @@ ssl_key = </etc/letsencrypt/live/$ServerName/privkey.pem
 # Define o protocolo mínimo como TLSv1.2 para evitar o uso de protocolos inseguros
 ssl_min_protocol = TLSv1.2
 
+# Forçar o uso de TLS 1.2 ou superior
+ssl_protocols = TLSv1.2 TLSv1.3
+
+
 # Define as cifras seguras a serem usadas, excluindo cifras obsoletas
-ssl_cipher_list = HIGH:!aNULL:!MD5:!3DES
+ssl_cipher_list = EECDH+AESGCM:EDH+AESGCM:EECDH+CHACHA20:EDH+CHACHA20:!ADH:!AECDH:!RC4:!MD5
 
 # Prefere as cifras do servidor em vez das do cliente
 ssl_prefer_server_ciphers = yes
