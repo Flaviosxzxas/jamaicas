@@ -187,7 +187,7 @@ echo "opendmarc opendmarc/dbconfig-install boolean false" | sudo debconf-set-sel
 
 # Instalar dependências para policyd-spf
 echo "Instalando python3-pip e dnspython..."
-sudo apt install -y python3-pip
+sudo apt-get install -y python3-pip
 pip3 install dnspython
 
 if [ $? -eq 0 ]; then
