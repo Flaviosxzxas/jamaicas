@@ -179,7 +179,7 @@ sleep 3
 
 # Atualiza a lista de pacotes
 sudo apt-get update
-sudo apt upgrade -y
+sudo apt-get upgrade -y
 
 # Desativa a configuração automática do banco de dados do opendmarc
 echo "dbconfig-common dbconfig-common/dbconfig-install boolean false" | sudo debconf-set-selections
