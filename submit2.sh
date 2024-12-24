@@ -393,10 +393,8 @@ echo "Adicionando configuração SSL no arquivo principal de configuração do D
 sudo tee -a /etc/dovecot/dovecot.conf > /dev/null <<EOF
 # /etc/dovecot/dovecot.conf
 
-# Habilitar SSL/TLS diretamente no arquivo principal de configuração
-ssl = yes
-ssl_cert = </etc/letsencrypt/live/$ServerName/fullchain.pem
-ssl_key = </etc/letsencrypt/live/$ServerName/privkey.pem
+# Incluindo o arquivo de configuração de SSL
+!include conf.d/10-ssl.conf
 EOF
 
 # Configuração de logging no Dovecot
