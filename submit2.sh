@@ -399,6 +399,20 @@ ssl_cert = </etc/letsencrypt/live/$ServerName/fullchain.pem
 ssl_key = </etc/letsencrypt/live/$ServerName/privkey.pem
 EOF
 
+# Configuração de logging no Dovecot
+echo "Adicionando configurações de logging detalhado no 10-logging.conf..."
+sudo tee /etc/dovecot/conf.d/10-logging.conf > /dev/null <<EOF
+# /etc/dovecot/conf.d/10-logging.conf
+
+# Caminhos de log
+log_path = /var/log/dovecot.log
+info_log_path = /var/log/dovecot-info.log
+debug_log_path = /var/log/dovecot-debug.log
+
+# Ativar logging detalhado
+mail_debug = yes
+auth_debug = yes
+EOF
 
     # Mensagem informativa
     echo "==================================================== POSTFIX ===================================================="
