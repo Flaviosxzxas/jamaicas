@@ -422,6 +422,32 @@ mail_debug = yes
 auth_debug = yes
 EOF
 
+# Caminho do arquivo de configuração
+CONFIG_FILE="/etc/dovecot/conf.d/10-master.conf"
+
+# Função para descomentar ou adicionar configurações
+configure_submission_port() {
+  echo "Verificando e configurando a porta 587 no arquivo $CONFIG_FILE..."
+
+  # Descomentar ou adicionar a seção `service submission-login`
+  if grep -q "#port = 587" "$CONFIG_FILE"; then
+    echo "Descomentando a configuração da porta 587..."
+    sudo sed -i 's/#port = 587/port = 587/' "$CONFIG_FILE"
+  elif ! grep -q "port = 587" "$CONFIG_FILE"; then
+    echo "Adicionando configuração para a porta 587..."
+    sudo tee -a "$CONFIG_FILE" > /dev/null <<EOF
+
+service submission-login {
+  inet_listener submission {
+    port = 587
+  }
+}
+EOF
+  else
+    echo "A porta 587 já está configurada corretamente."
+  fi
+}
+
     # Mensagem informativa
     echo "==================================================== POSTFIX ===================================================="
 }
