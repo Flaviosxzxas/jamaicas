@@ -240,7 +240,7 @@ echo "Removendo comentário e atualizando o arquivo de aliases"
 sudo sed -i '/^# See man 5 aliases for format/d' /etc/aliases
 
 # Adicionar o alias
-echo "contacto: user1" | sudo tee -a /etc/aliases
+echo "contacto: contacto@$ServerName" | sudo tee -a /etc/aliases
 
 # Atualizar aliases
 sudo newaliases
