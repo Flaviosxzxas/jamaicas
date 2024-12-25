@@ -214,7 +214,7 @@ else
 fi
 
 # Verificar e adicionar a configuração da porta 587, se necessário
-if ! grep -q "submission" /etc/postfix/master.cf; then
+if ! grep -v '^#' /etc/postfix/master.cf | grep -q "submission inet n - n - - smtpd"; then
     echo "Adicionando configuração para a porta 587 no master.cf..."
     sudo bash -c 'cat >> /etc/postfix/master.cf <<EOF
 # Porta 587 para envio de e-mails com STARTTLS
