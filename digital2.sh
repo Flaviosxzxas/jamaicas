@@ -202,7 +202,7 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postfix postfix-policyd-s
 wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Atualizar o arquivo master.cf para configurar o policyd-spf
-if ! grep -q "policy-spf" /etc/postfix/master.cf; then
+if ! grep -q "policy-spf unix - n n - - spawn" /etc/postfix/master.cf; then
     echo "Adicionando configuração para policyd-spf no master.cf..."
     sudo bash -c 'cat >> /etc/postfix/master.cf <<EOF
 # SPF 
@@ -214,7 +214,7 @@ else
 fi
 
 # Verificar e adicionar a configuração da porta 587, se necessário
-if ! grep -v '^#' /etc/postfix/master.cf | grep -q "submission inet n - n - - smtpd"; then
+if ! grep -A 1 "submission inet n - n - - smtpd" /etc/postfix/master.cf | grep -q "smtpd_tls_security_level=encrypt"; then
     echo "Adicionando configuração para a porta 587 no master.cf..."
     sudo bash -c 'cat >> /etc/postfix/master.cf <<EOF
 # Porta 587 para envio de e-mails com STARTTLS
@@ -233,6 +233,16 @@ EOF'
 else
     echo "Configuração para a porta 587 já existe no master.cf, pulando esta etapa."
 fi
+
+# Verificar integridade e reiniciar Postfix
+if grep -q "policy-spf unix" /etc/postfix/master.cf && grep -q "submission inet n - n - - smtpd" /etc/postfix/master.cf; then
+    echo "Configurações adicionadas com sucesso no master.cf!"
+    echo "Reiniciando o Postfix para aplicar as configurações..."
+    sudo systemctl restart postfix
+else
+    echo "Erro: Nem todas as configurações foram adicionadas corretamente."
+fi
+
 
 # Função para configurar aliases
 echo "Removendo comentário e atualizando o arquivo de aliases"
