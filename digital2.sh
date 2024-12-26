@@ -201,6 +201,34 @@ fi
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postfix postfix-policyd-spf-python opendmarc pflogsumm
 wait # adiciona essa linha para esperar que o comando seja concluído
 
+# Função para configurar aliases
+echo "Removendo comentário e atualizando o arquivo de aliases"
+
+# Remover o comentário caso exista
+sudo sed -i '/^# See man 5 aliases for format/d' /etc/aliases
+
+# Adicionar o alias para contacto, caso ainda não exista
+if ! grep -q "contacto:" /etc/aliases; then
+    echo "contacto: contacto@$ServerName" | sudo tee -a /etc/aliases
+else
+    echo "Alias 'contacto' já existe em /etc/aliases"
+fi
+
+# Adicionar alias para o root, caso não exista
+if ! grep -q "root:" /etc/aliases; then
+    echo "root: contacto@$ServerName" | sudo tee -a /etc/aliases
+else
+    echo "Alias 'root' já existe em /etc/aliases"
+fi
+
+# Remover o banco de dados de aliases para garantir que seja regenerado
+echo "Removendo banco de dados antigo de aliases..."
+sudo rm -f /etc/aliases.db
+
+# Atualizar aliases
+echo "Atualizando aliases..."
+sudo newaliases
+
 # Atualizar o arquivo master.cf para configurar o policyd-spf
 if ! grep -q "policy-spf unix - n n - - spawn" /etc/postfix/master.cf; then
     echo "Adicionando configuração para policyd-spf no master.cf..."
@@ -541,34 +569,6 @@ mailbox_size_limit = 0
 recipient_delimiter = +
 inet_interfaces = all
 inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
-
-# Função para configurar aliases
-echo "Removendo comentário e atualizando o arquivo de aliases"
-
-# Remover o comentário caso exista
-sudo sed -i '/^# See man 5 aliases for format/d' /etc/aliases
-
-# Adicionar o alias para contacto, caso ainda não exista
-if ! grep -q "contacto:" /etc/aliases; then
-    echo "contacto: contacto@$ServerName" | sudo tee -a /etc/aliases
-else
-    echo "Alias 'contacto' já existe em /etc/aliases"
-fi
-
-# Adicionar alias para o root, caso não exista
-if ! grep -q "root:" /etc/aliases; then
-    echo "root: contacto@$ServerName" | sudo tee -a /etc/aliases
-else
-    echo "Alias 'root' já existe em /etc/aliases"
-fi
-
-# Remover o banco de dados de aliases para garantir que seja regenerado
-echo "Removendo banco de dados antigo de aliases..."
-sudo rm -f /etc/aliases.db
-
-# Atualizar aliases
-echo "Atualizando aliases..."
-sudo newaliases
 
 # Certifica-se de que o diretório para o policyd-spf existe
 sudo mkdir -p /etc/postfix-policyd-spf-python
