@@ -824,8 +824,12 @@ create_or_update_record "$DKIMSelector" "A" "$ServerIP" ""
 create_or_update_record "$ServerName" "TXT" "\"v=spf1 a:$ServerName ~all\"" ""
 #create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmarc@$ServerName; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r\"" ""
 create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=reject; rua=mailto:dmarc-reports@$ServerName; ruf=mailto:dmarc-reports@$ServerName; sp=reject; adkim=s; aspf=s\"" ""
+
+# Atualização para garantir que o DKIM seja uma única string
+DKIMCode=$(echo "$DKIMCode" | tr -d '\n' | tr -s ' ')  # Limpar quebras de linha e espaços extras
 EscapedDKIMCode=$(printf '%s' "$DKIMCode" | sed 's/\"/\\\"/g')
 create_or_update_record "mail._domainkey.$ServerName" "TXT" "\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\"" ""
+
 create_or_update_record "$ServerName" "MX" "$ServerName" "10"
 echo "==================================================== APPLICATION ===================================================="
 
