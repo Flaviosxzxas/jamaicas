@@ -444,7 +444,6 @@ EOF
 # Chama a função para configurar a porta
 configure_submission_port
 
-
     # Mensagem informativa
     echo "==================================================== POSTFIX ===================================================="
 }
@@ -463,7 +462,7 @@ compatibility_level = 3
 header_checks = regexp:/etc/postfix/header_checks
 
 # Local recipient maps
-local_recipient_maps = proxy:unix:passwd.byname $alias_maps
+# local_recipient_maps = proxy:unix:passwd.byname $alias_maps
 alias_maps = hash:/etc/aliases
 alias_database = hash:/etc/aliases
 
@@ -484,18 +483,18 @@ smtpd_recipient_restrictions =
   reject_unknown_recipient_domain
 
 # Limites de conexão
-smtpd_client_connection_rate_limit = 20
-smtpd_client_connection_count_limit = 10
+smtpd_client_connection_rate_limit = 100
+smtpd_client_connection_count_limit = 50
 anvil_rate_time_unit = 60s
 
 # Gerenciamento de filas
 message_size_limit = 10485760
-default_destination_concurrency_limit = 10
+default_destination_concurrency_limit = 50
 maximal_queue_lifetime = 3d
 bounce_queue_lifetime = 3d
 
 # Retransmissão controlada
-smtp_destination_rate_delay = 3s
+smtp_destination_rate_delay = 1s
 
 # Configurações para lidar com erros temporários e definitivos no Postfix
 # smtpd_error_sleep_time = 5
@@ -528,7 +527,7 @@ smtpd_tls_auth_only = yes
 # Restrições para remetentes:
 # - permite remetentes autenticados ou da rede confiável.
 # - rejeita remetentes com domínio ou hostname inválido.
-#   smtpd_sender_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_sender_login_mismatch, reject_unknown_reverse_client_hostname, reject_unknown_sender_domain
+#  smtpd_sender_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_sender_login_mismatch, reject_unknown_reverse_client_hostname, reject_unknown_sender_domain
 
 # Restrições para o comando HELO/EHLO:
 # - valida o hostname enviado no comando.
