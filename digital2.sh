@@ -650,6 +650,9 @@ echo "==================================================== POSTFIX =============
 
 echo "==================================================== OpenDMARC ===================================================="
 
+# Configurar o debconf para modo não interativo globalmente
+export DEBIAN_FRONTEND=noninteractive
+
 # Criar os diretórios necessários para o OpenDMARC
 sudo mkdir -p /run/opendmarc
 sudo mkdir -p /etc/opendmarc
