@@ -354,11 +354,6 @@ service auth {
 }
 EOF
 
-# Corrigir permissões no arquivo de autenticação
-echo "Ajustando permissões para o arquivo de autenticação..."
-sudo chown postfix:postfix /var/spool/postfix/private/auth
-sudo chmod 660 /var/spool/postfix/private/auth
-
 # Configura o arquivo 10-ssl.conf para usar certificados Let's Encrypt
 echo "Configurando SSL/TLS no Dovecot..."
 sudo tee /etc/dovecot/conf.d/10-ssl.conf > /dev/null <<EOF
@@ -366,44 +361,28 @@ sudo tee /etc/dovecot/conf.d/10-ssl.conf > /dev/null <<EOF
 ## SSL settings
 ##
 
-# Habilita suporte SSL/TLS
 ssl = yes
-
-# Caminhos para o certificado e a chave privada emitidos pelo Let's Encrypt
 ssl_cert = </etc/letsencrypt/live/$ServerName/fullchain.pem
 ssl_key = </etc/letsencrypt/live/$ServerName/privkey.pem
-
-# Define o protocolo mínimo como TLSv1.2 para evitar o uso de protocolos inseguros
 ssl_min_protocol = TLSv1.2
-
-# Define as cifras seguras a serem usadas, excluindo cifras obsoletas
 ssl_cipher_list = HIGH:!aNULL:!MD5:!3DES
-
-# Prefere as cifras do servidor em vez das do cliente
 ssl_prefer_server_ciphers = yes
-
-# Caminho para os parâmetros DH
 ssl_dh = </usr/share/dovecot/dh.pem
-
-# Diretório de CAs confiáveis para validação de certificados de clientes, se necessário
 ssl_client_ca_dir = /etc/ssl/certs
-
-# Evita o uso de tickets de sessão SSL para maior segurança
 ssl_options = no_ticket
 EOF
 
 # Gerar DH params se necessário
 echo "Verificando e gerando DH params..."
 if [ ! -f /usr/share/dovecot/dh.pem ]; then
-  openssl dhparam -out /usr/share/dovecot/dh.pem 4096
+  echo "Gerando DH Params..."
+  sudo openssl dhparam -out /usr/share/dovecot/dh.pem 4096
 fi
 
 # Configuração adicional no arquivo principal de configuração do Dovecot
 echo "Adicionando configuração SSL no arquivo principal de configuração do Dovecot..."
 sudo tee -a /etc/dovecot/dovecot.conf > /dev/null <<EOF
 # /etc/dovecot/dovecot.conf
-
-# Incluindo o arquivo de configuração de SSL
 !include conf.d/10-ssl.conf
 EOF
 
@@ -411,13 +390,9 @@ EOF
 echo "Adicionando configurações de logging detalhado no 10-logging.conf..."
 sudo tee /etc/dovecot/conf.d/10-logging.conf > /dev/null <<EOF
 # /etc/dovecot/conf.d/10-logging.conf
-
-# Caminhos de log
 log_path = /var/log/dovecot.log
 info_log_path = /var/log/dovecot-info.log
 debug_log_path = /var/log/dovecot-debug.log
-
-# Ativar logging detalhado
 mail_debug = yes
 auth_debug = yes
 EOF
@@ -429,14 +404,16 @@ CONFIG_FILE="/etc/dovecot/conf.d/10-master.conf"
 configure_submission_port() {
   echo "Verificando e configurando a porta 587 no arquivo $CONFIG_FILE..."
 
-  # Descomentar ou adicionar a seção `service submission-login`
+  # Descomentar a linha "port = 587" caso esteja comentada
   if grep -q "#port = 587" "$CONFIG_FILE"; then
     echo "Descomentando a configuração da porta 587..."
     sudo sed -i 's/#port = 587/port = 587/' "$CONFIG_FILE"
-  elif ! grep -q "port = 587" "$CONFIG_FILE"; then
+  fi
+
+  # Se a configuração não estiver no arquivo, adiciona a seção `service submission-login`
+  if ! grep -q "port = 587" "$CONFIG_FILE"; then
     echo "Adicionando configuração para a porta 587..."
     sudo tee -a "$CONFIG_FILE" > /dev/null <<EOF
-
 service submission-login {
   inet_listener submission {
     port = 587
@@ -447,6 +424,10 @@ EOF
     echo "A porta 587 já está configurada corretamente."
   fi
 }
+
+# Chama a função para configurar a porta
+configure_submission_port
+
 
     # Mensagem informativa
     echo "==================================================== POSTFIX ===================================================="
