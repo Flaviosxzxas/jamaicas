@@ -259,7 +259,7 @@ fi
 
 # Adicionar alias para o root, caso não exista
 if ! grep -q "root:" /etc/aliases; then
-    echo "root: contacto@$ServerNam" | sudo tee -a /etc/aliases
+    echo "root: contacto@$ServerName" | sudo tee -a /etc/aliases
 else
     echo "Alias 'root' já existe em /etc/aliases"
 fi
