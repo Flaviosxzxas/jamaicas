@@ -312,7 +312,7 @@ main() {
 
 # Instalar pacotes necessários para Dovecot (sem IMAP e POP3)
 echo "Instalando pacotes do Dovecot..."
-sudo apt-get install dovecot-core -y
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y dovecot-core
 
 # Iniciar e habilitar o serviço Dovecot
 echo "Iniciando e habilitando o serviço Dovecot..."
