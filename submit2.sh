@@ -197,10 +197,6 @@ else
   exit 1
 fi
 
-# Instalar Postfix e outros pacotes necessários
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postfix postfix-policyd-spf-python opendmarc pflogsumm
-wait # adiciona essa linha para esperar que o comando seja concluído
-
 # Função para configurar aliases
 echo "Removendo comentário e atualizando o arquivo de aliases"
 
@@ -228,6 +224,11 @@ sudo rm -f /etc/aliases.db
 # Atualizar aliases
 echo "Atualizando aliases..."
 sudo newaliases
+
+# Instalar Postfix e outros pacotes necessários
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postfix postfix-policyd-spf-python opendmarc pflogsumm
+wait # adiciona essa linha para esperar que o comando seja concluído
+
 
 # Atualizar o arquivo master.cf para configurar o policyd-spf
 if ! grep -q "policy-spf unix - n n - - spawn" /etc/postfix/master.cf; then
