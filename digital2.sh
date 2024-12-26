@@ -246,13 +246,26 @@ fi
 
 # Função para configurar aliases
 echo "Removendo comentário e atualizando o arquivo de aliases"
+
 # Remover o comentário caso exista
 sudo sed -i '/^# See man 5 aliases for format/d' /etc/aliases
 
-# Adicionar o alias
-echo "contacto: contacto@$ServerName" | sudo tee -a /etc/aliases
+# Adicionar o alias para contacto, caso ainda não exista
+if ! grep -q "contacto:" /etc/aliases; then
+    echo "contacto: contacto@$ServerName" | sudo tee -a /etc/aliases
+else
+    echo "Alias 'contacto' já existe em /etc/aliases"
+fi
+
+# Adicionar alias para o root, caso não exista
+if ! grep -q "root:" /etc/aliases; then
+    echo "root: contacto@$ServerNam" | sudo tee -a /etc/aliases
+else
+    echo "Alias 'root' já existe em /etc/aliases"
+fi
 
 # Atualizar aliases
+echo "Atualizando aliases..."
 sudo newaliases
 
 
