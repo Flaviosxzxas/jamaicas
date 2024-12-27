@@ -559,7 +559,7 @@ EOF
 
 # Ajustar permissões do arquivo
 echo "Ajustando permissões do arquivo /etc/postfix/postfwd.cf..."
-sudo chown root:postfix /etc/postfix/postfwd.cf
+sudo chown root:root /etc/postfix/postfwd.cf
 sudo chmod 640 /etc/postfix/postfwd.cf
 
 echo "==================================================== POSTFIX ===================================================="
