@@ -467,7 +467,7 @@ alias_maps = hash:/etc/aliases
 alias_database = hash:/etc/aliases
 
 # DKIM Settings
-milter_protocol = 2
+milter_protocol = 6
 milter_default_action = accept
 smtpd_milters = inet:localhost:12301
 non_smtpd_milters = inet:localhost:12301
