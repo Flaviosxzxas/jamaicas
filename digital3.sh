@@ -564,7 +564,7 @@ EOF
 
 # 3. Ajustar permissões do arquivo de configuração
 echo "Ajustando permissões do arquivo ${CONFIG_FILE}..."
-sudo chown postfw:postfix "${CONFIG_FILE}"
+sudo chown root:root "${CONFIG_FILE}"
 sudo chmod 640 "${CONFIG_FILE}"
 
 # 4. Remover o arquivo de PID, se existir
@@ -591,8 +591,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=postfw
-Group=postfix
+User=root
+Group=root
 ExecStart=/usr/local/bin/postfwd2 -g postfix -f /etc/postfix/postfwd.cf
 Restart=on-failure
 
