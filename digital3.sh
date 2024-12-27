@@ -429,8 +429,15 @@ inet_interfaces = all
 inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 
 
+# Criar diretório necessário para postfwd
+echo "Criando diretório /etc/postfwd..."
+sudo mkdir -p /etc/postfwd
+
+# Criar o arquivo de configuração postfwd.cf com as regras
+echo "Criando o arquivo /etc/postfwd/postfwd.cf..."
+sudo tee /etc/postfwd/postfwd.cf > /dev/null <<EOF
 # Adiciona regras de controle de limites
-echo "#######################################################
+#######################################################
 # Regras de Controle de Limites por Servidor
 #######################################################
 
@@ -550,7 +557,12 @@ action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora ati
 id=no-limit
 pattern=recipient
 action=permit
-" | sudo tee /etc/postfwd/postfwd.cf > /dev/null
+EOF
+
+# Ajustar permissões do arquivo
+echo "Ajustando permissões do arquivo /etc/postfwd/postfwd.cf..."
+sudo chown postfix:postfix /etc/postfwd/postfwd.cf
+sudo chmod 640 /etc/postfwd/postfwd.cf
 
 echo "==================================================== POSTFIX ===================================================="
 
