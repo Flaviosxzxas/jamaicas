@@ -428,6 +428,11 @@ recipient_delimiter = +
 inet_interfaces = all
 inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 
+# Configurar variáveis
+SERVICE_FILE="/etc/systemd/system/postfwd2.service"
+CONFIG_FILE="/etc/postfix/postfwd.cf"
+LOG_FILE="/var/log/postfwd.log"
+PID_FILE="/var/tmp/postfwd3-master.pid"
 
 # Criar o arquivo de configuração postfwd.cf com as regras no local correto
 echo "Criando o arquivo /etc/postfix/postfwd.cf..."
@@ -437,7 +442,7 @@ sudo tee /etc/postfix/postfwd.cf > /dev/null <<EOF
 # Regras de Controle de Limites por Servidor
 #######################################################
 
-logfile = /var/log/postfwd.log
+logfile = ${LOG_FILE}
 
 # KingHost
 id=limit-kinghost
@@ -557,10 +562,48 @@ pattern=recipient
 action=permit
 EOF
 
-# Ajustar permissões do arquivo
-echo "Ajustando permissões do arquivo /etc/postfix/postfwd.cf..."
-sudo chown root:root /etc/postfix/postfwd.cf
-sudo chmod 640 /etc/postfix/postfwd.cf
+# 3. Ajustar permissões do arquivo de configuração
+echo "Ajustando permissões do arquivo ${CONFIG_FILE}..."
+sudo chown postfw:postfix "${CONFIG_FILE}"
+sudo chmod 640 "${CONFIG_FILE}"
+
+# 4. Remover o arquivo de PID, se existir
+if [ -f "${PID_FILE}" ]; then
+    echo "Removendo arquivo de PID existente (${PID_FILE})..."
+    sudo rm -f "${PID_FILE}"
+fi
+
+# Garantir permissões do diretório /var/tmp
+echo "Ajustando permissões do diretório /var/tmp..."
+sudo chmod 1777 /var/tmp
+
+# 5. Atualizar o arquivo de serviço, se necessário
+if [ -f "${SERVICE_FILE}" ]; then
+    echo "Atualizando o arquivo de serviço ${SERVICE_FILE}..."
+    sudo cp "${SERVICE_FILE}" "${SERVICE_FILE}.bak"
+    sudo sed -i 's|^ExecStart=.*|ExecStart=/usr/local/bin/postfwd2 -g postfix -f /etc/postfix/postfwd.cf|' "${SERVICE_FILE}"
+else
+    echo "Criando o arquivo de serviço ${SERVICE_FILE}..."
+    sudo tee "${SERVICE_FILE}" > /dev/null <<EOF
+[Unit]
+Description=Postfix Policy Server (Postfwd2)
+After=network.target
+
+[Service]
+Type=simple
+User=postfw
+Group=postfix
+ExecStart=/usr/local/bin/postfwd2 -g postfix -f /etc/postfix/postfwd.cf
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+fi
+
+# 6. Recarregar e reiniciar o serviço
+echo "Recarregando o systemd..."
+sudo systemctl daemon-reload
 
 echo "==================================================== POSTFIX ===================================================="
 
@@ -628,7 +671,7 @@ sudo chown opendmarc:opendmarc /run/opendmarc/opendmarc.pid
 sudo chmod 600 /run/opendmarc/opendmarc.pid
 
 echo "Reiniciando o serviço postfwd..." 
-sudo systemctl restart postfwd
+sudo systemctl restart postfwd2
 
 # Configurar e reiniciar o OpenDKIM
 sudo systemctl restart opendkim
