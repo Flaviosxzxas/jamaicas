@@ -113,6 +113,18 @@ echo "  -- Configurando registros DNS"
 create_or_update_record "$DKIMSelector" "A" "$ServerIP" ""
 create_or_update_record "$ServerName" "TXT" "\"v=spf1 a:$ServerName ~all\"" ""
 create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmarc@$ServerName; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r\"" ""
+# Atualização para garantir que o DKIM seja uma única string
+DKIMCode=$(echo "$DKIMCode" | tr -d '\n' | tr -s ' ')  # Limpar quebras de linha e espaços extras
+
+# Verifique se a chave DKIM não está vazia
+if [ -z "$DKIMCode" ]; then
+  echo "Erro: A chave DKIM gerada está vazia." >&2
+  exit 1
+fi
+
+# Escapar aspas na chave DKIM
 EscapedDKIMCode=$(printf '%s' "$DKIMCode" | sed 's/\"/\\\"/g')
+
+# Criar ou atualizar o registro DKIM
 create_or_update_record "mail._domainkey.$ServerName" "TXT" "\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\"" ""
 create_or_update_record "$ServerName" "MX" "$ServerName" "10"
