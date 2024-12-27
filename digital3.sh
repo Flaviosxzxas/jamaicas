@@ -449,6 +449,11 @@ id=limit-locaweb
 pattern=recipient mx=.*locaweb.com.br
 action=rate(global/500/3600) defer_if_permit "Limite de 500 e-mails por hora atingido para LocaWeb."
 
+# Yahoo (Contas Pessoais)
+id=limit-yahoo
+pattern=recipient mx=.*yahoo.com
+action=rate(global/150/3600) defer_if_permit "Limite de 150 e-mails por hora atingido para Yahoo."
+
 # Mandic
 id=limit-mandic
 pattern=recipient mx=.*mandic.com.br
@@ -459,15 +464,20 @@ id=limit-titan
 pattern=recipient mx=.*titan.email
 action=rate(global/500/3600) defer_if_permit "Limite de 500 e-mails por hora atingido para Titan."
 
-# Google
+# Google (Contas Pessoais e G Suite)
 id=limit-google
 pattern=recipient mx=.*google
 action=rate(global/2000/3600) defer_if_permit "Limite de 2000 e-mails por hora atingido para Google."
 
-# Outlook
-id=limit-outlook
-pattern=recipient mx=.*outlook
-action=rate(global/1500/3600) defer_if_permit "Limite de 1500 e-mails por hora atingido para Outlook."
+# Hotmail (Contas Pessoais)
+id=limit-hotmail
+pattern=recipient mx=.*hotmail.com
+action=rate(global/1000/86400) defer_if_permit "Limite de 1000 e-mails por dia atingido para Hotmail."
+
+# Office 365 (Contas Empresariais)
+id=limit-office365
+pattern=recipient mx=.*outlook.com
+action=rate(global/2000/3600) defer_if_permit "Limite de 2000 e-mails por hora atingido para Office 365."
 
 # Secureserver (GoDaddy)
 id=limit-secureserver
@@ -490,6 +500,21 @@ id=limit-speedy
 pattern=recipient mx=.*speedy.com.ar
 action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Speedy."
 
+# Personal (Arnet)
+id=limit-personal
+pattern=recipient mx=.*personal.com.ar
+action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Personal (Arnet)."
+
+# Telecom
+id=limit-telecom
+pattern=recipient mx=.*telecom.com.ar
+action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Telecom."
+
+# Claro
+id=limit-claro
+pattern=recipient mx=.*claro.com.ar
+action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Claro."
+
 # Provedores no México
 # Telmex
 id=limit-telmex
@@ -500,6 +525,26 @@ action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora ati
 id=limit-axtel
 pattern=recipient mx=.*axtel.net
 action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Axtel."
+
+# Izzi Telecom
+id=limit-izzi
+pattern=recipient mx=.*izzi.net.mx
+action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Izzi Telecom."
+
+# Megacable
+id=limit-megacable
+pattern=recipient mx=.*megacable.com.mx
+action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Megacable."
+
+# TotalPlay
+id=limit-totalplay
+pattern=recipient mx=.*totalplay.net.mx
+action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para TotalPlay."
+
+# Telcel
+id=limit-telcel
+pattern=recipient mx=.*telcel.net
+action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Telcel."
 
 # Outros (Sem Limite)
 id=no-limit
