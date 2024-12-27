@@ -441,6 +441,8 @@ sudo tee /etc/postfwd/postfwd.cf > /dev/null <<EOF
 # Regras de Controle de Limites por Servidor
 #######################################################
 
+logfile = /var/log/postfwd.log
+
 # KingHost
 id=limit-kinghost
 pattern=recipient mx=.*kinghost.net
