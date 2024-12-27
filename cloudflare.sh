@@ -27,25 +27,21 @@ echo "ServerIP: $ServerIP"
 
 sleep 5
 
+# Ajuste de permissões e propriedade das chaves
+sudo chmod -R 750 /etc/opendkim/
+
 # Código para processar a chave DKIM
 DKIMFileCode=$(cat /etc/opendkim/keys/mail.txt)
-
-# Remover quebras de linha e espaços desnecessários
-CleanedDKIMCode=$(echo "$DKIMFileCode" | tr -d '\n' | tr -s ' ')
 
 # Criar o script para extrair a chave pública
 echo '#!/usr/bin/node
 
-const DKIM = `'"$CleanedDKIMCode"'`;
+const DKIM = `'"$DKIMFileCode"'`;
 
-// Captura a chave pública
-const publicKeyMatch = DKIM.match(/p=([^"]+)/);
-if (publicKeyMatch) {
-    console.log(publicKeyMatch[1].replace(/\s+/g, "")); // Remove espaços em branco
-} else {
-    console.error("Chave pública não encontrada.");
-    process.exit(1);
-}
+// Remove quebras de linha, espaços e caracteres indesejados
+const publicKey = DKIM.replace(/(\r\n|\n|\r|\t|"|\)| )/gm, "").split(";").find((c) => c.match("p=")).replace("p=", "");
+
+console.log(publicKey);
 ' | sudo tee /root/dkimcode.sh > /dev/null
 
 # Dar permissão de execução ao script
