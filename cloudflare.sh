@@ -48,6 +48,7 @@ if (publicKeyMatch) {
 }
 ' | sudo tee /root/dkimcode.sh > /dev/null
 
+# Dar permissão de execução ao script
 sudo chmod 755 /root/dkimcode.sh
 
 echo "==================================================== CLOUDFLARE ===================================================="
