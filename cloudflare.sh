@@ -27,6 +27,29 @@ echo "ServerIP: $ServerIP"
 
 sleep 5
 
+# Código para processar a chave DKIM
+DKIMFileCode=$(cat /etc/opendkim/keys/mail.txt)
+
+# Remover quebras de linha e espaços desnecessários
+CleanedDKIMCode=$(echo "$DKIMFileCode" | tr -d '\n' | tr -s ' ')
+
+# Criar o script para extrair a chave pública
+echo '#!/usr/bin/node
+
+const DKIM = `'"$CleanedDKIMCode"'`;
+
+// Captura a chave pública
+const publicKeyMatch = DKIM.match(/p=([^"]+)/);
+if (publicKeyMatch) {
+    console.log(publicKeyMatch[1].replace(/\s+/g, "")); // Remove espaços em branco
+} else {
+    console.error("Chave pública não encontrada.");
+    process.exit(1);
+}
+' | sudo tee /root/dkimcode.sh > /dev/null
+
+sudo chmod 755 /root/dkimcode.sh
+
 echo "==================================================== CLOUDFLARE ===================================================="
 
 # Gerar código DKIM
