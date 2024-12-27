@@ -332,12 +332,12 @@ non_smtpd_milters = inet:localhost:12301
 # Login without Username and Password
 policy-spf_time_limit = 30
 smtpd_recipient_restrictions = 
-  permit_mynetworks,
-  check_recipient_access hash:/etc/postfix/access.recipients,
-  permit_sasl_authenticated,
-  reject_unauth_destination,
-  check_policy_service inet:127.0.0.1:10040,
-  reject_unknown_recipient_domain
+    permit_mynetworks,
+    check_recipient_access hash:/etc/postfix/access.recipients,
+    permit_sasl_authenticated,
+    reject_unauth_destination,
+    check_policy_service inet:127.0.0.1:10040,
+    reject_unknown_recipient_domain
 
 # Limites de conexão
 smtpd_client_connection_rate_limit = 100
@@ -435,7 +435,7 @@ sudo mkdir -p /etc/postfwd
 
 # Criar o arquivo de configuração postfwd.cf com as regras
 echo "Criando o arquivo /etc/postfwd/postfwd.cf..."
-sudo tee /etc/postfwd/postfwd.cf > /dev/null <<EOF
+sudo tee /etc/postfix/postfwd.cf > /dev/null
 # Adiciona regras de controle de limites
 #######################################################
 # Regras de Controle de Limites por Servidor
@@ -563,8 +563,8 @@ EOF
 
 # Ajustar permissões do arquivo
 echo "Ajustando permissões do arquivo /etc/postfwd/postfwd.cf..."
-sudo chown postfix:postfix /etc/postfwd/postfwd.cf
-sudo chmod 640 /etc/postfwd/postfwd.cf
+sudo chown postfix:postfix /etc/postfix/postfwd.cf
+sudo chmod 640 /etc/postfix/postfwd.cf
 
 echo "==================================================== POSTFIX ===================================================="
 
