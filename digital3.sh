@@ -596,7 +596,7 @@ EOF
 # 4. Remover linhas em branco no arquivo de configuração
 echo "Removendo linhas em branco no arquivo de configuração ${CONFIG_FILE}..."
 sudo sed -i '/^$/d' "${CONFIG_FILE}"
-
+sudo sed -i -e '$a\' "${CONFIG_FILE}"
 # 5. Ajustar permissões do arquivo de configuração
 echo "Ajustando permissões do arquivo ${CONFIG_FILE}..."
 sudo chown root:postfix "${CONFIG_FILE}"
