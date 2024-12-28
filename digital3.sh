@@ -616,7 +616,6 @@ sudo chmod 1777 /var/tmp
 if [ -f "${SERVICE_FILE}" ]; then
     echo "Atualizando o arquivo de serviço ${SERVICE_FILE}..."
     sudo cp "${SERVICE_FILE}" "${SERVICE_FILE}.bak"
-    sudo sed -i 's|^ExecStart=.*|ExecStart=/usr/local/bin/postfwd3 -g postfix -f /etc/postfix/postfwd.cf|' "${SERVICE_FILE}"
 else
     echo "Criando o arquivo de serviço ${SERVICE_FILE}..."
     sudo tee "${SERVICE_FILE}" > /dev/null <<EOF
