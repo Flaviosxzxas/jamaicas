@@ -428,6 +428,8 @@ recipient_delimiter = +
 inet_interfaces = all
 inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 
+#!/bin/bash
+
 # Configurar variáveis
 SERVICE_FILE="/etc/systemd/system/postfwd3.service"
 CONFIG_FILE="/etc/postfix/postfwd.cf"
@@ -435,7 +437,7 @@ LOG_FILE="/var/log/postfwd3.log"
 PID_FILE="/var/tmp/postfwd3-master.pid"
 POSTFWD_BIN="/usr/local/bin/postfwd3"
 
-echo "### Iniciando configuração do postfwd3 ###"
+echo "### Iniciando configuração do Postfwd3 ###"
 
 # 1. Criar usuário 'postfw' e associar ao grupo 'postfix'
 if ! id "postfw" &>/dev/null; then
@@ -446,16 +448,15 @@ else
     echo "Usuário 'postfw' já existe."
 fi
 
-# 2. Verificar e instalar o postfwd3 se necessário
+# 2. Verificar e instalar o Postfwd3 se necessário
 if [ ! -f "${POSTFWD_BIN}" ]; then
-    echo "O arquivo ${POSTFWD_BIN} não foi encontrado. Instalando o postfwd3..."
-    
+    echo "O arquivo ${POSTFWD_BIN} não foi encontrado. Instalando o Postfwd3..."
     export DEBIAN_FRONTEND=noninteractive
     sudo apt update
     sudo apt install -y perl libdigest-sha-perl
     sudo wget --no-check-certificate https://postfwd.org/postfwd3 -O "${POSTFWD_BIN}"
     sudo chmod +x "${POSTFWD_BIN}"
-    echo "postfwd3 instalado com sucesso em ${POSTFWD_BIN}."
+    echo "Postfwd3 instalado com sucesso em ${POSTFWD_BIN}."
 else
     echo "O arquivo ${POSTFWD_BIN} já existe. Pulando a instalação."
 fi
@@ -593,13 +594,13 @@ sudo sed -i -e '$a\' "${CONFIG_FILE}"
 sudo chown root:postfix "${CONFIG_FILE}"
 sudo chmod 640 "${CONFIG_FILE}"
 
-# 6. Configurar arquivo de log
+# 6. Configurar o arquivo de log
 echo "Configurando arquivo de log ${LOG_FILE}..."
 sudo touch "${LOG_FILE}"
 sudo chown postfw:postfix "${LOG_FILE}"
 sudo chmod 640 "${LOG_FILE}"
 
-# 7. Remover o arquivo de PID, se existir
+# 7. Forçar remoção do PID no reinício
 if [ -f "${PID_FILE}" ]; then
     echo "Removendo arquivo de PID existente (${PID_FILE})..."
     sudo rm -f "${PID_FILE}"
@@ -621,14 +622,13 @@ Requires=postfix.service
 Type=simple
 User=postfw
 Group=postfix
-ExecStartPre=/bin/rm -f ${PID_FILE}  # Forçar remoção do PID antes de iniciar
+ExecStartPre=/bin/rm -f ${PID_FILE} # Força a remoção do PID
 ExecStartPre=/bin/touch ${LOG_FILE}
 ExecStartPre=/bin/chown postfw:postfix ${LOG_FILE}
 ExecStartPre=/bin/chmod 640 ${LOG_FILE}
 ExecStart=/usr/local/bin/postfwd3 -g postfix -f ${CONFIG_FILE}
 PIDFile=${PID_FILE}
 Restart=on-failure
-RestartSec=5s
 
 [Install]
 WantedBy=multi-user.target
