@@ -473,9 +473,6 @@ logfile = ${LOG_FILE}
 #######################################################
 # Regras de Controle de Limites por Servidor
 #######################################################
-
-logfile = ${LOG_FILE}
-
 # KingHost
 id=limit-kinghost
 pattern=recipient mx=.*kinghost.net
@@ -596,7 +593,7 @@ EOF
 
 # 4. Ajustar permissões do arquivo de configuração
 echo "Ajustando permissões do arquivo ${CONFIG_FILE}..."
-sudo chown postfw:postfix "${CONFIG_FILE}"
+sudo chown root:postfix "${CONFIG_FILE}"
 sudo chmod 640 "${CONFIG_FILE}"
 
 # 5. Remover o arquivo de PID, se existir
@@ -633,18 +630,13 @@ WantedBy=multi-user.target
 EOF
 fi
 
-# 7. Ajustar permissões dos diretórios e arquivos relacionados ao Postfix
-echo "Ajustando permissões na pasta /etc/postfix..."
-sudo chown -R root:postfix /etc/postfix
-sudo chmod -R 750 /etc/postfix
-
-# Garantir permissões para arquivos necessários
-sudo chown postfw:postfix "${CONFIG_FILE}"
-sudo chmod 640 "${CONFIG_FILE}"
-
-# 8. Recarregar e reiniciar o serviço
+# 7. Recarregar o systemd e reiniciar o serviço
 echo "Recarregando o systemd..."
 sudo systemctl daemon-reload
+
+# 8. Reiniciar o serviço postfwd3
+echo "Removendo qualquer arquivo PID residual..."
+sudo rm -f "${PID_FILE}"
 
 echo "==================================================== POSTFIX ===================================================="
 
