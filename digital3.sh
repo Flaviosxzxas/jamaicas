@@ -428,8 +428,6 @@ recipient_delimiter = +
 inet_interfaces = all
 inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 
-#!/bin/bash
-
 # Configurar variáveis
 SERVICE_FILE="/etc/systemd/system/postfwd3.service"
 CONFIG_FILE="/etc/postfix/postfwd.cf"
@@ -470,8 +468,6 @@ fi
 # 3. Criar ou sobrescrever o arquivo de configuração
 echo "Criando o arquivo de configuração ${CONFIG_FILE}..."
 sudo tee "${CONFIG_FILE}" > /dev/null <<EOF
-logfile = ${LOG_FILE}
-
 #######################################################
 # Regras de Controle de Limites por Servidor
 #######################################################
@@ -628,6 +624,9 @@ Requires=postfix.service
 Type=simple
 User=postfw
 Group=postfix
+ExecStartPre=/bin/touch /var/log/postfwd3.log
+ExecStartPre=/bin/chown postfw:postfix /var/log/postfwd3.log
+ExecStartPre=/bin/chmod 640 /var/log/postfwd3.log
 ExecStart=/usr/local/bin/postfwd3 -g postfix -f /etc/postfix/postfwd.cf
 PIDFile=/var/tmp/postfwd3-master.pid
 Restart=on-failure
