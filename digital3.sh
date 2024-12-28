@@ -449,7 +449,6 @@ fi
 # 2. Verificar e instalar o postfwd3 se necessário
 if [ ! -f "${POSTFWD_BIN}" ]; then
     echo "O arquivo ${POSTFWD_BIN} não foi encontrado. Instalando o postfwd3..."
-    
     export DEBIAN_FRONTEND=noninteractive
     sudo apt update
     sudo apt install -y perl libdigest-sha-perl
@@ -593,18 +592,24 @@ sudo sed -i -e '$a\' "${CONFIG_FILE}"
 sudo chown root:postfix "${CONFIG_FILE}"
 sudo chmod 640 "${CONFIG_FILE}"
 
-# 6. Remover o arquivo de PID, se existir
+# 6. Configurar o arquivo de log
+echo "Configurando arquivo de log ${LOG_FILE}..."
+sudo touch "${LOG_FILE}"
+sudo chown postfw:postfix "${LOG_FILE}"
+sudo chmod 640 "${LOG_FILE}"
+
+# 7. Remover o arquivo de PID, se existir
 if [ -f "${PID_FILE}" ]; then
+    echo "Removendo arquivo de PID existente (${PID_FILE})..."
     sudo rm -f "${PID_FILE}"
 fi
 
 # Garantir permissões do diretório /var/tmp
 sudo chmod 1777 /var/tmp
 
-# 7. Atualizar ou criar o arquivo de serviço do systemd
-if [ ! -f "${SERVICE_FILE}" ]; then
-    echo "Criando o arquivo de serviço ${SERVICE_FILE}..."
-    sudo tee "${SERVICE_FILE}" > /dev/null <<EOF
+# 8. Criar ou atualizar o arquivo de serviço do systemd
+echo "Criando ou atualizando o arquivo de serviço ${SERVICE_FILE}..."
+sudo tee "${SERVICE_FILE}" > /dev/null <<EOF
 [Unit]
 Description=Postfix Policy Server (Postfwd3)
 After=network.target postfix.service
@@ -624,12 +629,19 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 EOF
-fi
 
-# 8. Recarregar o systemd e reiniciar o serviço
+# 9. Recarregar o systemd e reiniciar o serviço
+echo "Recarregando o systemd e reiniciando o serviço postfwd3..."
 sudo systemctl daemon-reload
 sudo systemctl enable postfwd3.service
 sudo systemctl restart postfwd3.service
+
+# 10. Verificar status do serviço
+echo "Verificando o status do serviço postfwd3..."
+sudo systemctl status postfwd3.service --no-pager
+
+# 11. Outras configurações
+echo "Iniciando outras configurações..."
 
 echo "==================================================== POSTFIX ===================================================="
 
