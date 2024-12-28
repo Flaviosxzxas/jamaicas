@@ -622,7 +622,8 @@ else
     sudo tee "${SERVICE_FILE}" > /dev/null <<EOF
 [Unit]
 Description=Postfix Policy Server (Postfwd3)
-After=network.target
+After=network.target postfix.service
+Requires=postfix.service
 
 [Service]
 Type=simple
