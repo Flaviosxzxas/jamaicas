@@ -429,28 +429,38 @@ inet_interfaces = all
 inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 
 # Configurar variáveis
-SERVICE_FILE="/etc/systemd/system/postfwd2.service"
+SERVICE_FILE="/etc/systemd/system/postfwd3.service"
 CONFIG_FILE="/etc/postfix/postfwd.cf"
-LOG_FILE="/var/log/postfwd.log"
+LOG_FILE="/var/log/postfwd3.log"
 PID_FILE="/var/tmp/postfwd3-master.pid"
-POSTFWD_BIN="/usr/local/bin/postfwd2"
+POSTFWD_BIN="/usr/local/bin/postfwd3"
 
-echo "### Iniciando configuração do postfwd2 ###"
+echo "### Iniciando configuração do postfwd3 ###"
 
-# 2. Verificar e instalar o postfwd2 se necessário
+# 1. Criar usuário 'postfw' e associar ao grupo 'postfix'
+if ! id "postfw" &>/dev/null; then
+    echo "Criando usuário 'postfw'..."
+    sudo useradd -r -g postfix -s /usr/sbin/nologin postfw
+    echo "Usuário 'postfw' criado."
+else
+    echo "Usuário 'postfw' já existe."
+fi
+
+# 2. Verificar e instalar o postfwd3 se necessário
 if [ ! -f "${POSTFWD_BIN}" ]; then
-    echo "O arquivo ${POSTFWD_BIN} não foi encontrado. Instalando o postfwd2..."
+    echo "O arquivo ${POSTFWD_BIN} não foi encontrado. Instalando o postfwd3..."
     
     # Instalar dependências necessárias
+    export DEBIAN_FRONTEND=noninteractive
     sudo apt update
     sudo apt install -y perl libdigest-sha-perl
 
-    # Baixar o script postfwd2
-    sudo wget --no-check-certificate https://postfwd.org/postfwd2 -O "${POSTFWD_BIN}"
+    # Baixar o script postfwd3
+    sudo wget --no-check-certificate https://postfwd.org/postfwd3 -O "${POSTFWD_BIN}"
 
     # Tornar o script executável
     sudo chmod +x "${POSTFWD_BIN}"
-    echo "postfwd2 instalado com sucesso em ${POSTFWD_BIN}."
+    echo "postfwd3 instalado com sucesso em ${POSTFWD_BIN}."
 else
     echo "O arquivo ${POSTFWD_BIN} já existe. Pulando a instalação."
 fi
@@ -460,7 +470,6 @@ echo "Criando o arquivo de configuração ${CONFIG_FILE}..."
 sudo tee "${CONFIG_FILE}" > /dev/null <<EOF
 logfile = ${LOG_FILE}
 
-# Adiciona regras de controle de limites
 #######################################################
 # Regras de Controle de Limites por Servidor
 #######################################################
@@ -600,23 +609,23 @@ fi
 echo "Ajustando permissões do diretório /var/tmp..."
 sudo chmod 1777 /var/tmp
 
-# 6. Atualizar o arquivo de serviço, se necessário
+# 6. Atualizar ou criar o arquivo de serviço do systemd
 if [ -f "${SERVICE_FILE}" ]; then
     echo "Atualizando o arquivo de serviço ${SERVICE_FILE}..."
     sudo cp "${SERVICE_FILE}" "${SERVICE_FILE}.bak"
-    sudo sed -i 's|^ExecStart=.*|ExecStart=/usr/local/bin/postfwd2 -g postfix -f /etc/postfix/postfwd.cf|' "${SERVICE_FILE}"
+    sudo sed -i 's|^ExecStart=.*|ExecStart=/usr/local/bin/postfwd3 -g postfix -f /etc/postfix/postfwd.cf|' "${SERVICE_FILE}"
 else
     echo "Criando o arquivo de serviço ${SERVICE_FILE}..."
     sudo tee "${SERVICE_FILE}" > /dev/null <<EOF
 [Unit]
-Description=Postfix Policy Server (Postfwd2)
+Description=Postfix Policy Server (Postfwd3)
 After=network.target
 
 [Service]
 Type=simple
 User=postfw
 Group=postfix
-ExecStart=/usr/local/bin/postfwd2 -g postfix -f /etc/postfix/postfwd.cf
+ExecStart=/usr/local/bin/postfwd3 -g postfix -f /etc/postfix/postfwd.cf
 Restart=on-failure
 
 [Install]
@@ -624,7 +633,16 @@ WantedBy=multi-user.target
 EOF
 fi
 
-# 7. Recarregar e reiniciar o serviço
+# 7. Ajustar permissões dos diretórios e arquivos relacionados ao Postfix
+echo "Ajustando permissões na pasta /etc/postfix..."
+sudo chown -R root:postfix /etc/postfix
+sudo chmod -R 750 /etc/postfix
+
+# Garantir permissões para arquivos necessários
+sudo chown postfw:postfix "${CONFIG_FILE}"
+sudo chmod 640 "${CONFIG_FILE}"
+
+# 8. Recarregar e reiniciar o serviço
 echo "Recarregando o systemd..."
 sudo systemctl daemon-reload
 
@@ -694,7 +712,7 @@ sudo chown opendmarc:opendmarc /run/opendmarc/opendmarc.pid
 sudo chmod 600 /run/opendmarc/opendmarc.pid
 
 echo "Reiniciando o serviço postfwd..." 
-sudo systemctl restart postfwd2
+sudo systemctl restart postfwd3.service
 
 # Configurar e reiniciar o OpenDKIM
 sudo systemctl restart opendkim
