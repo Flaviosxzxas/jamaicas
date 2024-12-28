@@ -449,6 +449,7 @@ fi
 # 2. Verificar e instalar o postfwd3 se necessário
 if [ ! -f "${POSTFWD_BIN}" ]; then
     echo "O arquivo ${POSTFWD_BIN} não foi encontrado. Instalando o postfwd3..."
+    
     export DEBIAN_FRONTEND=noninteractive
     sudo apt update
     sudo apt install -y perl libdigest-sha-perl
@@ -592,7 +593,7 @@ sudo sed -i -e '$a\' "${CONFIG_FILE}"
 sudo chown root:postfix "${CONFIG_FILE}"
 sudo chmod 640 "${CONFIG_FILE}"
 
-# 6. Configurar o arquivo de log
+# 6. Configurar arquivo de log
 echo "Configurando arquivo de log ${LOG_FILE}..."
 sudo touch "${LOG_FILE}"
 sudo chown postfw:postfix "${LOG_FILE}"
@@ -607,9 +608,10 @@ fi
 # Garantir permissões do diretório /var/tmp
 sudo chmod 1777 /var/tmp
 
-# 8. Criar ou atualizar o arquivo de serviço do systemd
-echo "Criando ou atualizando o arquivo de serviço ${SERVICE_FILE}..."
-sudo tee "${SERVICE_FILE}" > /dev/null <<EOF
+# 8. Atualizar ou criar o arquivo de serviço do systemd
+if [ ! -f "${SERVICE_FILE}" ]; then
+    echo "Criando o arquivo de serviço ${SERVICE_FILE}..."
+    sudo tee "${SERVICE_FILE}" > /dev/null <<EOF
 [Unit]
 Description=Postfix Policy Server (Postfwd3)
 After=network.target postfix.service
@@ -619,29 +621,36 @@ Requires=postfix.service
 Type=simple
 User=postfw
 Group=postfix
+ExecStartPre=/bin/rm -f ${PID_FILE}  # Forçar remoção do PID antes de iniciar
 ExecStartPre=/bin/touch ${LOG_FILE}
 ExecStartPre=/bin/chown postfw:postfix ${LOG_FILE}
 ExecStartPre=/bin/chmod 640 ${LOG_FILE}
 ExecStart=/usr/local/bin/postfwd3 -g postfix -f ${CONFIG_FILE}
 PIDFile=${PID_FILE}
 Restart=on-failure
+RestartSec=5s
 
 [Install]
 WantedBy=multi-user.target
 EOF
+fi
 
 # 9. Recarregar o systemd e reiniciar o serviço
-echo "Recarregando o systemd e reiniciando o serviço postfwd3..."
 sudo systemctl daemon-reload
 sudo systemctl enable postfwd3.service
 sudo systemctl restart postfwd3.service
 
-# 10. Verificar status do serviço
-echo "Verificando o status do serviço postfwd3..."
+# Reiniciar o Postfix após configurar o Postfwd3
+sudo systemctl restart postfix
+
+# Garantir que o Postfwd3 esteja ativo após o reinício do Postfix
+sudo systemctl restart postfwd3.service
+
+# Verificar o status do Postfwd3
 sudo systemctl status postfwd3.service --no-pager
 
-# 11. Outras configurações
-echo "Iniciando outras configurações..."
+# 11. Outras configurações (se necessário, insira aqui)
+echo "Configuração do Postfwd3 concluída!"
 
 echo "==================================================== POSTFIX ===================================================="
 
@@ -715,10 +724,6 @@ wait # adiciona essa linha para esperar que o comando seja concluído
 # Configurar e reiniciar o OpenDMARC
 sudo systemctl restart opendmarc
 wait # adiciona essa linha para esperar que o comando seja concluído
-
-# Consolidar reinicializações ao final do script
-echo "Recarregando e reiniciando os serviços..."
-sudo systemctl restart postfix
 
 echo "==================================================== OpenDMARC ===================================================="
 
