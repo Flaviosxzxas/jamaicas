@@ -428,6 +428,8 @@ recipient_delimiter = +
 inet_interfaces = all
 inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 
+#!/bin/bash
+
 # Configurar variáveis
 SERVICE_FILE="/etc/systemd/system/postfwd3.service"
 CONFIG_FILE="/etc/postfix/postfwd.cf"
@@ -591,12 +593,16 @@ pattern=recipient
 action=permit
 EOF
 
-# 4. Ajustar permissões do arquivo de configuração
+# 4. Remover linhas em branco no arquivo de configuração
+echo "Removendo linhas em branco no arquivo de configuração ${CONFIG_FILE}..."
+sudo sed -i '/^$/d' "${CONFIG_FILE}"
+
+# 5. Ajustar permissões do arquivo de configuração
 echo "Ajustando permissões do arquivo ${CONFIG_FILE}..."
 sudo chown root:postfix "${CONFIG_FILE}"
 sudo chmod 640 "${CONFIG_FILE}"
 
-# 5. Remover o arquivo de PID, se existir
+# 6. Remover o arquivo de PID, se existir
 if [ -f "${PID_FILE}" ]; then
     echo "Removendo arquivo de PID existente (${PID_FILE})..."
     sudo rm -f "${PID_FILE}"
@@ -606,7 +612,7 @@ fi
 echo "Ajustando permissões do diretório /var/tmp..."
 sudo chmod 1777 /var/tmp
 
-# 6. Atualizar ou criar o arquivo de serviço do systemd
+# 7. Atualizar ou criar o arquivo de serviço do systemd
 if [ -f "${SERVICE_FILE}" ]; then
     echo "Atualizando o arquivo de serviço ${SERVICE_FILE}..."
     sudo cp "${SERVICE_FILE}" "${SERVICE_FILE}.bak"
@@ -630,13 +636,9 @@ WantedBy=multi-user.target
 EOF
 fi
 
-# 7. Recarregar o systemd e reiniciar o serviço
+# 8. Recarregar o systemd e reiniciar o serviço
 echo "Recarregando o systemd..."
 sudo systemctl daemon-reload
-
-# 8. Reiniciar o serviço postfwd3
-echo "Removendo qualquer arquivo PID residual..."
-sudo rm -f "${PID_FILE}"
 
 echo "==================================================== POSTFIX ===================================================="
 
