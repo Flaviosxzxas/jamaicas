@@ -638,12 +638,10 @@ WantedBy=multi-user.target
 EOF
 fi
 
-# 8. Recarregar o systemd e reiniciar o serviço
-echo "Recarregando o systemd..."
+# 8. Recarregar o systemd e habilitar o serviço
 sudo systemctl daemon-reload
-
 sudo systemctl enable postfwd3.service
-sudo systemctl start postfwd3.service
+sudo systemctl restart postfwd3.service
 
 echo "==================================================== POSTFIX ===================================================="
 
@@ -709,9 +707,6 @@ sudo chmod 644 /var/lib/opendmarc/opendmarc.dat
 sudo touch /run/opendmarc/opendmarc.pid
 sudo chown opendmarc:opendmarc /run/opendmarc/opendmarc.pid
 sudo chmod 600 /run/opendmarc/opendmarc.pid
-
-echo "Reiniciando o serviço postfwd..." 
-sudo systemctl restart postfwd3.service
 
 # Configurar e reiniciar o OpenDKIM
 sudo systemctl restart opendkim
