@@ -433,10 +433,33 @@ SERVICE_FILE="/etc/systemd/system/postfwd2.service"
 CONFIG_FILE="/etc/postfix/postfwd.cf"
 LOG_FILE="/var/log/postfwd.log"
 PID_FILE="/var/tmp/postfwd3-master.pid"
+POSTFWD_BIN="/usr/local/bin/postfwd2"
 
-# Criar o arquivo de configuração postfwd.cf com as regras no local correto
-echo "Criando o arquivo /etc/postfix/postfwd.cf..."
-sudo tee /etc/postfix/postfwd.cf > /dev/null <<EOF
+echo "### Iniciando configuração do postfwd2 ###"
+
+# 2. Verificar e instalar o postfwd2 se necessário
+if [ ! -f "${POSTFWD_BIN}" ]; then
+    echo "O arquivo ${POSTFWD_BIN} não foi encontrado. Instalando o postfwd2..."
+    
+    # Instalar dependências necessárias
+    sudo apt update
+    sudo apt install -y perl libdigest-sha-perl
+
+    # Baixar o script postfwd2
+    sudo wget --no-check-certificate https://postfwd.org/postfwd2 -O "${POSTFWD_BIN}"
+
+    # Tornar o script executável
+    sudo chmod +x "${POSTFWD_BIN}"
+    echo "postfwd2 instalado com sucesso em ${POSTFWD_BIN}."
+else
+    echo "O arquivo ${POSTFWD_BIN} já existe. Pulando a instalação."
+fi
+
+# 3. Criar ou sobrescrever o arquivo de configuração
+echo "Criando o arquivo de configuração ${CONFIG_FILE}..."
+sudo tee "${CONFIG_FILE}" > /dev/null <<EOF
+logfile = ${LOG_FILE}
+
 # Adiciona regras de controle de limites
 #######################################################
 # Regras de Controle de Limites por Servidor
@@ -562,12 +585,12 @@ pattern=recipient
 action=permit
 EOF
 
-# 3. Ajustar permissões do arquivo de configuração
+# 4. Ajustar permissões do arquivo de configuração
 echo "Ajustando permissões do arquivo ${CONFIG_FILE}..."
-sudo chown root:root "${CONFIG_FILE}"
+sudo chown postfw:postfix "${CONFIG_FILE}"
 sudo chmod 640 "${CONFIG_FILE}"
 
-# 4. Remover o arquivo de PID, se existir
+# 5. Remover o arquivo de PID, se existir
 if [ -f "${PID_FILE}" ]; then
     echo "Removendo arquivo de PID existente (${PID_FILE})..."
     sudo rm -f "${PID_FILE}"
@@ -577,7 +600,7 @@ fi
 echo "Ajustando permissões do diretório /var/tmp..."
 sudo chmod 1777 /var/tmp
 
-# 5. Atualizar o arquivo de serviço, se necessário
+# 6. Atualizar o arquivo de serviço, se necessário
 if [ -f "${SERVICE_FILE}" ]; then
     echo "Atualizando o arquivo de serviço ${SERVICE_FILE}..."
     sudo cp "${SERVICE_FILE}" "${SERVICE_FILE}.bak"
@@ -591,8 +614,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
-Group=root
+User=postfw
+Group=postfix
 ExecStart=/usr/local/bin/postfwd2 -g postfix -f /etc/postfix/postfwd.cf
 Restart=on-failure
 
@@ -601,7 +624,7 @@ WantedBy=multi-user.target
 EOF
 fi
 
-# 6. Recarregar e reiniciar o serviço
+# 7. Recarregar e reiniciar o serviço
 echo "Recarregando o systemd..."
 sudo systemctl daemon-reload
 
