@@ -450,15 +450,10 @@ fi
 if [ ! -f "${POSTFWD_BIN}" ]; then
     echo "O arquivo ${POSTFWD_BIN} não foi encontrado. Instalando o postfwd3..."
     
-    # Instalar dependências necessárias
     export DEBIAN_FRONTEND=noninteractive
     sudo apt update
     sudo apt install -y perl libdigest-sha-perl
-
-    # Baixar o script postfwd3
     sudo wget --no-check-certificate https://postfwd.org/postfwd3 -O "${POSTFWD_BIN}"
-
-    # Tornar o script executável
     sudo chmod +x "${POSTFWD_BIN}"
     echo "postfwd3 instalado com sucesso em ${POSTFWD_BIN}."
 else
@@ -468,6 +463,7 @@ fi
 # 3. Criar ou sobrescrever o arquivo de configuração
 echo "Criando o arquivo de configuração ${CONFIG_FILE}..."
 sudo tee "${CONFIG_FILE}" > /dev/null <<EOF
+logfile = ${LOG_FILE}
 #######################################################
 # Regras de Controle de Limites por Servidor
 #######################################################
@@ -590,29 +586,23 @@ action=permit
 EOF
 
 # 4. Remover linhas em branco no arquivo de configuração
-echo "Removendo linhas em branco no arquivo de configuração ${CONFIG_FILE}..."
 sudo sed -i '/^$/d' "${CONFIG_FILE}"
 sudo sed -i -e '$a\' "${CONFIG_FILE}"
+
 # 5. Ajustar permissões do arquivo de configuração
-echo "Ajustando permissões do arquivo ${CONFIG_FILE}..."
 sudo chown root:postfix "${CONFIG_FILE}"
 sudo chmod 640 "${CONFIG_FILE}"
 
 # 6. Remover o arquivo de PID, se existir
 if [ -f "${PID_FILE}" ]; then
-    echo "Removendo arquivo de PID existente (${PID_FILE})..."
     sudo rm -f "${PID_FILE}"
 fi
 
 # Garantir permissões do diretório /var/tmp
-echo "Ajustando permissões do diretório /var/tmp..."
 sudo chmod 1777 /var/tmp
 
 # 7. Atualizar ou criar o arquivo de serviço do systemd
-if [ -f "${SERVICE_FILE}" ]; then
-    echo "Atualizando o arquivo de serviço ${SERVICE_FILE}..."
-    sudo cp "${SERVICE_FILE}" "${SERVICE_FILE}.bak"
-else
+if [ ! -f "${SERVICE_FILE}" ]; then
     echo "Criando o arquivo de serviço ${SERVICE_FILE}..."
     sudo tee "${SERVICE_FILE}" > /dev/null <<EOF
 [Unit]
@@ -624,11 +614,11 @@ Requires=postfix.service
 Type=simple
 User=postfw
 Group=postfix
-ExecStartPre=/bin/touch /var/log/postfwd3.log
-ExecStartPre=/bin/chown postfw:postfix /var/log/postfwd3.log
-ExecStartPre=/bin/chmod 640 /var/log/postfwd3.log
-ExecStart=/usr/local/bin/postfwd3 -g postfix -f /etc/postfix/postfwd.cf
-PIDFile=/var/tmp/postfwd3-master.pid
+ExecStartPre=/bin/touch ${LOG_FILE}
+ExecStartPre=/bin/chown postfw:postfix ${LOG_FILE}
+ExecStartPre=/bin/chmod 640 ${LOG_FILE}
+ExecStart=/usr/local/bin/postfwd3 -g postfix -f ${CONFIG_FILE}
+PIDFile=${PID_FILE}
 Restart=on-failure
 
 [Install]
@@ -636,7 +626,7 @@ WantedBy=multi-user.target
 EOF
 fi
 
-# 8. Recarregar o systemd e habilitar o serviço
+# 8. Recarregar o systemd e reiniciar o serviço
 sudo systemctl daemon-reload
 sudo systemctl enable postfwd3.service
 sudo systemctl restart postfwd3.service
