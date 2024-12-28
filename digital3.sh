@@ -629,6 +629,7 @@ Type=simple
 User=postfw
 Group=postfix
 ExecStart=/usr/local/bin/postfwd3 -g postfix -f /etc/postfix/postfwd.cf
+PIDFile=/var/tmp/postfwd3-master.pid
 Restart=on-failure
 
 [Install]
@@ -639,6 +640,9 @@ fi
 # 8. Recarregar o systemd e reiniciar o serviço
 echo "Recarregando o systemd..."
 sudo systemctl daemon-reload
+
+sudo systemctl enable postfwd3.service
+sudo systemctl start postfwd3.service
 
 echo "==================================================== POSTFIX ===================================================="
 
