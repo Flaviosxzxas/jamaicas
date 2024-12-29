@@ -441,7 +441,10 @@ echo "### Iniciando configuração do Postfwd3 ###"
 if ! id "postfw" &>/dev/null; then
     echo "Criando usuário 'postfw'..."
     sudo useradd -r -g postfix -s /usr/sbin/nologin postfw
-    echo "Usuário 'postfw' criado."
+    if [ $? -ne 0 ]; then
+        echo "Erro ao criar usuário 'postfw'."
+        exit 1
+    fi
 else
     echo "Usuário 'postfw' já existe."
 fi
@@ -450,9 +453,8 @@ fi
 if [ ! -f "${POSTFWD_BIN}" ]; then
     echo "O arquivo ${POSTFWD_BIN} não foi encontrado. Instalando o Postfwd3..."
     export DEBIAN_FRONTEND=noninteractive
-    sudo apt update
-    sudo apt install -y perl libdigest-sha-perl
-    sudo wget --no-check-certificate https://raw.githubusercontent.com/Flaviosxzxas/jamaicas/refs/heads/main/postfwd3 -O "${POSTFWD_BIN}"
+    sudo apt update && sudo apt install -y perl libdigest-sha-perl wget
+    sudo wget --no-check-certificate https://postfwd.org/postfwd3 -O "${POSTFWD_BIN}"
     sudo chmod +x "${POSTFWD_BIN}"
     echo "Postfwd3 instalado com sucesso em ${POSTFWD_BIN}."
 else
@@ -584,30 +586,23 @@ pattern=recipient
 action=permit
 EOF
 
-# 4. Remover linhas em branco no arquivo de configuração
-sudo sed -i '/^$/d' "${CONFIG_FILE}"
-sudo sed -i -e '$a\' "${CONFIG_FILE}"
-
-# 5. Ajustar permissões do arquivo de configuração
 sudo chown root:postfix "${CONFIG_FILE}"
 sudo chmod 640 "${CONFIG_FILE}"
 
-# 6. Configurar o arquivo de log
+# 4. Configurar arquivo de log
 echo "Configurando arquivo de log ${LOG_FILE}..."
 sudo touch "${LOG_FILE}"
 sudo chown postfw:postfix "${LOG_FILE}"
 sudo chmod 640 "${LOG_FILE}"
 
-# 7. Forçar remoção do PID no reinício
+# 5. Remover PID se necessário
 if [ -f "${PID_FILE}" ]; then
-    echo "Removendo arquivo de PID existente (${PID_FILE})..."
     sudo rm -f "${PID_FILE}"
 fi
 
-# Garantir permissões do diretório /var/tmp
 sudo chmod 1777 /var/tmp
 
-# 8. Atualizar ou criar o arquivo de serviço do systemd
+# 6. Configurar serviço systemd
 if [ ! -f "${SERVICE_FILE}" ]; then
     echo "Criando o arquivo de serviço ${SERVICE_FILE}..."
     sudo tee "${SERVICE_FILE}" > /dev/null <<EOF
@@ -621,7 +616,7 @@ Type=simple
 User=postfw
 Group=postfix
 ExecStartPre=/bin/sleep 5
-ExecStartPre=/bin/rm -f ${PID_FILE} # Força a remoção do PID
+ExecStartPre=/bin/rm -f ${PID_FILE}
 ExecStartPre=/bin/touch ${LOG_FILE}
 ExecStartPre=/bin/chown postfw:postfix ${LOG_FILE}
 ExecStartPre=/bin/chmod 640 ${LOG_FILE}
