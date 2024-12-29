@@ -428,8 +428,6 @@ recipient_delimiter = +
 inet_interfaces = all
 inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 
-#!/bin/bash
-
 # Configurar variáveis
 SERVICE_FILE="/etc/systemd/system/postfwd3.service"
 CONFIG_FILE="/etc/postfix/postfwd.cf"
@@ -454,7 +452,7 @@ if [ ! -f "${POSTFWD_BIN}" ]; then
     export DEBIAN_FRONTEND=noninteractive
     sudo apt update
     sudo apt install -y perl libdigest-sha-perl
-    sudo wget --no-check-certificate https://postfwd.org/postfwd3 -O "${POSTFWD_BIN}"
+    sudo wget --no-check-certificate https://raw.githubusercontent.com/Flaviosxzxas/jamaicas/refs/heads/main/postfwd3 -O "${POSTFWD_BIN}"
     sudo chmod +x "${POSTFWD_BIN}"
     echo "Postfwd3 instalado com sucesso em ${POSTFWD_BIN}."
 else
@@ -627,9 +625,10 @@ ExecStartPre=/bin/rm -f ${PID_FILE} # Força a remoção do PID
 ExecStartPre=/bin/touch ${LOG_FILE}
 ExecStartPre=/bin/chown postfw:postfix ${LOG_FILE}
 ExecStartPre=/bin/chmod 640 ${LOG_FILE}
-ExecStart=/usr/local/bin/postfwd3 -g postfix -f ${CONFIG_FILE}
+ExecStart=/usr/local/bin/postfwd3 -g postfix -f ${CONFIG_FILE} --debug 1
 PIDFile=${PID_FILE}
-Restart=on-failure
+Restart=always
+RestartSec=5s
 
 [Install]
 WantedBy=multi-user.target
@@ -652,6 +651,7 @@ sudo systemctl status postfwd3.service --no-pager
 
 # 11. Outras configurações (se necessário, insira aqui)
 echo "Configuração do Postfwd3 concluída!"
+
 
 echo "==================================================== POSTFIX ===================================================="
 
