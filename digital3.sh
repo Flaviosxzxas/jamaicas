@@ -438,6 +438,22 @@ then
     export DEBIAN_FRONTEND=noninteractive
     sudo apt update
     sudo apt install postfwd -y
+
+    # Garantir que o grupo nobody exista
+    sudo groupadd nobody
+
+    # Verificar se o arquivo de configuração do postfwd existe e corrigir permissões
+    if [ ! -f "$POSTFWD_CONF" ]; then
+        echo "Erro: $POSTFWD_CONF não encontrado!"
+        exit 1
+    fi
+    sudo chmod 644 "$POSTFWD_CONF"
+
+    # Verificar e corrigir permissões do diretório /var/tmp
+    if [ ! -d /var/tmp ]; then
+        sudo mkdir -p /var/tmp
+    fi
+    sudo chmod 1777 /var/tmp
 else
     echo "Postfwd já está instalado."
 fi
