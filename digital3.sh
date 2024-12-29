@@ -441,11 +441,19 @@ else
     echo "Usuário 'postfw' já existe."
 fi
 
+# Garantir que o grupo 'nobody' exista
+if ! getent group nobody &>/dev/null; then
+    echo "Criando grupo 'nobody'..."
+    sudo groupadd nobody || { echo "Erro ao criar grupo 'nobody'."; exit 1; }
+else
+    echo "Grupo 'nobody' já existe."
+fi
+
 # Verificar se o postfwd está instalado
 if ! command -v postfwd &>/dev/null; then
     echo "Postfwd não encontrado. Instalando..."
     export DEBIAN_FRONTEND=noninteractive
-    sudo apt-get update && sudo apt-get install postfwd -y || { echo "Erro ao instalar o postfwd."; exit 1; }
+    sudo apt update && sudo apt install postfwd -y || { echo "Erro ao instalar o postfwd."; exit 1; }
 fi
 
 # Verificar se o arquivo de configuração do Postfwd existe
@@ -594,7 +602,7 @@ After=network.target postfix.service
 Requires=postfix.service
 
 [Service]
-ExecStart=/usr/sbin/postfwd
+ExecStart=/usr/sbin/postfwd -f /etc/postfix/postfwd.cf
 ExecReload=/bin/kill -HUP \$MAINPID
 PIDFile=/var/run/postfwd/postfwd.pid
 Restart=on-failure
