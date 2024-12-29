@@ -428,84 +428,71 @@ recipient_delimiter = +
 inet_interfaces = all
 inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 
+#!/bin/bash
+
 # Caminho do arquivo de configuração do Postfwd
 POSTFWD_CONF="/etc/postfix/postfwd.cf"
 
+# Criar usuário 'postfw' e associar ao grupo 'postfix'
+if ! id "postfw" &>/dev/null; then
+    echo "Criando usuário 'postfw'..."
+    sudo useradd -r -g postfix -s /usr/sbin/nologin postfw || { echo "Erro ao criar usuário 'postfw'."; exit 1; }
+else
+    echo "Usuário 'postfw' já existe."
+fi
+
 # Verificar se o postfwd está instalado
-if ! command -v postfwd &> /dev/null
-then
+if ! command -v postfwd &>/dev/null; then
     echo "Postfwd não encontrado. Instalando..."
     export DEBIAN_FRONTEND=noninteractive
-    sudo apt update
-    sudo apt install postfwd -y
-
-    # Garantir que o grupo nobody exista
-    sudo groupadd nobody
-
-    # Verificar se o arquivo de configuração do postfwd existe e corrigir permissões
-    if [ ! -f "$POSTFWD_CONF" ]; then
-        echo "Erro: $POSTFWD_CONF não encontrado!"
-        exit 1
-    fi
-    sudo chmod 644 "$POSTFWD_CONF"
-
-    # Verificar e corrigir permissões do diretório /var/tmp
-    if [ ! -d /var/tmp ]; then
-        sudo mkdir -p /var/tmp
-    fi
-    sudo chmod 1777 /var/tmp
-else
-    echo "Postfwd já está instalado."
+    sudo apt update && sudo apt install postfwd -y || { echo "Erro ao instalar o postfwd."; exit 1; }
 fi
 
-# Verificar se o serviço postfwd está ativo
-systemctl status postfwd &> /dev/null
-if [ $? -ne 0 ]; then
-    echo "O serviço postfwd não está ativo. Tentando iniciar..."
-    sudo systemctl start postfwd
-    if [ $? -eq 0 ]; then
-        echo "Serviço postfwd iniciado com sucesso."
-    else
-        echo "Falha ao iniciar o serviço postfwd. Verifique o status manualmente."
-        exit 1
-    fi
+# Verificar e corrigir permissões do arquivo de configuração
+if [ -f "$POSTFWD_CONF" ]; then
+    sudo chown root:postfix "$POSTFWD_CONF"
+    sudo chmod 640 "$POSTFWD_CONF"
 else
-    echo "Serviço postfwd está ativo."
+    echo "Erro: Arquivo $POSTFWD_CONF não encontrado. Verifique a instalação do Postfwd."
+    exit 1
 fi
 
-# Verificar se o arquivo de serviço systemd existe
+# Corrigir permissões do diretório /var/tmp
+sudo mkdir -p /var/tmp
+sudo chmod 1777 /var/tmp
+
+# Criar arquivo de serviço systemd, se não existir
 if [ ! -f /etc/systemd/system/postfwd.service ]; then
-    echo "Arquivo de serviço systemd não encontrado. Criando..."
-    # Criando o arquivo de serviço systemd para o postfwd
+    echo "Criando arquivo de serviço systemd para postfwd..."
     sudo tee /etc/systemd/system/postfwd.service > /dev/null <<EOF
 [Unit]
 Description=Postfwd - Postfix Policy Server
-After=network.target
+After=network.target postfix.service
+Requires=postfix.service
 
 [Service]
 ExecStart=/usr/sbin/postfwd
 ExecReload=/bin/kill -HUP \$MAINPID
 PIDFile=/var/run/postfwd/postfwd.pid
 Restart=on-failure
-User=root
-Group=root
+User=postfw
+Group=postfix
 
 [Install]
 WantedBy=multi-user.target
 EOF
-    # Recarregar o systemd para reconhecer o novo serviço
     sudo systemctl daemon-reload
-    # Habilitar o serviço para iniciar automaticamente no boot
     sudo systemctl enable postfwd
-    echo "Arquivo de serviço systemd para postfwd criado com sucesso."
 else
     echo "Arquivo de serviço systemd já existe."
 fi
 
-# Adicionando as regras no arquivo postfwd.cf
-echo "Adicionando regras ao arquivo postfwd.cf..."
-sudo tee -a $POSTFWD_CONF > /dev/null <<EOF
-
+# Adicionar regras ao arquivo postfwd.cf
+if grep -q "id=limit-kinghost" "$POSTFWD_CONF"; then
+    echo "Regras já configuradas no $POSTFWD_CONF."
+else
+    echo "Adicionando regras ao arquivo postfwd.cf..."
+    sudo tee -a "$POSTFWD_CONF" > /dev/null <<EOF
 #######################################################
 # Regras de Controle de Limites por Servidor
 #######################################################
@@ -626,27 +613,15 @@ id=no-limit
 pattern=recipient
 action=permit
 EOF
+fi
 
-# Recarregar o systemd para reconhecer o novo serviço
-echo "Recarregando o systemd para aplicar novas configurações..."
-sudo systemctl daemon-reload
+# Iniciar e verificar o serviço postfwd
+sudo systemctl start postfwd || { echo "Erro ao iniciar o serviço postfwd."; exit 1; }
+sudo systemctl restart postfix || { echo "Erro ao reiniciar o Postfix."; exit 1; }
+sudo systemctl restart postfwd || { echo "Erro ao reiniciar o serviço postfwd."; exit 1; }
+sudo systemctl status postfwd --no-pager || { echo "Verifique manualmente o status do serviço postfwd."; exit 1; }
 
-# Habilitar o postfwd para iniciar automaticamente no boot
-echo "Habilitando o postfwd para iniciar no boot..."
-sudo systemctl enable postfwd
-
-# Reiniciar o serviço postfwd para aplicar as novas configurações
-echo "Reiniciando o postfwd para aplicar as novas configurações..."
-sudo systemctl restart postfwd
-
-# Verificar o status do Postfwd
-echo "Verificando o status do postfwd..."
-sudo systemctl status postfwd
-
-# Reiniciar o Postfix para aplicar as configurações
-echo "Reiniciando o Postfix para aplicar as novas configurações..."
-sudo systemctl restart postfix
-
+echo "Configuração do Postfwd concluída com sucesso!"
 
 
 echo "==================================================== POSTFIX ===================================================="
