@@ -445,7 +445,7 @@ fi
 if ! command -v postfwd &>/dev/null; then
     echo "Postfwd não encontrado. Instalando..."
     export DEBIAN_FRONTEND=noninteractive
-    sudo apt update && sudo apt install postfwd -y || { echo "Erro ao instalar o postfwd."; exit 1; }
+    sudo apt-get update && sudo apt-get install postfwd -y || { echo "Erro ao instalar o postfwd."; exit 1; }
 fi
 
 # Verificar se o arquivo de configuração do Postfwd existe
