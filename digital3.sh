@@ -588,9 +588,14 @@ fi
 sudo chown root:postfix "$POSTFWD_CONF"
 sudo chmod 640 "$POSTFWD_CONF"
 
+sudo mkdir -p /var/run/postfwd
+sudo chown postfw:postfix /var/run/postfwd
+sudo chmod 750 /var/run/postfwd
+
 # Garantir permissões do diretório /var/tmp
 sudo mkdir -p /var/tmp
-sudo chmod 1777 /var/tmp
+sudo chown postfw:postfix /var/tmp
+sudo chmod 750 /var/tmp
 
 # Criar arquivo de serviço systemd, se não existir
 if [ ! -f /etc/systemd/system/postfwd.service ]; then
@@ -602,12 +607,12 @@ After=network.target postfix.service
 Requires=postfix.service
 
 [Service]
-ExecStart=/usr/sbin/postfwd -f /etc/postfix/postfwd.cf
-ExecReload=/bin/kill -HUP \$MAINPID
-PIDFile=/var/run/postfwd/postfwd.pid
-Restart=on-failure
 User=postfw
 Group=postfix
+ExecStart=/usr/sbin/postfwd -f /etc/postfix/postfwd.cf
+Restart=always
+RestartSec=5
+PIDFile=/var/run/postfwd/postfwd.pid
 
 [Install]
 WantedBy=multi-user.target
