@@ -622,6 +622,7 @@ Requires=postfix.service
 Type=simple
 User=postfw
 Group=postfix
+ExecStartPre=/bin/sleep 5
 ExecStartPre=/bin/rm -f ${PID_FILE} # Força a remoção do PID
 ExecStartPre=/bin/touch ${LOG_FILE}
 ExecStartPre=/bin/chown postfw:postfix ${LOG_FILE}
