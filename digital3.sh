@@ -226,7 +226,7 @@ echo "Atualizando aliases..."
 sudo newaliases
 
 # Instalar Postfix e outros pacotes necessários
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postfix opendmarc pflogsumm postfwd
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postfix opendmarc pflogsumm
 wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Configurações básicas do Postfix
@@ -448,51 +448,10 @@ if ! command -v postfwd &>/dev/null; then
     sudo apt update && sudo apt install postfwd -y || { echo "Erro ao instalar o postfwd."; exit 1; }
 fi
 
-# Verificar e corrigir permissões do arquivo de configuração
-if [ -f "$POSTFWD_CONF" ]; then
-    sudo chown root:postfix "$POSTFWD_CONF"
-    sudo chmod 640 "$POSTFWD_CONF"
-else
-    echo "Erro: Arquivo $POSTFWD_CONF não encontrado. Verifique a instalação do Postfwd."
-    exit 1
-fi
-
-# Corrigir permissões do diretório /var/tmp
-sudo mkdir -p /var/tmp
-sudo chmod 1777 /var/tmp
-
-# Criar arquivo de serviço systemd, se não existir
-if [ ! -f /etc/systemd/system/postfwd.service ]; then
-    echo "Criando arquivo de serviço systemd para postfwd..."
-    sudo tee /etc/systemd/system/postfwd.service > /dev/null <<EOF
-[Unit]
-Description=Postfwd - Postfix Policy Server
-After=network.target postfix.service
-Requires=postfix.service
-
-[Service]
-ExecStart=/usr/sbin/postfwd
-ExecReload=/bin/kill -HUP \$MAINPID
-PIDFile=/var/run/postfwd/postfwd.pid
-Restart=on-failure
-User=postfw
-Group=postfix
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    sudo systemctl daemon-reload
-    sudo systemctl enable postfwd
-else
-    echo "Arquivo de serviço systemd já existe."
-fi
-
-# Adicionar regras ao arquivo postfwd.cf
-if grep -q "id=limit-kinghost" "$POSTFWD_CONF"; then
-    echo "Regras já configuradas no $POSTFWD_CONF."
-else
-    echo "Adicionando regras ao arquivo postfwd.cf..."
-    sudo tee -a "$POSTFWD_CONF" > /dev/null <<EOF
+# Verificar se o arquivo de configuração do Postfwd existe
+if [ ! -f "$POSTFWD_CONF" ]; then
+    echo "Arquivo $POSTFWD_CONF não encontrado. Criando..."
+    sudo tee "$POSTFWD_CONF" > /dev/null <<EOF
 #######################################################
 # Regras de Controle de Limites por Servidor
 #######################################################
@@ -613,12 +572,50 @@ id=no-limit
 pattern=recipient
 action=permit
 EOF
+else
+    echo "Arquivo de configuração $POSTFWD_CONF já existe."
+fi
+
+# Ajustar permissões do arquivo de configuração
+sudo chown root:postfix "$POSTFWD_CONF"
+sudo chmod 640 "$POSTFWD_CONF"
+
+# Garantir permissões do diretório /var/tmp
+sudo mkdir -p /var/tmp
+sudo chmod 1777 /var/tmp
+
+# Criar arquivo de serviço systemd, se não existir
+if [ ! -f /etc/systemd/system/postfwd.service ]; then
+    echo "Criando arquivo de serviço systemd para postfwd..."
+    sudo tee /etc/systemd/system/postfwd.service > /dev/null <<EOF
+[Unit]
+Description=Postfwd - Postfix Policy Server
+After=network.target postfix.service
+Requires=postfix.service
+
+[Service]
+ExecStart=/usr/sbin/postfwd
+ExecReload=/bin/kill -HUP \$MAINPID
+PIDFile=/var/run/postfwd/postfwd.pid
+Restart=on-failure
+User=postfw
+Group=postfix
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    sudo systemctl daemon-reload
+    sudo systemctl enable postfwd
+else
+    echo "Arquivo de serviço systemd já existe."
 fi
 
 # Iniciar e verificar o serviço postfwd
 sudo systemctl start postfwd || { echo "Erro ao iniciar o serviço postfwd."; exit 1; }
 sudo systemctl restart postfix || { echo "Erro ao reiniciar o Postfix."; exit 1; }
 sudo systemctl restart postfwd || { echo "Erro ao reiniciar o serviço postfwd."; exit 1; }
+
+# Verificar o status do serviço
 sudo systemctl status postfwd --no-pager || { echo "Verifique manualmente o status do serviço postfwd."; exit 1; }
 
 echo "Configuração do Postfwd concluída com sucesso!"
