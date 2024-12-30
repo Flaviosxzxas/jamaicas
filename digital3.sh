@@ -585,16 +585,16 @@ else
 fi
 
 # Ajustar permissões do arquivo de configuração
-sudo chown root:postfix "$POSTFWD_CONF"
+sudo chown root:root "$POSTFWD_CONF"
 sudo chmod 640 "$POSTFWD_CONF"
 
 sudo mkdir -p /var/run/postfwd
-sudo chown postfw:postfix /var/run/postfwd
+sudo chown root:root /var/run/postfwd
 sudo chmod 750 /var/run/postfwd
 
 # Garantir permissões do diretório /var/tmp
 sudo mkdir -p /var/tmp
-sudo chown postfw:postfix /var/tmp
+sudo chown root:root /var/tmp
 sudo chmod 750 /var/tmp
 
 # Criar arquivo de serviço systemd, se não existir
@@ -607,12 +607,10 @@ After=network.target postfix.service
 Requires=postfix.service
 
 [Service]
-User=postfw
+User =postfw
 Group=postfix
-ExecStart=/usr/sbin/postfwd -f /etc/postfix/postfwd.cf
-Restart=always
-RestartSec=5
-PIDFile=/var/run/postfwd/postfwd.pid
+ExecStart=/usr/sbin/postfwd -f /etc/postfwd/postfwd.cf
+Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
