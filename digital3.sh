@@ -461,6 +461,8 @@ if [ ! -f "$POSTFWD_CONF" ]; then
     echo "Arquivo $POSTFWD_CONF não encontrado. Criando..."
     sudo tee "$POSTFWD_CONF" > /dev/null <<EOF
 #######################################################
+pidfile=/run/postfwd/postfwd.pid
+#######################################################
 # Regras de Controle de Limites por Servidor
 #######################################################
 # KingHost
@@ -584,6 +586,23 @@ else
     echo "Arquivo de configuração $POSTFWD_CONF já existe."
 fi
 
+# Adicionar Postfwd ao master.cf, se ainda não estiver presente
+MASTER_CF="/etc/postfix/master.cf"
+POSTFWD_ENTRY="127.0.0.1:10040 inet  n  -  n  -  1  spawn\n  user=nobody argv=/usr/sbin/postfwd2 -f /etc/postfix/postfwd.cf"
+
+echo "Verificando se a entrada do Postfwd já está presente no master.cf..."
+if ! grep -q "127.0.0.1:10040 inet" "$MASTER_CF"; then
+    echo "Adicionando entrada do Postfwd ao master.cf..."
+    sudo tee -a "$MASTER_CF" > /dev/null <<EOF
+
+# Postfwd Policy Server
+$POSTFWD_ENTRY
+EOF
+    echo "Entrada adicionada com sucesso!"
+else
+    echo "A entrada do Postfwd já existe no master.cf."
+fi
+
 # Criar usuário e grupo dedicados para o Postfwd
 echo "Criando usuário e grupo dedicados para o Postfwd..."
 sudo useradd -r -s /sbin/nologin postfwd
@@ -597,7 +616,7 @@ sudo chmod 640 "$POSTFWD_CONF"
 # Criar e ajustar permissões do diretório de PID
 echo "Criando e ajustando permissões do diretório de PID..."
 sudo mkdir -p "$POSTFWD_PID_DIR"
-sudo chown postfwd:postfwd "$POSTFWD_PID_DIR"
+sudo chown postfix:postfix "$POSTFWD_PID_DIR"
 sudo chmod 750 "$POSTFWD_PID_DIR"
 
 # Criar e ajustar permissões do diretório temporário, se necessário
@@ -618,17 +637,13 @@ After=network.target
 
 [Service]
 Type=simple
-User =postfwd
-Group=postfwd
-KillMode=mixed
-ExecStartPre=/bin/rm -f /var/run/postfwd/postfwd.pid
-ExecStart=/usr/sbin/postfwd -f /etc/postfix/postfwd.cf -vv
-ExecStop=/bin/killall -q postfwd
-Restart=always
-PIDFile=/var/run/postfwd/postfwd.pid
+ExecStart=/usr/sbin/postfwd -f /etc/postfix/postfwd.cf -vv --pidfile /run/postfwd/postfwd.pid
+PIDFile=/run/postfwd/postfwd.pid
+Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
+
 EOF
     sudo systemctl daemon-reload
     sudo systemctl enable postfwd
