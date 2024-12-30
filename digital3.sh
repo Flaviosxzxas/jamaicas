@@ -336,8 +336,8 @@ smtpd_recipient_restrictions =
     check_recipient_access hash:/etc/postfix/access.recipients,
     permit_sasl_authenticated,
     reject_unauth_destination,
-    check_policy_service inet:127.0.0.1:10040,
-    reject_unknown_recipient_domain
+    reject_unknown_recipient_domain,
+    check_policy_service inet:127.0.0.1:10040
 
 # Limites de conexão
 smtpd_client_connection_rate_limit = 100
@@ -603,14 +603,19 @@ if [ ! -f /etc/systemd/system/postfwd.service ]; then
     sudo tee /etc/systemd/system/postfwd.service > /dev/null <<EOF
 [Unit]
 Description=Postfwd - Postfix Policy Server
-After=network.target postfix.service
-Requires=postfix.service
+After=network.target
 
 [Service]
-User =postfw
-Group=postfix
-ExecStart=/usr/sbin/postfwd -f /etc/postfwd/postfwd.cf
-Restart=on-failure
+Type=simple
+User =postfwd
+Group=postfwd
+KillMode=control-group
+KillSignal=SIGTERM
+ExecStartPre=/bin/rm -f /var/run/postfwd/postfwd.pid
+ExecStart=/usr/sbin/postfwd -f /etc/postfix/postfwd.cf
+ExecStop=/bin/kill -9 $MAINPID
+Restart=always
+PIDFile=/var/run/postfwd/postfwd.pid
 
 [Install]
 WantedBy=multi-user.target
