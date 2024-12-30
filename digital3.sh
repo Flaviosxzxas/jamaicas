@@ -337,7 +337,7 @@ smtpd_recipient_restrictions =
     permit_sasl_authenticated,
     reject_unauth_destination,
     reject_unknown_recipient_domain,
-    check_policy_service inet:127.0.0.1:10040
+    check_policy_service inet:127.0.0.1:10045
 
 # Limites de conexão
 smtpd_client_connection_rate_limit = 100
@@ -586,13 +586,20 @@ else
 fi
 
 # Ajustar permissões do arquivo de configuração do Postfwd
+# Ajustar permissões do arquivo de configuração do Postfwd
 if [ -f "$POSTFWD_CONF" ]; then
     echo "Ajustando permissões do arquivo de configuração do Postfwd..."
-    sudo chown postfwd:postfwd "$POSTFWD_CONF"  # Garantir que o arquivo seja de propriedade do usuário postfwd
-    sudo chmod 640 "$POSTFWD_CONF"
+    sudo chown postfwd:postfwd "$POSTFWD_CONF"  # Alterar propriedade para postfwd:postfwd
+    if [ $? -eq 0 ]; then
+        echo "Permissões ajustadas com sucesso para $POSTFWD_CONF."
+    else
+        echo "Erro ao ajustar as permissões de $POSTFWD_CONF."
+    fi
+    sudo chmod 640 "$POSTFWD_CONF"  # Garantir permissões adequadas
 else
     echo "Arquivo de configuração $POSTFWD_CONF não encontrado para ajuste de permissões."
 fi
+
 
 # Criar e ajustar permissões do diretório de PID
 echo "Criando e ajustando permissões do diretório de PID..."
@@ -633,11 +640,11 @@ fi
 
 # Adicionar Postfwd ao master.cf, se ainda não estiver presente
 MASTER_CF="/etc/postfix/master.cf"
-POSTFWD_ENTRY="127.0.0.1:10040 inet  n  -  n  -  1  spawn
+POSTFWD_ENTRY="127.0.0.1:10045 inet  n  -  n  -  1  spawn
   user=nobody argv=/usr/sbin/postfwd2 -f /etc/postfix/postfwd.cf"
 
 echo "Verificando se a entrada do Postfwd já está presente no master.cf..."
-if ! grep -q "127.0.0.1:10040 inet" "$MASTER_CF"; then
+if ! grep -q "127.0.0.1:10045 inet" "$MASTER_CF"; then
     echo "Adicionando entrada do Postfwd ao master.cf..."
     sudo tee -a "$MASTER_CF" > /dev/null <<EOF
 
@@ -659,7 +666,6 @@ sudo systemctl restart postfwd || { echo "Erro ao reiniciar o serviço postfwd."
 sudo systemctl status postfwd --no-pager || { echo "Verifique manualmente o status do serviço postfwd."; exit 1; }
 
 echo "Configuração do Postfwd concluída com sucesso!"
-
 
 echo "==================================================== POSTFIX ===================================================="
 
