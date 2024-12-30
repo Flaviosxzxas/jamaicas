@@ -433,12 +433,13 @@ POSTFWD_CONF="/etc/postfix/postfwd.cf"
 POSTFWD_PID_DIR="/var/run/postfwd"
 POSTFWD_TMP_DIR="/var/tmp"
 
-# Criar usuário 'postfwd' e associar ao grupo 'postfix'
+# Criar usuário e grupo 'postfwd', se necessário
 if ! id "postfwd" &>/dev/null; then
-    echo "Criando usuário 'postfwd'..."
-    sudo useradd -r -g postfix -s /usr/sbin/nologin postfwd || { echo "Erro ao criar usuário 'postfwd'."; exit 1; }
+    echo "Criando usuário e grupo 'postfwd'..."
+    sudo groupadd postfwd || { echo "Erro ao criar grupo 'postfwd'."; exit 1; }
+    sudo useradd -r -g postfwd -s /usr/sbin/nologin postfwd || { echo "Erro ao criar usuário 'postfwd'."; exit 1; }
 else
-    echo "Usuário 'postfwd' já existe."
+    echo "Usuário e grupo 'postfwd' já existem."
 fi
 
 # Garantir que o grupo 'nobody' exista
@@ -449,11 +450,13 @@ else
     echo "Grupo 'nobody' já existe."
 fi
 
-# Verificar se o postfwd está instalado
+# Instalar Postfwd, se não estiver instalado
 if ! command -v postfwd &>/dev/null; then
     echo "Postfwd não encontrado. Instalando..."
     export DEBIAN_FRONTEND=noninteractive
-    sudo apt update && sudo apt install postfwd -y || { echo "Erro ao instalar o postfwd."; exit 1; }
+    sudo apt-get update -y && sudo apt-get install -y postfwd || { echo "Erro ao instalar o postfwd."; exit 1; }
+else
+    echo "Postfwd já está instalado."
 fi
 
 # Verificar se o arquivo de configuração do Postfwd existe
@@ -586,32 +589,26 @@ else
 fi
 
 # Ajustar permissões do arquivo de configuração do Postfwd
-# Ajustar permissões do arquivo de configuração do Postfwd
-if [ -f "$POSTFWD_CONF" ]; then
+if [ -f "/etc/postfix/postfwd.cf" ]; then
     echo "Ajustando permissões do arquivo de configuração do Postfwd..."
-    sudo chown postfwd:postfwd "$POSTFWD_CONF"  # Alterar propriedade para postfwd:postfwd
-    if [ $? -eq 0 ]; then
-        echo "Permissões ajustadas com sucesso para $POSTFWD_CONF."
-    else
-        echo "Erro ao ajustar as permissões de $POSTFWD_CONF."
-    fi
-    sudo chmod 640 "$POSTFWD_CONF"  # Garantir permissões adequadas
+    sudo chown postfwd:postfwd "/etc/postfix/postfwd.cf" || { echo "Erro ao ajustar proprietário do arquivo /etc/postfix/postfwd.cf."; exit 1; }
+    sudo chmod 640 "/etc/postfix/postfwd.cf" || { echo "Erro ao ajustar permissões do arquivo /etc/postfix/postfwd.cf."; exit 1; }
 else
-    echo "Arquivo de configuração $POSTFWD_CONF não encontrado para ajuste de permissões."
+    echo "Erro: Arquivo de configuração /etc/postfix/postfwd.cf não encontrado."
+    exit 1
 fi
-
 
 # Criar e ajustar permissões do diretório de PID
 echo "Criando e ajustando permissões do diretório de PID..."
-sudo mkdir -p "$POSTFWD_PID_DIR"
-sudo chown postfix:postfix "$POSTFWD_PID_DIR"
-sudo chmod 750 "$POSTFWD_PID_DIR"
+sudo mkdir -p "/var/run/postfwd" || { echo "Erro ao criar diretório /var/run/postfwd."; exit 1; }
+sudo chown postfwd:postfwd "/var/run/postfwd" || { echo "Erro ao ajustar proprietário do diretório /var/run/postfwd."; exit 1; }
+sudo chmod 750 "/var/run/postfwd" || { echo "Erro ao ajustar permissões do diretório /var/run/postfwd."; exit 1; }
 
 # Criar e ajustar permissões do diretório temporário para cache
 echo "Criando e ajustando permissões do diretório temporário para cache..."
-sudo mkdir -p "$POSTFWD_CACHE_DIR"  # Criar o diretório, se não existir
-sudo chown nobody:nobody "$POSTFWD_CACHE_DIR"  # Ajustar propriedade para nobody:nobody
-sudo chmod 750 "$POSTFWD_CACHE_DIR"  # Ajustar permissões
+sudo mkdir -p "/var/tmp/postfwd" || { echo "Erro ao criar diretório /var/tmp/postfwd."; exit 1; }
+sudo chown postfwd:postfwd "/var/tmp/postfwd" || { echo "Erro ao ajustar proprietário do diretório /var/tmp/postfwd."; exit 1; }
+sudo chmod 750 "/var/tmp/postfwd" || { echo "Erro ao ajustar permissões do diretório /var/tmp/postfwd."; exit 1; }
 
 echo "Permissões ajustadas com sucesso!"
 
@@ -639,23 +636,19 @@ else
 fi
 
 # Adicionar Postfwd ao master.cf, se ainda não estiver presente
-MASTER_CF="/etc/postfix/master.cf"
-POSTFWD_ENTRY="127.0.0.1:10045 inet  n  -  n  -  1  spawn
-  user=nobody argv=/usr/sbin/postfwd2 -f /etc/postfix/postfwd.cf"
-
-echo "Verificando se a entrada do Postfwd já está presente no master.cf..."
-if ! grep -q "127.0.0.1:10045 inet" "$MASTER_CF"; then
-    echo "Adicionando entrada do Postfwd ao master.cf..."
-    sudo tee -a "$MASTER_CF" > /dev/null <<EOF
+echo "Verificando se a entrada do Postfwd já está presente no /etc/postfix/master.cf..."
+if ! grep -q "127.0.0.1:10045 inet" /etc/postfix/master.cf; then
+    echo "Adicionando entrada do Postfwd ao /etc/postfix/master.cf..."
+    sudo tee -a /etc/postfix/master.cf > /dev/null <<EOF
 
 # Postfwd Policy Server
-$POSTFWD_ENTRY
+127.0.0.1:10045 inet  n  -  n  -  1  spawn
+  user=postfwd argv=/usr/sbin/postfwd2 -f /etc/postfix/postfwd.cf
 EOF
     echo "Entrada adicionada com sucesso!"
 else
-    echo "A entrada do Postfwd já existe no master.cf."
+    echo "A entrada do Postfwd já existe no /etc/postfix/master.cf."
 fi
-
 
 # Iniciar e verificar o serviço postfwd
 sudo systemctl start postfwd || { echo "Erro ao iniciar o serviço postfwd."; exit 1; }
@@ -666,6 +659,7 @@ sudo systemctl restart postfwd || { echo "Erro ao reiniciar o serviço postfwd."
 sudo systemctl status postfwd --no-pager || { echo "Verifique manualmente o status do serviço postfwd."; exit 1; }
 
 echo "Configuração do Postfwd concluída com sucesso!"
+
 
 echo "==================================================== POSTFIX ===================================================="
 
