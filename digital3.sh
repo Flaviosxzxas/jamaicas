@@ -613,7 +613,7 @@ KillMode=control-group
 KillSignal=SIGTERM
 ExecStartPre=/bin/rm -f /var/run/postfwd/postfwd.pid
 ExecStart=/usr/sbin/postfwd -f /etc/postfix/postfwd.cf
-ExecStop=/bin/kill -9 $MAINPID
+ExecStop=/usr/bin/killall postfwd
 Restart=always
 PIDFile=/var/run/postfwd/postfwd.pid
 
