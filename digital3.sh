@@ -632,7 +632,8 @@ fi
 
 # Adicionar Postfwd ao master.cf, se ainda não estiver presente
 MASTER_CF="/etc/postfix/master.cf"
-POSTFWD_ENTRY="127.0.0.1:10040 inet  n  -  n  -  1  spawn\n  user=nobody argv=/usr/sbin/postfwd2 -f /etc/postfix/postfwd.cf"
+POSTFWD_ENTRY="127.0.0.1:10040 inet  n  -  n  -  1  spawn
+  user=nobody argv=/usr/sbin/postfwd2 -f /etc/postfix/postfwd.cf"
 
 echo "Verificando se a entrada do Postfwd já está presente no master.cf..."
 if ! grep -q "127.0.0.1:10040 inet" "$MASTER_CF"; then
@@ -646,6 +647,7 @@ EOF
 else
     echo "A entrada do Postfwd já existe no master.cf."
 fi
+
 
 # Iniciar e verificar o serviço postfwd
 sudo systemctl start postfwd || { echo "Erro ao iniciar o serviço postfwd."; exit 1; }
