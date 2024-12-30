@@ -430,6 +430,8 @@ inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 
 # Caminho do arquivo de configuração do Postfwd
 POSTFWD_CONF="/etc/postfix/postfwd.cf"
+POSTFWD_PID_DIR="/var/run/postfwd"
+POSTFWD_TMP_DIR="/var/tmp"
 
 # Criar usuário 'postfwd' e associar ao grupo 'postfix'
 if ! id "postfwd" &>/dev/null; then
@@ -437,6 +439,14 @@ if ! id "postfwd" &>/dev/null; then
     sudo useradd -r -g postfix -s /usr/sbin/nologin postfwd || { echo "Erro ao criar usuário 'postfwd'."; exit 1; }
 else
     echo "Usuário 'postfwd' já existe."
+fi
+
+# Garantir que o grupo 'nobody' exista
+if ! getent group nobody &>/dev/null; then
+    echo "Criando grupo 'nobody'..."
+    sudo groupadd nobody || { echo "Erro ao criar grupo 'nobody'."; exit 1; }
+else
+    echo "Grupo 'nobody' já existe."
 fi
 
 # Verificar se o postfwd está instalado
@@ -574,19 +584,29 @@ else
     echo "Arquivo de configuração $POSTFWD_CONF já existe."
 fi
 
+# Criar usuário e grupo dedicados para o Postfwd
+echo "Criando usuário e grupo dedicados para o Postfwd..."
+sudo useradd -r -s /sbin/nologin postfwd
+sudo groupadd postfwd
+
 # Ajustar permissões do arquivo de configuração
-sudo chown root:root "$POSTFWD_CONF"
+echo "Ajustando permissões do arquivo de configuração..."
+sudo chown postfwd:postfwd "$POSTFWD_CONF"
 sudo chmod 640 "$POSTFWD_CONF"
 
 # Criar e ajustar permissões do diretório de PID
-sudo mkdir -p /var/run/postfwd
-sudo chown postfwd:postfwd /var/run/postfwd
-sudo chmod 750 /var/run/postfwd
+echo "Criando e ajustando permissões do diretório de PID..."
+sudo mkdir -p "$POSTFWD_PID_DIR"
+sudo chown postfwd:postfwd "$POSTFWD_PID_DIR"
+sudo chmod 750 "$POSTFWD_PID_DIR"
 
-# Garantir permissões do diretório /var/tmp
-sudo mkdir -p /var/tmp
-sudo chown root:root /var/tmp
-sudo chmod 750 /var/tmp
+# Criar e ajustar permissões do diretório temporário, se necessário
+echo "Criando e ajustando permissões do diretório temporário..."
+sudo mkdir -p "$POSTFWD_TMP_DIR"
+sudo chown postfwd:postfwd "$POSTFWD_TMP_DIR"
+sudo chmod 750 "$POSTFWD_TMP_DIR"
+
+echo "Permissões ajustadas com sucesso!"
 
 # Criar arquivo de serviço systemd, se não existir
 if [ ! -f /etc/systemd/system/postfwd.service ]; then
@@ -598,13 +618,12 @@ After=network.target
 
 [Service]
 Type=simple
-User=postfwd
-Group=postfix
-KillMode=control-group
-KillSignal=SIGTERM
+User =postfwd
+Group=postfwd
+KillMode=mixed
 ExecStartPre=/bin/rm -f /var/run/postfwd/postfwd.pid
-ExecStart=/usr/sbin/postfwd -f /etc/postfix/postfwd.cf
-ExecStop=/bin/killall -9 postfwd
+ExecStart=/usr/sbin/postfwd -f /etc/postfix/postfwd.cf -vv
+ExecStop=/bin/killall -q postfwd
 Restart=always
 PIDFile=/var/run/postfwd/postfwd.pid
 
