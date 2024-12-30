@@ -428,25 +428,15 @@ recipient_delimiter = +
 inet_interfaces = all
 inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 
-#!/bin/bash
-
 # Caminho do arquivo de configuração do Postfwd
 POSTFWD_CONF="/etc/postfix/postfwd.cf"
 
-# Criar usuário 'postfw' e associar ao grupo 'postfix'
-if ! id "postfw" &>/dev/null; then
-    echo "Criando usuário 'postfw'..."
-    sudo useradd -r -g postfix -s /usr/sbin/nologin postfw || { echo "Erro ao criar usuário 'postfw'."; exit 1; }
+# Criar usuário 'postfwd' e associar ao grupo 'postfix'
+if ! id "postfwd" &>/dev/null; then
+    echo "Criando usuário 'postfwd'..."
+    sudo useradd -r -g postfix -s /usr/sbin/nologin postfwd || { echo "Erro ao criar usuário 'postfwd'."; exit 1; }
 else
-    echo "Usuário 'postfw' já existe."
-fi
-
-# Garantir que o grupo 'nobody' exista
-if ! getent group nobody &>/dev/null; then
-    echo "Criando grupo 'nobody'..."
-    sudo groupadd nobody || { echo "Erro ao criar grupo 'nobody'."; exit 1; }
-else
-    echo "Grupo 'nobody' já existe."
+    echo "Usuário 'postfwd' já existe."
 fi
 
 # Verificar se o postfwd está instalado
@@ -588,8 +578,9 @@ fi
 sudo chown root:root "$POSTFWD_CONF"
 sudo chmod 640 "$POSTFWD_CONF"
 
+# Criar e ajustar permissões do diretório de PID
 sudo mkdir -p /var/run/postfwd
-sudo chown root:root /var/run/postfwd
+sudo chown postfwd:postfwd /var/run/postfwd
 sudo chmod 750 /var/run/postfwd
 
 # Garantir permissões do diretório /var/tmp
@@ -607,13 +598,13 @@ After=network.target
 
 [Service]
 Type=simple
-User =postfwd
-Group=postfwd
+User=postfwd
+Group=postfix
 KillMode=control-group
 KillSignal=SIGTERM
 ExecStartPre=/bin/rm -f /var/run/postfwd/postfwd.pid
 ExecStart=/usr/sbin/postfwd -f /etc/postfix/postfwd.cf
-ExecStop=/usr/bin/killall postfwd
+ExecStop=/bin/killall -9 postfwd
 Restart=always
 PIDFile=/var/run/postfwd/postfwd.pid
 
