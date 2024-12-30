@@ -428,6 +428,8 @@ recipient_delimiter = +
 inet_interfaces = all
 inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 
+#!/bin/bash
+
 # Caminho do arquivo de configuração do Postfwd
 POSTFWD_CONF="/etc/postfix/postfwd.cf"
 POSTFWD_PID_DIR="/var/run/postfwd"
@@ -460,7 +462,6 @@ fi
 if [ ! -f "$POSTFWD_CONF" ]; then
     echo "Arquivo $POSTFWD_CONF não encontrado. Criando..."
     sudo tee "$POSTFWD_CONF" > /dev/null <<EOF
-#######################################################
 pidfile=/run/postfwd/postfwd.pid
 #######################################################
 # Regras de Controle de Limites por Servidor
@@ -585,15 +586,15 @@ EOF
 else
     echo "Arquivo de configuração $POSTFWD_CONF já existe."
 fi
-# Criar usuário e grupo dedicados para o Postfwd
-echo "Criando usuário e grupo dedicados para o Postfwd..."
-sudo useradd -r -s /sbin/nologin postfwd
-sudo groupadd postfwd
 
-# Ajustar permissões do arquivo de configuração
-echo "Ajustando permissões do arquivo de configuração..."
-sudo chown postfwd:postfwd "$POSTFWD_CONF"
-sudo chmod 640 "$POSTFWD_CONF"
+# Ajustar permissões do arquivo de configuração do Postfwd
+if [ -f "$POSTFWD_CONF" ]; then
+    echo "Ajustando permissões do arquivo de configuração do Postfwd..."
+    sudo chown postfwd:postfwd "$POSTFWD_CONF"
+    sudo chmod 640 "$POSTFWD_CONF"
+else
+    echo "Arquivo de configuração $POSTFWD_CONF não encontrado para ajuste de permissões."
+fi
 
 # Criar e ajustar permissões do diretório de PID
 echo "Criando e ajustando permissões do diretório de PID..."
@@ -625,7 +626,6 @@ Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
-
 EOF
     sudo systemctl daemon-reload
     sudo systemctl enable postfwd
@@ -659,6 +659,7 @@ sudo systemctl restart postfwd || { echo "Erro ao reiniciar o serviço postfwd."
 sudo systemctl status postfwd --no-pager || { echo "Verifique manualmente o status do serviço postfwd."; exit 1; }
 
 echo "Configuração do Postfwd concluída com sucesso!"
+
 
 
 echo "==================================================== POSTFIX ===================================================="
