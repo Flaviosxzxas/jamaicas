@@ -585,24 +585,6 @@ EOF
 else
     echo "Arquivo de configuração $POSTFWD_CONF já existe."
 fi
-
-# Adicionar Postfwd ao master.cf, se ainda não estiver presente
-MASTER_CF="/etc/postfix/master.cf"
-POSTFWD_ENTRY="127.0.0.1:10040 inet  n  -  n  -  1  spawn\n  user=nobody argv=/usr/sbin/postfwd2 -f /etc/postfix/postfwd.cf"
-
-echo "Verificando se a entrada do Postfwd já está presente no master.cf..."
-if ! grep -q "127.0.0.1:10040 inet" "$MASTER_CF"; then
-    echo "Adicionando entrada do Postfwd ao master.cf..."
-    sudo tee -a "$MASTER_CF" > /dev/null <<EOF
-
-# Postfwd Policy Server
-$POSTFWD_ENTRY
-EOF
-    echo "Entrada adicionada com sucesso!"
-else
-    echo "A entrada do Postfwd já existe no master.cf."
-fi
-
 # Criar usuário e grupo dedicados para o Postfwd
 echo "Criando usuário e grupo dedicados para o Postfwd..."
 sudo useradd -r -s /sbin/nologin postfwd
@@ -649,6 +631,23 @@ EOF
     sudo systemctl enable postfwd
 else
     echo "Arquivo de serviço systemd já existe."
+fi
+
+# Adicionar Postfwd ao master.cf, se ainda não estiver presente
+MASTER_CF="/etc/postfix/master.cf"
+POSTFWD_ENTRY="127.0.0.1:10040 inet  n  -  n  -  1  spawn\n  user=nobody argv=/usr/sbin/postfwd2 -f /etc/postfix/postfwd.cf"
+
+echo "Verificando se a entrada do Postfwd já está presente no master.cf..."
+if ! grep -q "127.0.0.1:10040 inet" "$MASTER_CF"; then
+    echo "Adicionando entrada do Postfwd ao master.cf..."
+    sudo tee -a "$MASTER_CF" > /dev/null <<EOF
+
+# Postfwd Policy Server
+$POSTFWD_ENTRY
+EOF
+    echo "Entrada adicionada com sucesso!"
+else
+    echo "A entrada do Postfwd já existe no master.cf."
 fi
 
 # Iniciar e verificar o serviço postfwd
