@@ -428,8 +428,6 @@ recipient_delimiter = +
 inet_interfaces = all
 inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 
-#!/bin/bash
-
 # Caminho do arquivo de configuração do Postfwd
 POSTFWD_CONF="/etc/postfix/postfwd.cf"
 POSTFWD_PID_DIR="/var/run/postfwd"
@@ -462,7 +460,6 @@ fi
 if [ ! -f "$POSTFWD_CONF" ]; then
     echo "Arquivo $POSTFWD_CONF não encontrado. Criando..."
     sudo tee "$POSTFWD_CONF" > /dev/null <<EOF
-pidfile=/run/postfwd/postfwd.pid
 #######################################################
 # Regras de Controle de Limites por Servidor
 #######################################################
@@ -590,7 +587,7 @@ fi
 # Ajustar permissões do arquivo de configuração do Postfwd
 if [ -f "$POSTFWD_CONF" ]; then
     echo "Ajustando permissões do arquivo de configuração do Postfwd..."
-    sudo chown postfwd:postfwd "$POSTFWD_CONF"
+    sudo chown postfwd:postfwd "$POSTFWD_CONF"  # Garantir que o arquivo seja de propriedade do usuário postfwd
     sudo chmod 640 "$POSTFWD_CONF"
 else
     echo "Arquivo de configuração $POSTFWD_CONF não encontrado para ajuste de permissões."
@@ -604,9 +601,9 @@ sudo chmod 750 "$POSTFWD_PID_DIR"
 
 # Criar e ajustar permissões do diretório temporário, se necessário
 echo "Criando e ajustando permissões do diretório temporário..."
-sudo mkdir -p "$POSTFWD_TMP_DIR"
-sudo chown postfwd:postfwd "$POSTFWD_TMP_DIR"
-sudo chmod 750 "$POSTFWD_TMP_DIR"
+sudo mkdir -p "$POSTFWD_TMP_DIR/postfwd"  # Criar um subdiretório específico para o Postfwd
+sudo chown postfwd:postfwd "$POSTFWD_TMP_DIR/postfwd"  # Ajustar a propriedade do subdiretório
+sudo chmod 750 "$POSTFWD_TMP_DIR/postfwd"  # Ajustar permissões do subdiretório
 
 echo "Permissões ajustadas com sucesso!"
 
@@ -659,8 +656,6 @@ sudo systemctl restart postfwd || { echo "Erro ao reiniciar o serviço postfwd."
 sudo systemctl status postfwd --no-pager || { echo "Verifique manualmente o status do serviço postfwd."; exit 1; }
 
 echo "Configuração do Postfwd concluída com sucesso!"
-
-
 
 echo "==================================================== POSTFIX ===================================================="
 
