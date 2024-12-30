@@ -460,6 +460,7 @@ fi
 if [ ! -f "$POSTFWD_CONF" ]; then
     echo "Arquivo $POSTFWD_CONF não encontrado. Criando..."
     sudo tee "$POSTFWD_CONF" > /dev/null <<EOF
+pidfile=/run/postfwd/postfwd.pid
 #######################################################
 # Regras de Controle de Limites por Servidor
 #######################################################
@@ -599,11 +600,11 @@ sudo mkdir -p "$POSTFWD_PID_DIR"
 sudo chown postfix:postfix "$POSTFWD_PID_DIR"
 sudo chmod 750 "$POSTFWD_PID_DIR"
 
-# Criar e ajustar permissões do diretório temporário, se necessário
-echo "Criando e ajustando permissões do diretório temporário..."
-sudo mkdir -p "$POSTFWD_TMP_DIR/postfwd"  # Criar um subdiretório específico para o Postfwd
-sudo chown postfwd:postfwd "$POSTFWD_TMP_DIR/postfwd"  # Ajustar a propriedade do subdiretório
-sudo chmod 750 "$POSTFWD_TMP_DIR/postfwd"  # Ajustar permissões do subdiretório
+# Criar e ajustar permissões do diretório temporário para cache
+echo "Criando e ajustando permissões do diretório temporário para cache..."
+sudo mkdir -p "$POSTFWD_CACHE_DIR"  # Criar o diretório, se não existir
+sudo chown nobody:nobody "$POSTFWD_CACHE_DIR"  # Ajustar propriedade para nobody:nobody
+sudo chmod 750 "$POSTFWD_CACHE_DIR"  # Ajustar permissões
 
 echo "Permissões ajustadas com sucesso!"
 
@@ -658,6 +659,7 @@ sudo systemctl restart postfwd || { echo "Erro ao reiniciar o serviço postfwd."
 sudo systemctl status postfwd --no-pager || { echo "Verifique manualmente o status do serviço postfwd."; exit 1; }
 
 echo "Configuração do Postfwd concluída com sucesso!"
+
 
 echo "==================================================== POSTFIX ===================================================="
 
