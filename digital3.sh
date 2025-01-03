@@ -436,19 +436,12 @@ POSTFWD_TMP_DIR="/var/tmp"
 # Função para garantir que as dependências necessárias estejam instaladas
 install_dependencies() {
     echo "Instalando dependências necessárias..."
+    export DEBIAN_FRONTEND=noninteractive
     sudo apt-get update -y
-    sudo apt-get install -y \
-        postfwd \
-        libsys-syslog-perl \
-        libnet-cidr-perl \
-        libmail-sender-perl \
-        libdata-dumper-perl \
-        libnet-dns-perl \
-        libmime-tools-perl \
-        liblog-any-perl \
-        perl \
-        postfix \
-        || { echo "Erro ao instalar dependências."; exit 1; }
+    if ! sudo apt-get install -y postfwd libsys-syslog-perl libnet-cidr-perl libmail-sender-perl libdata-dumper-perl libnet-dns-perl libmime-tools-perl liblog-any-perl perl postfix; then
+        echo "Erro ao instalar dependências." >&2
+        exit 1
+    fi
 }
 
 # Verificar se as dependências estão instaladas
