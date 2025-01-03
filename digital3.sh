@@ -800,6 +800,15 @@ echo "==================================================== OpenDMARC ===========
 
 echo "==================================================== CLOUDFLARE ===================================================="
 
+# Verificar se o jq já está instalado
+if ! command -v jq &> /dev/null; then
+  echo "jq não encontrado. Instalando..."
+  sudo apt-get update
+  sudo apt-get install -y jq
+else
+  echo "jq já está instalado. Pulando instalação."
+fi
+
 # Gerar código DKIM
 DKIMCode=$(/root/dkimcode.sh)
 
