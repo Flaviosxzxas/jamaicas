@@ -475,8 +475,6 @@ fi
 # Continuar execução após instalação de dependências ou após erro
 echo "Continuando a execução do script...
 
-
-
 # Criar usuário e grupo 'postfwd', se necessário
 if ! id "postfwd" &>/dev/null; then
     echo "Usuário 'postfwd' não encontrado. Tentando criar..."
@@ -605,7 +603,7 @@ action="rate(global\/200\/3600) defer_if_permit \"Limite de 200 e-mails por hora
 # Personal (Arnet)
 id=limit-personal
 pattern=recipient mx=.*personal.com.ar
-action="rate(global\/200\/3600) defer_if_permit \"Limite de 200 e-mails por hora atingido para Personal (Arnet).\""
+action="rate(global\/200\/3600) defer_if_permit \"Limite de 200 e-mails por hora atingido para Personal Arnet.\""
 
 # Telecom
 id=limit-telecom
