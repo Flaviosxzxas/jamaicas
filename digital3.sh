@@ -481,13 +481,11 @@ if ! id "postfwd" &>/dev/null; then
     
     # Tentar criar o grupo 'postfwd'
     if ! getent group postfwd &>/dev/null; then
-        sudo groupadd postfwd || { echo "Erro ao criar grupo 'postfwd'. Verificando novamente..."; }
+        sudo groupadd postfwd || { echo "Erro ao criar grupo 'postfwd'. Abortando..."; exit 1; }
     fi
 
     # Tentar criar o usuário 'postfwd'
-    sudo useradd -r -g postfwd -s /usr/sbin/nologin postfwd || {
-        echo "Erro ao criar usuário 'postfwd'. Verificando novamente..."
-    }
+    sudo useradd -r -g postfwd -s /usr/sbin/nologin postfwd || { echo "Erro ao criar usuário 'postfwd'. Abortando..."; exit 1; }
 fi
 
 # Verificar novamente se o usuário foi criado
@@ -506,11 +504,10 @@ fi
 # Mensagem de sucesso após garantir a criação
 echo "Usuário e grupo 'postfwd' configurados com sucesso."
 
-
 # Garantir que o grupo 'nobody' exista
 if ! getent group nobody &>/dev/null; then
     echo "Criando grupo 'nobody'..."
-    sudo groupadd nobody || { echo "Erro ao criar grupo 'nobody'."; exit 1; }
+    sudo groupadd nobody || { echo "Erro ao criar grupo 'nobody'. Abortando..."; exit 1; }
 else
     echo "Grupo 'nobody' já existe."
 fi
