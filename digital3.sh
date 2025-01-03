@@ -337,7 +337,7 @@ smtpd_recipient_restrictions =
     permit_sasl_authenticated,
     reject_unauth_destination,
     reject_unknown_recipient_domain,
-    check_policy_service inet:127.0.0.1:10045
+    check_policy_service inet:127.0.0.1:10044
 
 # Limites de conexão
 smtpd_client_connection_rate_limit = 100
@@ -432,6 +432,32 @@ inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 POSTFWD_CONF="/etc/postfix/postfwd.cf"
 POSTFWD_PID_DIR="/var/run/postfwd"
 POSTFWD_TMP_DIR="/var/tmp"
+
+# Função para garantir que as dependências necessárias estejam instaladas
+install_dependencies() {
+    echo "Instalando dependências necessárias..."
+    sudo apt-get update -y
+    sudo apt-get install -y \
+        postfwd \
+        libsys-syslog-perl \
+        libnet-cidr-perl \
+        libmail-sender-perl \
+        libdata-dumper-perl \
+        libnet-dns-perl \
+        libmime-tools-perl \
+        liblog-any-perl \
+        perl \
+        postfix \
+        || { echo "Erro ao instalar dependências."; exit 1; }
+}
+
+# Verificar se as dependências estão instaladas
+echo "Verificando dependências..."
+if ! dpkg -l | grep -q postfwd; then
+    install_dependencies
+else
+    echo "Postfwd e dependências já instalados."
+fi
 
 # Criar usuário e grupo 'postfwd', se necessário
 if ! id "postfwd" &>/dev/null; then
@@ -649,12 +675,12 @@ fi
 
 # Adicionar Postfwd ao master.cf, se ainda não estiver presente
 echo "Verificando se a entrada do Postfwd já está presente no /etc/postfix/master.cf..."
-if ! grep -q "127.0.0.1:10045 inet" /etc/postfix/master.cf; then
+if ! grep -q "127.0.0.1:10040 inet" /etc/postfix/master.cf; then
     echo "Adicionando entrada do Postfwd ao /etc/postfix/master.cf..."
     sudo tee -a /etc/postfix/master.cf > /dev/null <<EOF
 
 # Postfwd Policy Server
-127.0.0.1:10045 inet  n  -  n  -  1  spawn
+127.0.0.1:10040 inet  n  -  n  -  1  spawn
   user=postfwd argv=/usr/sbin/postfwd2 -f /etc/postfix/postfwd.cf
 EOF
     echo "Entrada adicionada com sucesso!"
