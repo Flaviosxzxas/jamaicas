@@ -528,8 +528,8 @@ POSTFWD_CONF="/etc/postfix/postfwd.cf"
 
 # Criar arquivo de configuração do Postfwd
 if [ ! -f "$POSTFWD_CONF" ]; then
-    echo "Criando arquivo de configuração do Postfwd..."
-    cat <<EOF > "$POSTFWD_CONF"
+    echo "Arquivo de configuração $POSTFWD_CONF não encontrado. Criando..."
+    sudo tee "$POSTFWD_CONF" > /dev/null <<EOF
 pidfile=/run/postfwd/postfwd.pid
 #######################################################
 # Regras de Controle de Limites por Servidor
