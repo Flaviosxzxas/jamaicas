@@ -428,19 +428,38 @@ recipient_delimiter = +
 inet_interfaces = all
 inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 
-# Caminho do arquivo de configuração do Postfwd
-POSTFWD_CONF="/etc/postfix/postfwd.cf"
-POSTFWD_PID_DIR="/var/run/postfwd"
-POSTFWD_TMP_DIR="/var/tmp"
-
 # Função para garantir que as dependências necessárias estejam instaladas
 install_dependencies() {
     echo "Instalando dependências necessárias..."
     export DEBIAN_FRONTEND=noninteractive
     sudo apt-get update -y
+
+    # Verificar se o repositório universe está habilitado e habilitá-lo se necessário
+    if ! grep -q "^deb .*universe" /etc/apt/sources.list; then
+        echo "Habilitando repositório 'universe'..."
+        sudo add-apt-repository universe
+        sudo apt-get update -y
+    fi
+
+    # Instalar pacotes via apt-get
     if ! sudo apt-get install -y postfwd libsys-syslog-perl libnet-cidr-perl libmail-sender-perl libdata-dumper-perl libnet-dns-perl libmime-tools-perl liblog-any-perl perl postfix; then
-        echo "Erro ao instalar dependências." >&2
-        exit 1
+        echo "Erro ao instalar dependências com apt-get. Tentando instalar pacotes Perl via CPAN." >&2
+
+        # Verificar se o CPAN está instalado
+        if ! command -v cpan &> /dev/null; then
+            echo "CPAN não encontrado, instalando..."
+            sudo apt-get install -y perl
+            sudo cpan install Data::Dumper || { echo "Erro ao instalar Data::Dumper via CPAN."; exit 1; }
+        else
+            echo "Instalando pacotes Perl necessários via CPAN..."
+            sudo cpan install Data::Dumper || { echo "Erro ao instalar Data::Dumper via CPAN."; exit 1; }
+            sudo cpan install Sys::Syslog || { echo "Erro ao instalar Sys::Syslog via CPAN."; exit 1; }
+            sudo cpan install Net::CIDR || { echo "Erro ao instalar Net::CIDR via CPAN."; exit 1; }
+            sudo cpan install Mail::Sender || { echo "Erro ao instalar Mail::Sender via CPAN."; exit 1; }
+            sudo cpan install Net::DNS || { echo "Erro ao instalar Net::DNS via CPAN."; exit 1; }
+            sudo cpan install MIME::Tools || { echo "Erro ao instalar MIME::Tools via CPAN."; exit 1; }
+            sudo cpan install Log::Any || { echo "Erro ao instalar Log::Any via CPAN."; exit 1; }
+        fi
     fi
 }
 
@@ -451,6 +470,7 @@ if ! dpkg -l | grep -q postfwd; then
 else
     echo "Postfwd e dependências já instalados."
 fi
+
 
 # Criar usuário e grupo 'postfwd', se necessário
 if ! id "postfwd" &>/dev/null; then
@@ -500,6 +520,8 @@ if ! command -v postfwd &>/dev/null; then
 else
     echo "Postfwd já está instalado."
 fi
+
+POSTFWD_CONF="/etc/postfix/postfwd.cf"
 
 # Verificar se o arquivo de configuração do Postfwd existe
 if [ ! -f "$POSTFWD_CONF" ]; then
