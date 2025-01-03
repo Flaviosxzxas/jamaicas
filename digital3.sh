@@ -490,6 +490,7 @@ pidfile=/run/postfwd/postfwd.pid
 #######################################################
 # Regras de Controle de Limites por Servidor
 #######################################################
+
 # KingHost
 id=limit-kinghost
 pattern=recipient mx=.*kinghost.net
@@ -607,8 +608,6 @@ id=no-limit
 pattern=recipient
 action=permit
 EOF
-else
-    echo "Arquivo de configuração $POSTFWD_CONF já existe."
 fi
 
 # Criar e ajustar permissões do diretório de PID
