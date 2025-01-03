@@ -653,6 +653,13 @@ action=permit
 EOF
 fi
 
+    # Ajustar a propriedade e permissões do arquivo de configuração
+    sudo chown postfwd:postfwd "$POSTFWD_CONF"  # Ajustar a propriedade do arquivo
+    sudo chmod 640 "$POSTFWD_CONF"  # Ajustar as permissões do arquivo
+else
+    echo "Arquivo de configuração $POSTFWD_CONF já existe."
+fi
+
 # Criar e ajustar permissões do diretório de PID
 echo "Criando e ajustando permissões do diretório de PID..."
 sudo mkdir -p "/var/run/postfwd" || { echo "Erro ao criar diretório /var/run/postfwd."; exit 1; }
