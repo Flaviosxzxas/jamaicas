@@ -473,7 +473,7 @@ else
 fi
 
 # Continuar execução após instalação de dependências ou após erro
-echo "Continuando a execução do script...
+echo "Continuando a execução do script..."
 
 # Criar usuário e grupo 'postfwd', se necessário
 if ! id "postfwd" &>/dev/null; then
