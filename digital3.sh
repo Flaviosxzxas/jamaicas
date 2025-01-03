@@ -478,7 +478,7 @@ echo "Continuando a execução do script..."
 # Criar usuário e grupo 'postfwd', se necessário
 if ! id "postfwd" &>/dev/null; then
     echo "Usuário 'postfwd' não encontrado. Tentando criar..."
-    
+
     # Tentar criar o grupo 'postfwd'
     if ! getent group postfwd &>/dev/null; then
         sudo groupadd postfwd || { echo "Erro ao criar grupo 'postfwd'. Abortando..."; exit 1; }
@@ -486,23 +486,25 @@ if ! id "postfwd" &>/dev/null; then
 
     # Tentar criar o usuário 'postfwd'
     sudo useradd -r -g postfwd -s /usr/sbin/nologin postfwd || { echo "Erro ao criar usuário 'postfwd'. Abortando..."; exit 1; }
+else
+    echo "Usuário 'postfwd' já existe."
 fi
 
-# Verificar novamente se o usuário foi criado
+# Verificar novamente se o usuário foi criado corretamente
 if ! id "postfwd" &>/dev/null; then
-    echo "Usuário 'postfwd' não foi criado corretamente. Tentando solução alternativa..."
-    
-    # Tentar recriar tudo
-    sudo groupdel postfwd &>/dev/null || true # Excluir o grupo, se ele estiver corrompido
-    sudo userdel postfwd &>/dev/null || true # Excluir o usuário, se ele estiver corrompido
-    
+    echo "Erro: O usuário 'postfwd' não foi criado corretamente. Tentando recriar..."
+
+    # Remover grupo e usuário corrompidos
+    sudo groupdel postfwd &>/dev/null || true
+    sudo userdel postfwd &>/dev/null || true
+
     # Criar novamente o grupo e o usuário
     sudo groupadd postfwd || { echo "Erro crítico ao criar grupo 'postfwd'. Abortando..."; exit 1; }
     sudo useradd -r -g postfwd -s /usr/sbin/nologin postfwd || { echo "Erro crítico ao criar usuário 'postfwd'. Abortando..."; exit 1; }
 fi
 
-# Mensagem de sucesso após garantir a criação
 echo "Usuário e grupo 'postfwd' configurados com sucesso."
+
 
 # Garantir que o grupo 'nobody' exista
 if ! getent group nobody &>/dev/null; then
