@@ -648,11 +648,11 @@ id=no-limit
 pattern=recipient mx=.*
 action=permit
 EOF
-fi
 
     # Ajustar a propriedade e permissões do arquivo de configuração
     sudo chown postfwd:postfwd "$POSTFWD_CONF"  # Ajustar a propriedade do arquivo
     sudo chmod 640 "$POSTFWD_CONF"  # Ajustar as permissões do arquivo
+
 else
     echo "Arquivo de configuração $POSTFWD_CONF já existe."
 fi
