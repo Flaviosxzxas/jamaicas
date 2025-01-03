@@ -437,18 +437,19 @@ install_dependencies() {
     # Verificar se o repositório universe está habilitado e habilitá-lo se necessário
     if ! grep -q "^deb .*universe" /etc/apt/sources.list; then
         echo "Habilitando repositório 'universe'..."
-        sudo add-apt-repository universe
-        sudo apt-get update -y
+        sudo apt-add-repository "deb http://archive.ubuntu.com/ubuntu/ $(lsb_release -sc) universe" -y
+        sudo apt-get update -y || { echo "Erro ao habilitar repositório 'universe'."; exit 1; }
     fi
 
     # Instalar pacotes via apt-get
+    echo "Instalando pacotes necessários via apt-get..."
     if ! sudo apt-get install -y postfwd libsys-syslog-perl libnet-cidr-perl libmail-sender-perl libdata-dumper-perl libnet-dns-perl libmime-tools-perl liblog-any-perl perl postfix; then
         echo "Erro ao instalar dependências com apt-get. Tentando instalar pacotes Perl via CPAN." >&2
 
         # Verificar se o CPAN está instalado
         if ! command -v cpan &> /dev/null; then
             echo "CPAN não encontrado, instalando..."
-            sudo apt-get install -y perl
+            sudo apt-get install -y perl || { echo "Erro ao instalar Perl."; exit 1; }
             sudo cpan install Data::Dumper || { echo "Erro ao instalar Data::Dumper via CPAN."; exit 1; }
         else
             echo "Instalando pacotes Perl necessários via CPAN..."
@@ -470,6 +471,7 @@ if ! dpkg -l | grep -q postfwd; then
 else
     echo "Postfwd e dependências já instalados."
 fi
+
 
 
 # Criar usuário e grupo 'postfwd', se necessário
