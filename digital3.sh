@@ -435,12 +435,35 @@ POSTFWD_TMP_DIR="/var/tmp"
 
 # Criar usuário e grupo 'postfwd', se necessário
 if ! id "postfwd" &>/dev/null; then
-    echo "Criando usuário e grupo 'postfwd'..."
-    sudo groupadd postfwd || { echo "Erro ao criar grupo 'postfwd'."; exit 1; }
-    sudo useradd -r -g postfwd -s /usr/sbin/nologin postfwd || { echo "Erro ao criar usuário 'postfwd'."; exit 1; }
-else
-    echo "Usuário e grupo 'postfwd' já existem."
+    echo "Usuário 'postfwd' não encontrado. Tentando criar..."
+    
+    # Tentar criar o grupo 'postfwd'
+    if ! getent group postfwd &>/dev/null; then
+        sudo groupadd postfwd || { echo "Erro ao criar grupo 'postfwd'. Verificando novamente..."; }
+    fi
+
+    # Tentar criar o usuário 'postfwd'
+    sudo useradd -r -g postfwd -s /usr/sbin/nologin postfwd || {
+        echo "Erro ao criar usuário 'postfwd'. Verificando novamente..."
+    }
 fi
+
+# Verificar novamente se o usuário foi criado
+if ! id "postfwd" &>/dev/null; then
+    echo "Usuário 'postfwd' não foi criado corretamente. Tentando solução alternativa..."
+    
+    # Tentar recriar tudo
+    sudo groupdel postfwd &>/dev/null || true # Excluir o grupo, se ele estiver corrompido
+    sudo userdel postfwd &>/dev/null || true # Excluir o usuário, se ele estiver corrompido
+    
+    # Criar novamente o grupo e o usuário
+    sudo groupadd postfwd || { echo "Erro crítico ao criar grupo 'postfwd'. Abortando..."; exit 1; }
+    sudo useradd -r -g postfwd -s /usr/sbin/nologin postfwd || { echo "Erro crítico ao criar usuário 'postfwd'. Abortando..."; exit 1; }
+fi
+
+# Mensagem de sucesso após garantir a criação
+echo "Usuário e grupo 'postfwd' configurados com sucesso."
+
 
 # Garantir que o grupo 'nobody' exista
 if ! getent group nobody &>/dev/null; then
@@ -588,16 +611,6 @@ else
     echo "Arquivo de configuração $POSTFWD_CONF já existe."
 fi
 
-# Ajustar permissões do arquivo de configuração do Postfwd
-if [ -f "/etc/postfix/postfwd.cf" ]; then
-    echo "Ajustando permissões do arquivo de configuração do Postfwd..."
-    sudo chown postfwd:postfwd "/etc/postfix/postfwd.cf" || { echo "Erro ao ajustar proprietário do arquivo /etc/postfix/postfwd.cf."; exit 1; }
-    sudo chmod 640 "/etc/postfix/postfwd.cf" || { echo "Erro ao ajustar permissões do arquivo /etc/postfix/postfwd.cf."; exit 1; }
-else
-    echo "Erro: Arquivo de configuração /etc/postfix/postfwd.cf não encontrado."
-    exit 1
-fi
-
 # Criar e ajustar permissões do diretório de PID
 echo "Criando e ajustando permissões do diretório de PID..."
 sudo mkdir -p "/var/run/postfwd" || { echo "Erro ao criar diretório /var/run/postfwd."; exit 1; }
@@ -659,6 +672,7 @@ sudo systemctl restart postfwd || { echo "Erro ao reiniciar o serviço postfwd."
 sudo systemctl status postfwd --no-pager || { echo "Verifique manualmente o status do serviço postfwd."; exit 1; }
 
 echo "Configuração do Postfwd concluída com sucesso!"
+
 
 
 echo "==================================================== POSTFIX ===================================================="
