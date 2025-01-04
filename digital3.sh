@@ -466,6 +466,21 @@ fi
 # Salvar variáveis antes de instalar dependências
 ORIGINAL_VARS=$(declare -p ServerName CloudflareAPI CloudflareEmail Domain DKIMSelector ServerIP)
 
+# Função para verificar e instalar módulos Perl
+check_and_install_perl_module() {
+    local module_name=$1
+
+    # Verificar se o módulo já está instalado
+    if perl -M$module_name -e 'print "$module_name já está instalado\n";' 2>/dev/null; then
+        echo "Módulo Perl $module_name já está instalado. Pulando instalação."
+    else
+        echo "Módulo Perl $module_name não encontrado. Instalando via CPAN..."
+        cpan install $module_name || { echo "Erro ao instalar $module_name via CPAN."; exit 1; }
+        echo "Módulo Perl $module_name instalado com sucesso."
+    fi
+}
+
+# Função para garantir que as dependências necessárias estejam instaladas
 install_dependencies() {
     echo "Instalando dependências necessárias..."
     export DEBIAN_FRONTEND=noninteractive
@@ -485,37 +500,25 @@ install_dependencies() {
     echo "Instalando pacotes via apt-get..."
     apt-get install -y postfwd libsys-syslog-perl libnet-cidr-perl libmail-sender-perl \
     libnet-dns-perl libmime-tools-perl liblog-any-perl perl postfix || {
-    echo "Erro ao instalar pacotes via apt-get"; exit 1;
+        echo "Erro ao instalar pacotes via apt-get"; exit 1;
     }
 
-    # Instalar dependências para o Net::DNS
-    echo "Instalando dependências para o Net::DNS..."
+    # Instalar dependências do Net::DNS
+    echo "Instalando dependências do Net::DNS..."
     apt-get install -y libidn2-0 libidn2-0-dev || {
-        echo "Erro ao instalar libidn2. Certifique-se de que o repositório está atualizado."; exit 1;
+        echo "Erro ao instalar dependências para Net::DNS."; exit 1;
     }
 
-    # Instalar pacotes Perl via CPAN
-    echo "Instalando pacotes Perl via CPAN..."
-    echo "Iniciando instalação do Data::Dumper"
-    cpan install Data::Dumper || { echo "Erro ao instalar Data::Dumper via CPAN."; exit 1; }
-    echo "Data::Dumper instalado com sucesso"
-
-    echo "Iniciando instalação do Sys::Syslog"
-    cpan install Sys::Syslog || { echo "Erro ao instalar Sys::Syslog via CPAN."; exit 1; }
-    echo "Sys::Syslog instalado com sucesso"
-
-    echo "Iniciando instalação do Net::CIDR"
-    cpan install Net::CIDR || { echo "Erro ao instalar Net::CIDR via CPAN."; exit 1; }
-    echo "Net::CIDR instalado com sucesso"
-
-    echo "Iniciando instalação do Net::DNS"
-    cpan install Net::DNS || { echo "Erro ao instalar Net::DNS via CPAN."; exit 1; }
-    echo "Net::DNS instalado com sucesso"
-
+    # Verificar e instalar módulos Perl via CPAN
+    check_and_install_perl_module Data::Dumper
+    check_and_install_perl_module Sys::Syslog
+    check_and_install_perl_module Net::CIDR
+    check_and_install_perl_module Net::DNS
+    check_and_install_perl_module Log::Any
 }
 
 # Verificar dependências
-if ! dpkg-query -W -f='${Status}' postfwd 2>/dev/null | grep -q "ok installed"; then
+if ! dpkg -l | grep -q postfwd; then
     install_dependencies
 else
     echo "Postfwd e dependências já instalados."
