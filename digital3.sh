@@ -457,45 +457,56 @@ recipient_delimiter = +
 inet_interfaces = all
 inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 
+# Verificar se o script está sendo executado como root
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Erro: Este script precisa ser executado como root."
+    exit 1
+fi
+
 # Salvar variáveis antes de instalar dependências
 ORIGINAL_VARS=$(declare -p ServerName CloudflareAPI CloudflareEmail Domain DKIMSelector ServerIP)
 
-# Função para instalar dependências
 install_dependencies() {
     echo "Instalando dependências necessárias..."
     export DEBIAN_FRONTEND=noninteractive
+    export PERL_MM_USE_DEFAULT=1  # Forçar CPAN para modo não interativo
 
     # Atualizar repositórios
-    apt-get update -y || { echo "Erro ao atualizar repositórios"; exit 1; }
+    apt-get update -y || { echo "Erro ao atualizar o repositório"; exit 1; }
 
-    # Verificar se o repositório 'universe' está habilitado
+    # Verificar se o repositório universe está habilitado
     if ! grep -q "^deb .*universe" /etc/apt/sources.list; then
         echo "Habilitando repositório 'universe'..."
         apt-add-repository -y universe || { echo "Erro ao habilitar repositório 'universe'"; exit 1; }
         apt-get update -y || { echo "Erro ao atualizar repositórios"; exit 1; }
     fi
 
-    # Instalar pacotes necessários
+    # Instalar pacotes via apt-get
     echo "Instalando pacotes via apt-get..."
-    apt-get install -y postfwd libsys-syslog-perl libnet-cidr-perl libmail-sender-perl || {
+    apt-get install -y postfwd libsys-syslog-perl libnet-cidr-perl || {
         echo "Erro ao instalar pacotes via apt-get"; exit 1;
     }
 
-    echo "Verificando CPAN..."
-    if ! command -v cpan &> /dev/null; then
-        echo "CPAN não encontrado. Instalando Perl e CPAN..."
-        apt-get install -y perl || { echo "Erro ao instalar Perl"; exit 1; }
-    fi
-
     # Instalar pacotes Perl via CPAN
     echo "Instalando pacotes Perl via CPAN..."
-    cpan install Data::Dumper Sys::Syslog Net::CIDR || {
-        echo "Erro ao instalar pacotes Perl via CPAN"; exit 1;
-    }
+    echo "Iniciando instalação do Data::Dumper"
+    if ! cpan install Data::Dumper; then
+        echo "Erro ao instalar Data::Dumper via CPAN. Tentando novamente..."
+        cpan install Data::Dumper || { echo "Falha definitiva ao instalar Data::Dumper."; exit 1; }
+    fi
+    echo "Data::Dumper instalado com sucesso"
+
+    echo "Iniciando instalação do Sys::Syslog"
+    cpan install Sys::Syslog || { echo "Erro ao instalar Sys::Syslog via CPAN."; exit 1; }
+    echo "Sys::Syslog instalado com sucesso"
+
+    echo "Iniciando instalação do Net::CIDR"
+    cpan install Net::CIDR || { echo "Erro ao instalar Net::CIDR via CPAN."; exit 1; }
+    echo "Net::CIDR instalado com sucesso"
 }
 
 # Verificar dependências
-if ! dpkg -l | grep -q postfwd; then
+if ! dpkg-query -W -f='${Status}' postfwd 2>/dev/null | grep -q "ok installed"; then
     install_dependencies
 else
     echo "Postfwd e dependências já instalados."
@@ -503,7 +514,6 @@ fi
 
 # Restaurar variáveis
 eval "$ORIGINAL_VARS"
-
 
 # Continuar execução após instalação de dependências ou após erro
 echo "Continuando a execução do script..."
