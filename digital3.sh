@@ -12,15 +12,43 @@ sudo apt-get update
 sudo apt-get upgrade -y
 wait # adiciona essa linha para esperar que o comando seja concluído
 
+# Definir variáveis principais
 ServerName=$1
 CloudflareAPI=$2
 CloudflareEmail=$3
 
+# Verificar se os argumentos foram fornecidos
+if [ -z "$ServerName" ] || [ -z "$CloudflareAPI" ] || [ -z "$CloudflareEmail" ]; then
+  echo "Erro: Argumentos insuficientes fornecidos."
+  echo "Uso: $0 <ServerName> <CloudflareAPI> <CloudflareEmail>"
+  exit 1
+fi
+
+# Exportar variáveis principais para subprocessos
+export ServerName
+export CloudflareAPI
+export CloudflareEmail
+
+# Definir variáveis derivadas
 Domain=$(echo $ServerName | cut -d "." -f2-)
 DKIMSelector=$(echo $ServerName | awk -F[.:] '{print $1}')
+
+# Verificar conectividade antes de obter o IP público
+if ! wget -q --spider http://ip-api.com/line\?fields=query; then
+  echo "Erro: Não foi possível acessar a API para obter o IP do servidor."
+  exit 1
+fi
 ServerIP=$(wget -qO- http://ip-api.com/line\?fields=query)
 
-echo "Configurando Servidor: $ServerName"
+# Exportar variáveis derivadas para subprocessos
+export Domain
+export DKIMSelector
+export ServerIP
+
+# Exibir valores das variáveis para depuração
+echo "ServerName: $ServerName"
+echo "CloudflareAPI: $CloudflareAPI"
+echo "CloudflareEmail: $CloudflareEmail"
 echo "Domain: $Domain"
 echo "DKIMSelector: $DKIMSelector"
 echo "ServerIP: $ServerIP"
