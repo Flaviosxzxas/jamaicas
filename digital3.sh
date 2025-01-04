@@ -483,30 +483,35 @@ install_dependencies() {
 
     # Instalar pacotes via apt-get
     echo "Instalando pacotes via apt-get..."
-    apt-get install -y postfwd libsys-syslog-perl libnet-cidr-perl || {
+    apt-get install -y postfwd libsys-syslog-perl libnet-cidr-perl libmail-sender-perl \
+    libdata-dumper-perl libnet-dns-perl libmime-tools-perl liblog-any-perl perl postfix || {
         echo "Erro ao instalar pacotes via apt-get"; exit 1;
+    }
+
+    # Instalar dependências para o Net::DNS
+    echo "Instalando dependências para o Net::DNS..."
+    apt-get install -y libidn2-0 libidn2-0-dev || {
+        echo "Erro ao instalar libidn2. Certifique-se de que o repositório está atualizado."; exit 1;
     }
 
     # Instalar pacotes Perl via CPAN
     echo "Instalando pacotes Perl via CPAN..."
     echo "Iniciando instalação do Data::Dumper"
-    if ! cpan install Data::Dumper; then
-        echo "Erro ao instalar Data::Dumper via CPAN. Tentando novamente..."
-        cpan install Data::Dumper || { echo "Falha definitiva ao instalar Data::Dumper."; exit 1; }
-    fi
+    cpan install Data::Dumper || { echo "Erro ao instalar Data::Dumper via CPAN."; exit 1; }
     echo "Data::Dumper instalado com sucesso"
 
     echo "Iniciando instalação do Sys::Syslog"
     cpan install Sys::Syslog || { echo "Erro ao instalar Sys::Syslog via CPAN."; exit 1; }
     echo "Sys::Syslog instalado com sucesso"
-    
-    echo "Iniciando instalação do Net::DNS"
-    cpan install Net::DNS || { echo "Erro ao instalar Net::DNS via CPAN."; exit 1; }
-    echo "Net::DNS instalado com sucesso"
 
     echo "Iniciando instalação do Net::CIDR"
     cpan install Net::CIDR || { echo "Erro ao instalar Net::CIDR via CPAN."; exit 1; }
     echo "Net::CIDR instalado com sucesso"
+
+    echo "Iniciando instalação do Net::DNS"
+    cpan install Net::DNS || { echo "Erro ao instalar Net::DNS via CPAN."; exit 1; }
+    echo "Net::DNS instalado com sucesso"
+
 }
 
 # Verificar dependências
