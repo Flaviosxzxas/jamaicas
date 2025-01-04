@@ -707,7 +707,7 @@ action=permit
 EOF
 
     # Ajustar a propriedade e permissões do arquivo de configuração
-    sudo chown postfwd:postfwd "$POSTFWD_CONF"  # Ajustar a propriedade do arquivo
+    sudo chown root:postfwd "$POSTFWD_CONF"  # Ajustar a propriedade do arquivo
     sudo chmod 640 "$POSTFWD_CONF"  # Ajustar as permissões do arquivo
 
 else
