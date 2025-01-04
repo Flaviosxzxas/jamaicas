@@ -484,8 +484,8 @@ install_dependencies() {
     # Instalar pacotes via apt-get
     echo "Instalando pacotes via apt-get..."
     apt-get install -y postfwd libsys-syslog-perl libnet-cidr-perl libmail-sender-perl \
-    libdata-dumper-perl libnet-dns-perl libmime-tools-perl liblog-any-perl perl postfix || {
-        echo "Erro ao instalar pacotes via apt-get"; exit 1;
+    libnet-dns-perl libmime-tools-perl liblog-any-perl perl postfix || {
+    echo "Erro ao instalar pacotes via apt-get"; exit 1;
     }
 
     # Instalar dependências para o Net::DNS
