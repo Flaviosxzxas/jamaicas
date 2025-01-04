@@ -738,7 +738,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=postfwd
+User=root
 Group=postfwd
 ExecStart=/usr/sbin/postfwd -f /etc/postfix/postfwd.cf -vv --pidfile /run/postfwd/postfwd.pid
 PIDFile=/run/postfwd/postfwd.pid
