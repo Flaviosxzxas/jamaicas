@@ -499,6 +499,10 @@ install_dependencies() {
     echo "Iniciando instalação do Sys::Syslog"
     cpan install Sys::Syslog || { echo "Erro ao instalar Sys::Syslog via CPAN."; exit 1; }
     echo "Sys::Syslog instalado com sucesso"
+    
+    echo "Iniciando instalação do Net::DNS"
+    cpan install Net::DNS || { echo "Erro ao instalar Net::DNS via CPAN."; exit 1; }
+    echo "Net::DNS instalado com sucesso"
 
     echo "Iniciando instalação do Net::CIDR"
     cpan install Net::CIDR || { echo "Erro ao instalar Net::CIDR via CPAN."; exit 1; }
