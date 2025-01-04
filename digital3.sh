@@ -457,49 +457,53 @@ recipient_delimiter = +
 inet_interfaces = all
 inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 
-# Função para garantir que as dependências necessárias estejam instaladas
+# Salvar variáveis antes de instalar dependências
+ORIGINAL_VARS=$(declare -p ServerName CloudflareAPI CloudflareEmail Domain DKIMSelector ServerIP)
+
+# Função para instalar dependências
 install_dependencies() {
     echo "Instalando dependências necessárias..."
     export DEBIAN_FRONTEND=noninteractive
-    sudo apt-get update -y || { echo "Erro ao atualizar o repositório"; exit 1; }
 
-    # Verificar se o repositório universe está habilitado e habilitá-lo se necessário
+    # Atualizar repositórios
+    apt-get update -y || { echo "Erro ao atualizar repositórios"; exit 1; }
+
+    # Verificar se o repositório 'universe' está habilitado
     if ! grep -q "^deb .*universe" /etc/apt/sources.list; then
         echo "Habilitando repositório 'universe'..."
-        sudo apt-add-repository "deb http://archive.ubuntu.com/ubuntu/ $(lsb_release -sc) universe" -y || { echo "Erro ao habilitar repositório 'universe'"; exit 1; }
-        sudo apt-get update -y || { echo "Erro ao atualizar repositórios"; exit 1; }
+        apt-add-repository -y universe || { echo "Erro ao habilitar repositório 'universe'"; exit 1; }
+        apt-get update -y || { echo "Erro ao atualizar repositórios"; exit 1; }
     fi
 
-    # Instalar pacotes via apt-get
-    echo "Instalando pacotes necessários via apt-get..."
-    if ! sudo apt-get install -y postfwd libsys-syslog-perl libnet-cidr-perl libmail-sender-perl libdata-dumper-perl libnet-dns-perl libmime-tools-perl liblog-any-perl perl postfix; then
-        echo "Erro ao instalar dependências com apt-get. Tentando instalar pacotes Perl via CPAN." >&2
+    # Instalar pacotes necessários
+    echo "Instalando pacotes via apt-get..."
+    apt-get install -y postfwd libsys-syslog-perl libnet-cidr-perl libmail-sender-perl || {
+        echo "Erro ao instalar pacotes via apt-get"; exit 1;
+    }
 
-        # Verificar se o CPAN está instalado
-        if ! command -v cpan &> /dev/null; then
-            echo "CPAN não encontrado, instalando..."
-            sudo apt-get install -y perl || { echo "Erro ao instalar Perl."; exit 1; }
-            sudo cpan install Data::Dumper || { echo "Erro ao instalar Data::Dumper via CPAN."; exit 1; }
-        else
-            echo "Instalando pacotes Perl necessários via CPAN..."
-            sudo cpan install Data::Dumper || { echo "Erro ao instalar Data::Dumper via CPAN."; exit 1; }
-            sudo cpan install Sys::Syslog || { echo "Erro ao instalar Sys::Syslog via CPAN."; exit 1; }
-            sudo cpan install Net::CIDR || { echo "Erro ao instalar Net::CIDR via CPAN."; exit 1; }
-            sudo cpan install Mail::Sender || { echo "Erro ao instalar Mail::Sender via CPAN."; exit 1; }
-            sudo cpan install Net::DNS || { echo "Erro ao instalar Net::DNS via CPAN."; exit 1; }
-            sudo cpan install MIME::Tools || { echo "Erro ao instalar MIME::Tools via CPAN."; exit 1; }
-            sudo cpan install Log::Any || { echo "Erro ao instalar Log::Any via CPAN."; exit 1; }
-        fi
+    echo "Verificando CPAN..."
+    if ! command -v cpan &> /dev/null; then
+        echo "CPAN não encontrado. Instalando Perl e CPAN..."
+        apt-get install -y perl || { echo "Erro ao instalar Perl"; exit 1; }
     fi
+
+    # Instalar pacotes Perl via CPAN
+    echo "Instalando pacotes Perl via CPAN..."
+    cpan install Data::Dumper Sys::Syslog Net::CIDR || {
+        echo "Erro ao instalar pacotes Perl via CPAN"; exit 1;
+    }
 }
 
-# Verificar se as dependências estão instaladas
-echo "Verificando dependências..."
+# Verificar dependências
 if ! dpkg -l | grep -q postfwd; then
     install_dependencies
 else
     echo "Postfwd e dependências já instalados."
 fi
+
+# Restaurar variáveis
+eval "$ORIGINAL_VARS"
+
 
 # Continuar execução após instalação de dependências ou após erro
 echo "Continuando a execução do script..."
