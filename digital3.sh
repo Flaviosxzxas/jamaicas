@@ -9,8 +9,7 @@ fi
 # Atualizar a lista de pacotes e atualizar pacotes
 echo "Atualizando a lista de pacotes..."
 sudo apt-get update
-sudo apt-get upgrade -y
-wait # adiciona essa linha para esperar que o comando seja concluído
+sudo apt-get upgrade -y || { echo "Erro ao atualizar os pacotes."; exit 1; }
 
 # Definir variáveis principais
 ServerName=$1
@@ -30,19 +29,22 @@ export CloudflareAPI
 export CloudflareEmail
 
 # Definir variáveis derivadas
-Domain=$(echo $ServerName | cut -d "." -f2-)
-DKIMSelector=$(echo $ServerName | awk -F[.:] '{print $1}')
-
-# Verificar conectividade antes de obter o IP público
-if ! wget -q --spider http://ip-api.com/line\?fields=query; then
-  echo "Erro: Não foi possível acessar a API para obter o IP do servidor."
+if [ -z "$ServerName" ]; then
+  echo "Erro: ServerName não está definido."
   exit 1
 fi
-ServerIP=$(wget -qO- http://ip-api.com/line\?fields=query)
 
-# Exportar variáveis derivadas para subprocessos
+Domain=$(echo "$ServerName" | cut -d "." -f2-)
+DKIMSelector=$(echo "$ServerName" | awk -F[.:] '{print $1}')
 export Domain
 export DKIMSelector
+
+# Obter IP público
+ServerIP=$(wget -qO- http://ip-api.com/line\?fields=query)
+if [ -z "$ServerIP" ]; then
+  echo "Erro: Não foi possível obter o IP público."
+  exit 1
+fi
 export ServerIP
 
 # Exibir valores das variáveis para depuração
@@ -52,7 +54,6 @@ echo "CloudflareEmail: $CloudflareEmail"
 echo "Domain: $Domain"
 echo "DKIMSelector: $DKIMSelector"
 echo "ServerIP: $ServerIP"
-
 sleep 10
 
 echo "==================================================================== Hostname && SSL ===================================================================="
@@ -828,6 +829,15 @@ echo "==================================================== OpenDMARC ===========
 
 echo "==================================================== CLOUDFLARE ===================================================="
 
+# Exibir valores das variáveis no início da seção Cloudflare
+echo "===== DEPURAÇÃO: ANTES DA CONFIGURAÇÃO CLOUDFLARE ====="
+echo "ServerName: $ServerName"
+echo "CloudflareAPI: $CloudflareAPI"
+echo "CloudflareEmail: $CloudflareEmail"
+echo "Domain: $Domain"
+echo "DKIMSelector: $DKIMSelector"
+echo "ServerIP: $ServerIP"
+
 # Verificar se o jq já está instalado
 if ! command -v jq &> /dev/null; then
   echo "jq não encontrado. Instalando..."
@@ -840,6 +850,12 @@ fi
 # Gerar código DKIM
 DKIMCode=$(/root/dkimcode.sh)
 
+# Exibir valores antes de obter a zona do Cloudflare
+echo "===== DEPURAÇÃO: ANTES DE OBTER ZONA CLOUDFLARE ====="
+echo "DKIMCode: $DKIMCode"
+echo "Domain: $Domain"
+echo "ServerName: $ServerName"
+
 # Obter o ID da zona do Cloudflare
 echo "  -- Obtendo Zona"
 CloudflareZoneID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$Domain&status=active" \
@@ -851,6 +867,10 @@ if [ -z "$CloudflareZoneID" ]; then
   echo "Erro: Não foi possível obter o ID da zona do Cloudflare." >&2
   exit 1
 fi
+
+# Exibir valores após obter a zona do Cloudflare
+echo "===== DEPURAÇÃO: APÓS OBTER ZONA CLOUDFLARE ====="
+echo "CloudflareZoneID: $CloudflareZoneID"
 
 # Função para obter detalhes de um registro existente
 get_record_details() {
@@ -871,11 +891,22 @@ create_or_update_record() {
   local record_priority=$4
   local record_proxied=false
 
+  # Exibir valores antes de obter detalhes do registro
+  echo "===== DEPURAÇÃO: ANTES DE OBTER DETALHES DO REGISTRO ====="
+  echo "RecordName: $record_name"
+  echo "RecordType: $record_type"
+
   # Obter os detalhes do registro existente
   response=$(get_record_details "$record_name" "$record_type")
   existing_content=$(echo "$response" | jq -r '.result[0].content')
   existing_ttl=$(echo "$response" | jq -r '.result[0].ttl')
   existing_priority=$(echo "$response" | jq -r '.result[0].priority')
+
+  # Exibir valores do registro existente
+  echo "===== DEPURAÇÃO: DETALHES DO REGISTRO EXISTENTE ====="
+  echo "ExistingContent: $existing_content"
+  echo "ExistingTTL: $existing_ttl"
+  echo "ExistingPriority: $existing_priority"
 
   # Verificar se o registro está atualizado
   if [ "$record_type" == "MX" ] && [ "$existing_content" == "$record_content" ] && [ "$existing_ttl" -eq "$record_ttl" ] && [ "$existing_priority" -eq "$record_priority" ]; then
@@ -913,7 +944,6 @@ create_or_update_record() {
 echo "  -- Configurando registros DNS"
 create_or_update_record "$DKIMSelector" "A" "$ServerIP" ""
 create_or_update_record "$ServerName" "TXT" "\"v=spf1 a:$ServerName ~all\"" ""
-#create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmarc@$ServerName; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r\"" ""
 create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=reject; rua=mailto:dmarc-reports@$ServerName; ruf=mailto:dmarc-reports@$ServerName; sp=reject; adkim=s; aspf=s\"" ""
 
 # Atualização para garantir que o DKIM seja uma única string
