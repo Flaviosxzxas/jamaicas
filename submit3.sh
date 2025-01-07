@@ -727,6 +727,13 @@ sudo mkdir -p "/var/tmp/postfwd2" || { echo "Erro ao criar diretório /var/tmp/p
 sudo chown postfwd:postfwd "/var/tmp/postfwd2" || { echo "Erro ao ajustar proprietário do diretório /var/tmp/postfwd2."; exit 1; }
 sudo chmod 750 "/var/tmp/postfwd2" || { echo "Erro ao ajustar permissões do diretório /var/tmp/postfwd2."; exit 1; }
 
+# Verificar se os diretórios foram configurados corretamente
+if [ -d "/var/run/postfwd" ] && [ -d "/var/tmp/postfwd2" ]; then
+    echo "Todos os diretórios necessários foram configurados com sucesso."
+else
+    echo "Erro: Alguns diretórios não foram configurados corretamente."
+    exit 1
+fi
 
 echo "Permissões ajustadas com sucesso!"
 
