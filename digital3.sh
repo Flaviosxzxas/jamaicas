@@ -567,22 +567,21 @@ else
     echo "Grupo 'nobody' já existe."
 fi
 
-# Instalar Postfwd, se não estiver instalado
-if ! command -v postfwd &>/dev/null; then
-    echo "Postfwd não encontrado. Instalando..."
+# Instalar postfwd2, se não estiver instalado
+if ! command -v postfwd2 &>/dev/null; then
+    echo "postfwd2 não encontrado. Instalando..."
     export DEBIAN_FRONTEND=noninteractive
-    sudo apt-get update -y && sudo apt-get install -y postfwd || { echo "Erro ao instalar o postfwd."; exit 1; }
+    sudo apt-get update -y && sudo apt-get install -y postfwd2 || { echo "Erro ao instalar o postfwd2."; exit 1; }
 else
-    echo "Postfwd já está instalado."
+    echo "postfwd2 já está instalado."
 fi
 
 POSTFWD_CONF="/etc/postfix/postfwd.cf"
 
-# Criar arquivo de configuração do Postfwd
+# Criar arquivo de configuração do postfwd2
 if [ ! -f "$POSTFWD_CONF" ]; then
     echo "Arquivo de configuração $POSTFWD_CONF não encontrado. Criando..."
     sudo tee "$POSTFWD_CONF" > /dev/null <<EOF
-pidfile=/run/postfwd/postfwd.pid
 #######################################################
 # Regras de Controle de Limites por Servidor
 #######################################################
@@ -731,7 +730,7 @@ if [ ! -f /etc/systemd/system/postfwd.service ]; then
     echo "Criando arquivo de serviço systemd para postfwd..."
     sudo tee /etc/systemd/system/postfwd.service > /dev/null <<EOF
 [Unit]
-Description=Postfwd - Postfix Policy Server
+Description=Postfwd2 - Postfix Policy Server
 After=network.target
 
 [Service]
