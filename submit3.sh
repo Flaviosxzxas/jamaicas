@@ -723,9 +723,10 @@ sudo chmod 750 "/var/run/postfwd" || { echo "Erro ao ajustar permissões do dire
 
 # Criar e ajustar permissões do diretório temporário para cache
 echo "Criando e ajustando permissões do diretório temporário para cache..."
-sudo mkdir -p "/var/tmp/postfwd2" || { echo "Erro ao criar diretório /var/tmp/postfwd2."; exit 1; }
-sudo chown postfwd:postfwd "/var/tmp/postfwd2" || { echo "Erro ao ajustar proprietário do diretório /var/tmp/postfwd2."; exit 1; }
-sudo chmod 750 "/var/tmp/postfwd2" || { echo "Erro ao ajustar permissões do diretório /var/tmp/postfwd2."; exit 1; }
+sudo mkdir -p "/var/tmp" || { echo "Erro ao criar diretório /var/tmp."; exit 1; }
+sudo chown postfwd:postfwd "/var/tmp" || { echo "Erro ao ajustar proprietário do diretório /var/tmp."; exit 1; }
+sudo chmod 750 "/var/tmp" || { echo "Erro ao ajustar permissões do diretório /var/tmp."; exit 1; }
+
 
 # Verificar se os diretórios foram configurados corretamente
 if [ -d "/var/run/postfwd" ] && [ -d "/var/tmp/postfwd2" ]; then
