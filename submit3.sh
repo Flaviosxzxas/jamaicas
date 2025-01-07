@@ -781,6 +781,31 @@ else
     echo "A entrada do Postfwd já existe no /etc/postfix/master.cf."
 fi
 
+POSTFWD_FILE="/usr/sbin/postfwd"
+
+# Verificar se o arquivo existe
+if [ ! -f "$POSTFWD_FILE" ]; then
+    echo "Erro: O arquivo $POSTFWD_FILE não foi encontrado."
+    exit 1
+fi
+
+# Backup do arquivo original
+BACKUP_FILE="${POSTFWD_FILE}.bak.$(date +%F_%T)"
+sudo cp "$POSTFWD_FILE" "$BACKUP_FILE" || {
+    echo "Erro ao criar backup do arquivo original."
+    exit 1
+}
+
+echo "Backup criado: $BACKUP_FILE"
+
+# Corrigir o problema da variável $send não inicializada
+sudo sed -i '/\$send/s/^/my $send = ""; # Inicialização adicionada\n/' "$POSTFWD_FILE" || {
+    echo "Erro ao corrigir o arquivo Postfwd."
+    exit 1
+}
+
+echo "O arquivo $POSTFWD_FILE foi corrigido com sucesso."
+
 # Iniciar e verificar o serviço postfwd
 sudo systemctl start postfwd || { echo "Erro ao iniciar o serviço postfwd."; exit 1; }
 sudo systemctl restart postfix || { echo "Erro ao reiniciar o Postfix."; exit 1; }
