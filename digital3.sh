@@ -469,13 +469,11 @@ ORIGINAL_VARS=$(declare -p ServerName CloudflareAPI CloudflareEmail Domain DKIMS
 # Função para verificar e instalar módulos Perl
 check_and_install_perl_module() {
     local module_name=$1
-
-    # Verificar se o módulo já está instalado
-    if perl -M$module_name -e 'print "$module_name já está instalado\n";' 2>/dev/null; then
+    if perl -M"$module_name" -e '1' 2>/dev/null; then
         echo "Módulo Perl $module_name já está instalado. Pulando instalação."
     else
         echo "Módulo Perl $module_name não encontrado. Instalando via CPAN..."
-        cpan install $module_name || { echo "Erro ao instalar $module_name via CPAN."; exit 1; }
+        cpan install "$module_name" || { echo "Erro ao instalar $module_name via CPAN."; exit 1; }
         echo "Módulo Perl $module_name instalado com sucesso."
     fi
 }
@@ -707,7 +705,7 @@ action=permit
 EOF
 
     # Ajustar a propriedade e permissões do arquivo de configuração
-    sudo chown root:postfwd "$POSTFWD_CONF"  # Ajustar a propriedade do arquivo
+    sudo chown postfwd:postfwd "$POSTFWD_CONF"  # Ajustar a propriedade do arquivo
     sudo chmod 640 "$POSTFWD_CONF"  # Ajustar as permissões do arquivo
 
 else
@@ -738,7 +736,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
+User=postfwd
 Group=postfwd
 ExecStart=/usr/sbin/postfwd -f /etc/postfix/postfwd.cf -vv --pidfile /run/postfwd/postfwd.pid
 PIDFile=/run/postfwd/postfwd.pid
