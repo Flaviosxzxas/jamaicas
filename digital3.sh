@@ -738,7 +738,7 @@ After=network.target
 Type=simple
 User=postfwd
 Group=postfwd
-ExecStart=/usr/sbin/postfwd -f /etc/postfix/postfwd.cf -vv --pidfile /run/postfwd/postfwd.pid
+ExecStart=/usr/sbin/postfwd2 -f /etc/postfix/postfwd.cf -vv --pidfile /run/postfwd/postfwd.pid
 PIDFile=/run/postfwd/postfwd.pid
 Restart=on-failure
 
