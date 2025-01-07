@@ -575,18 +575,6 @@ else
     echo "postfwd2 já está instalado."
 fi
 
-# Verificar e corrigir o symlink makedefs.out
-if [ -L /etc/postfix/makedefs.out ]; then
-    echo "Corrigindo symlink /etc/postfix/makedefs.out..."
-    sudo rm /etc/postfix/makedefs.out
-fi
-
-# Criar o symlink correto
-if [ ! -L /etc/postfix/makedefs.out ]; then
-    echo "Criando symlink /etc/postfix/makedefs.out..."
-    sudo ln -s /usr/share/postfix/makedefs.out /etc/postfix/makedefs.out
-fi
-
 # Criar arquivo de configuração do postfwd2
 if [ ! -f "/etc/postfix/postfwd.cf" ]; then
     echo "Arquivo de configuração /etc/postfix/postfwd.cf não encontrado. Criando..."
@@ -743,7 +731,7 @@ After=network.target
 
 [Service]
 Type=simple
-# User=postfwd  # Esta linha foi removida
+User=postfwd
 Group=postfwd
 ExecStart=/usr/sbin/postfwd2 -f /etc/postfix/postfwd.cf -vv --pidfile /run/postfwd/postfwd.pid
 PIDFile=/run/postfwd/postfwd.pid
@@ -752,6 +740,9 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 EOF
+    # Ajustar a propriedade e permissões do arquivo de serviço
+    sudo chown postfwd:postfwd /etc/systemd/system/postfwd.service
+    sudo chmod 644 /etc/systemd/system/postfwd.service
     sudo systemctl daemon-reload
     sudo systemctl enable postfwd
 else
