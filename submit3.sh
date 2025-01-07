@@ -389,26 +389,6 @@ smtp_destination_rate_delay = 1s
 # smtpd_hard_error_limit = 20
 #   Define o número máximo de erros definitivos (5xx) permitidos antes de encerrar a conexão.
 
-# Habilita a autenticação SASL para enviar e-mails. Necessário para autenticação segura.
-smtpd_sasl_auth_enable = yes
-
-# Define o método de autenticação SASL (aqui usamos Dovecot).
-smtpd_sasl_type = dovecot
-
-# Especifica o caminho para o serviço de autenticação do Dovecot.
-smtpd_sasl_path = private/auth
-
-# Define opções de segurança para autenticação SASL:
-# - noanonymous: Não permite autenticação anônima.
-# - noplaintext: Exige que as credenciais sejam transmitidas de forma segura.
-smtpd_sasl_security_options = noanonymous, noplaintext
-
-# Adiciona mais restrições de segurança no SASL quando TLS é usado.
-smtpd_sasl_tls_security_options = noanonymous
-
-# Força o uso de TLS para autenticação. Garantia de que os dados de login estão criptografados.
-smtpd_tls_auth_only = yes
-
 # Restrições para remetentes:
 # - permite remetentes autenticados ou da rede confiável.
 # - rejeita remetentes com domínio ou hostname inválido.
@@ -420,7 +400,7 @@ smtpd_tls_auth_only = yes
 smtpd_helo_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_invalid_helo_hostname, reject_non_fqdn_helo_hostname, reject_unknown_helo_hostname
 
 
-# TLS parameters
+# Configurações TLS para recepção (SMTPD)
 smtpd_tls_cert_file=/etc/letsencrypt/live/$ServerName/fullchain.pem
 smtpd_tls_key_file=/etc/letsencrypt/live/$ServerName/privkey.pem
 smtpd_tls_security_level = may
@@ -431,13 +411,13 @@ smtpd_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
 smtpd_tls_ciphers = HIGH:!aNULL:!MD5:!3DES:!RC4:!eNULL
 smtpd_tls_exclude_ciphers = aNULL, MD5, 3DES
 
-# Forçar TLS para conexões de saída
+# Configurações TLS para envio (SMTP)
 smtp_tls_security_level = may
 smtp_tls_loglevel = 2
 smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
 smtp_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
-smtp_tls_ciphers = high
-smtp_tls_exclude_ciphers = aNULL, MD5, 3DES, RC4, eNULL
+smtp_tls_ciphers = HIGH:!aNULL:!MD5:!3DES:!RC4:!eNULL
+smtp_tls_exclude_ciphers = aNULL, MD5, 3DES
 
 # SASL Authentication
 smtpd_sasl_auth_enable = yes
