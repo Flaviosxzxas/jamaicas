@@ -365,7 +365,7 @@ smtpd_recipient_restrictions =
     permit_sasl_authenticated,
     reject_unauth_destination,
     reject_unknown_recipient_domain,
-    check_policy_service inet:127.0.0.1:10044
+    check_policy_service inet:127.0.0.1:10040
 
 # Limites de conexão
 smtpd_client_connection_rate_limit = 100
