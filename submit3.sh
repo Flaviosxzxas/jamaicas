@@ -575,6 +575,18 @@ else
     echo "postfwd2 já está instalado."
 fi
 
+# Verificar e corrigir o symlink makedefs.out
+if [ -L /etc/postfix/makedefs.out ]; then
+    echo "Corrigindo symlink /etc/postfix/makedefs.out..."
+    sudo rm /etc/postfix/makedefs.out
+fi
+
+# Criar o symlink correto
+if [ ! -L /etc/postfix/makedefs.out ]; then
+    echo "Criando symlink /etc/postfix/makedefs.out..."
+    sudo ln -s /usr/share/postfix/makedefs.out /etc/postfix/makedefs.out
+fi
+
 # Criar arquivo de configuração do postfwd2
 if [ ! -f "/etc/postfix/postfwd.cf" ]; then
     echo "Arquivo de configuração /etc/postfix/postfwd.cf não encontrado. Criando..."
