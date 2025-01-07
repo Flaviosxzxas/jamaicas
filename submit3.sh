@@ -456,10 +456,31 @@ recipient_delimiter = +
 inet_interfaces = all
 inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 
-# Verificar se o script está sendo executado como root
-if [ "$(id -u)" -ne 0 ]; then
-    echo "Erro: Este script precisa ser executado como root."
-    exit 1
+# Corrigir o problema do symlink 'makedefs.out' no Postfix
+POSTFIX_FILES="/etc/postfix/postfix-files"
+MAKDEFS_LINE='$meta_directory/makedefs.out:f:root:-:644'
+
+if grep -q "$MAKDEFS_LINE" "$POSTFIX_FILES"; then
+    echo "Encontrada entrada 'makedefs.out' no arquivo $POSTFIX_FILES. Comentando a linha..."
+    sudo sed -i "s|$MAKDEFS_LINE|#$MAKDEFS_LINE|" "$POSTFIX_FILES" || {
+        echo "Erro ao comentar a linha 'makedefs.out' no arquivo $POSTFIX_FILES."
+        exit 1
+    }
+    echo "Linha 'makedefs.out' comentada com sucesso no arquivo $POSTFIX_FILES."
+else
+    echo "A entrada 'makedefs.out' já está comentada ou não foi encontrada no arquivo $POSTFIX_FILES."
+fi
+
+# Remover o arquivo 'makedefs.out' se existir
+if [ -e "/etc/postfix/makedefs.out" ]; then
+    echo "Removendo o arquivo ou symlink /etc/postfix/makedefs.out..."
+    sudo rm -f /etc/postfix/makedefs.out || {
+        echo "Erro ao remover /etc/postfix/makedefs.out."
+        exit 1
+    }
+    echo "Arquivo /etc/postfix/makedefs.out removido com sucesso."
+else
+    echo "Arquivo /etc/postfix/makedefs.out não encontrado. Nenhuma ação necessária."
 fi
 
 # Salvar variáveis antes de instalar dependências
