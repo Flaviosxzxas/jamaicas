@@ -575,12 +575,10 @@ else
     echo "postfwd2 já está instalado."
 fi
 
-POSTFWD_CONF="/etc/postfix/postfwd.cf"
-
 # Criar arquivo de configuração do postfwd2
-if [ ! -f "$POSTFWD_CONF" ]; then
-    echo "Arquivo de configuração $POSTFWD_CONF não encontrado. Criando..."
-    sudo tee "$POSTFWD_CONF" > /dev/null <<EOF
+if [ ! -f "/etc/postfix/postfwd.cf" ]; then
+    echo "Arquivo de configuração /etc/postfix/postfwd.cf não encontrado. Criando..."
+    sudo bash -c "cat > /etc/postfix/postfwd.cf" <<EOF
 #######################################################
 # Regras de Controle de Limites por Servidor
 #######################################################
@@ -703,11 +701,10 @@ action=permit
 EOF
 
     # Ajustar a propriedade e permissões do arquivo de configuração
-    sudo chown postfwd:postfwd "$POSTFWD_CONF"  # Ajustar a propriedade do arquivo
-    sudo chmod 640 "$POSTFWD_CONF"  # Ajustar as permissões do arquivo
-
+    sudo chown root:postfwd "/etc/postfix/postfwd.cf"  # Ajustar a propriedade do arquivo
+    sudo chmod 640 "/etc/postfix/postfwd.cf"  # Ajustar as permissões do arquivo
 else
-    echo "Arquivo de configuração $POSTFWD_CONF já existe."
+    echo "Arquivo de configuração /etc/postfix/postfwd.cf já existe."
 fi
 
 # Criar e ajustar permissões do diretório de PID
