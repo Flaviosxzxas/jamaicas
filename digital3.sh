@@ -581,7 +581,7 @@ POSTFWD_CONF="/etc/postfix/postfwd.cf"
 # Criar arquivo de configuração do postfwd2
 if [ ! -f "$POSTFWD_CONF" ]; then
     echo "Arquivo de configuração $POSTFWD_CONF não encontrado. Criando..."
-    sudo tee "$POSTFWD_CONF" > /dev/null <<EOF
+    sudo bash -c "cat > $POSTFWD_CONF" <<EOF
 #######################################################
 # Regras de Controle de Limites por Servidor
 #######################################################
@@ -706,7 +706,6 @@ EOF
     # Ajustar a propriedade e permissões do arquivo de configuração
     sudo chown root:postfwd "$POSTFWD_CONF"  # Ajustar a propriedade do arquivo
     sudo chmod 640 "$POSTFWD_CONF"  # Ajustar as permissões do arquivo
-
 else
     echo "Arquivo de configuração $POSTFWD_CONF já existe."
 fi
