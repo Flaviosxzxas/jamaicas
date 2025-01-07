@@ -358,7 +358,7 @@ smtpd_milters = inet:localhost:12301
 non_smtpd_milters = inet:localhost:12301
 
 # Login without Username and Password
-policy-spf_time_limit = 30
+# policy-spf_time_limit = 30
 smtpd_recipient_restrictions = 
     permit_mynetworks,
     check_recipient_access hash:/etc/postfix/access.recipients,
