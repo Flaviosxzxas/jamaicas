@@ -737,14 +737,14 @@ fi
 # Criar e ajustar permissões do diretório temporário para cache
 echo "Criando e ajustando permissões do diretório temporário para cache..."
 sudo mkdir -p "/var/tmp" || { echo "Erro ao criar diretório /var/tmp."; exit 1; }
-sudo chown postfwd:postfwd "/var/tmp" || { echo "Erro ao ajustar proprietário do diretório /var/tmp."; exit 1; }
-sudo chmod 770 "/var/tmp" || { echo "Erro ao ajustar permissões do diretório /var/tmp."; exit 1; }
+sudo chmod 1777 "/var/tmp" || { echo "Erro ao ajustar permissões do diretório /var/tmp."; exit 1; }
 
 # Garantir que o socket seja acessível
 if [ -e "/var/tmp/postfwd2-cache.socket" ]; then
     echo "Removendo socket antigo..."
     sudo rm -f "/var/tmp/postfwd2-cache.socket"
 fi
+
 
 
 # Verificar se os diretórios foram configurados corretamente
