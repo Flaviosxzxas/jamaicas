@@ -516,18 +516,35 @@ clean_postfwd2_residues() {
     echo "Resquícios do postfwd2 removidos com sucesso."
 }
 
-# Atualizar pacotes e instalar dependências
+# Garantir que o script seja totalmente não interativo
+export DEBIAN_FRONTEND=noninteractive
+
+# Atualizar pacotes e instalar dependências básicas
 sudo apt-get update
 sudo apt-get install -y wget unzip libidn2-0-dev
 
 # Baixar e instalar o Postfwd
 cd /tmp
-wget https://github.com/postfwd/postfwd/archive/master.zip
-unzip master.zip
+wget https://github.com/postfwd/postfwd/archive/master.zip -O postfwd.zip
+unzip postfwd.zip
 sudo mv postfwd-master /opt/postfwd
 
-# Instalar módulos Perl necessários
-sudo cpan install Net::Server::Daemonize Net::Server::Multiplex Net::Server::PreFork Net::DNS IO::Multiplex
+# Verificar e instalar módulos Perl necessários
+check_and_install_perl_module() {
+    local module_name=$1
+    if perl -M"$module_name" -e '1' 2>/dev/null; then
+        echo "Módulo Perl $module_name já está instalado. Pulando."
+    else
+        echo "Módulo Perl $module_name não encontrado. Instalando..."
+        sudo cpan -i "$module_name" || { echo "Erro ao instalar $module_name."; exit 1; }
+    fi
+}
+
+# Instalar módulos necessários
+modules=("Net::Server::Daemonize" "Net::Server::Multiplex" "Net::Server::PreFork" "Net::DNS" "IO::Multiplex")
+for module in "${modules[@]}"; do
+    check_and_install_perl_module "$module"
+done
 
 # Criar arquivo de configuração do Postfwd
 sudo mkdir -p /opt/postfwd/etc
