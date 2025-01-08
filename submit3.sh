@@ -826,74 +826,95 @@ echo "==================================================== POSTFIX =============
 
 echo "==================================================== OpenDMARC ===================================================="
 
-# Configurar o debconf para modo não interativo globalmente
-export DEBIAN_FRONTEND=noninteractive
-
 # Criar os diretórios necessários para o OpenDMARC
-sudo mkdir -p /run/opendmarc
-sudo mkdir -p /etc/opendmarc
-sudo mkdir -p /var/log/opendmarc
-sudo mkdir -p /var/lib/opendmarc
+echo "[OpenDMARC] Criando diretórios necessários..."
+sudo mkdir -p /run/opendmarc /etc/opendmarc /var/log/opendmarc /var/lib/opendmarc
 
 # Ajustar permissões e propriedade dos diretórios
-sudo chown opendmarc:opendmarc /run/opendmarc
-sudo chmod 750 /run/opendmarc
-sudo chown opendmarc:opendmarc /etc/opendmarc
-sudo chmod 750 /etc/opendmarc
-sudo chown opendmarc:opendmarc /var/log/opendmarc
-sudo chmod 750 /var/log/opendmarc
-sudo chown opendmarc:opendmarc /var/lib/opendmarc
-sudo chmod 750 /var/lib/opendmarc
+echo "[OpenDMARC] Ajustando permissões dos diretórios..."
+sudo chown opendmarc:opendmarc /run/opendmarc /etc/opendmarc /var/log/opendmarc /var/lib/opendmarc
+sudo chmod 750 /run/opendmarc /etc/opendmarc /var/log/opendmarc /var/lib/opendmarc
 
-# Criar o arquivo de configuração do OpenDMARC
-sudo tee /etc/opendmarc.conf > /dev/null <<EOF
-# Configuração de logs
-Syslog true
+# Função para analisar e preencher o arquivo /etc/opendmarc.conf
+preencher_opendmarc_conf() {
+    local opendmarc_conf="/etc/opendmarc.conf"
 
-# Definição do socket onde o OpenDMARC escuta
-Socket inet:54321@127.0.0.1
+    # Verifica se o arquivo existe, caso contrário, cria
+    if [[ ! -f "$opendmarc_conf" ]]; then
+        echo "[OpenDMARC] Arquivo $opendmarc_conf não encontrado. Criando um novo..."
+        sudo touch "$opendmarc_conf"
+    fi
 
-# Definição do arquivo PID para controle do processo
-PidFile /run/opendmarc/opendmarc.pid
+    # Configurações esperadas
+    local configuracoes=(
+        "Syslog true"
+        "Socket inet:54321@127.0.0.1"
+        "PidFile /run/opendmarc/opendmarc.pid"
+        "AuthservID OpenDMARC"
+        "IgnoreHosts /etc/opendmarc/ignore.hosts"
+        "RejectFailures false"
+        "TrustedAuthservIDs HOSTNAME"
+        "HistoryFile /var/lib/opendmarc/opendmarc.dat"
+    )
 
-# ID do autenticador usado nos cabeçalhos de autenticação
-AuthservID OpenDMARC
+    # Verifica e preenche as configurações
+    echo "[OpenDMARC] Analisando e preenchendo o arquivo $opendmarc_conf..."
+    for configuracao in "${configuracoes[@]}"; do
+        if ! grep -q "^${configuracao//\//\\/}" "$opendmarc_conf"; then
+            echo "[OpenDMARC] Adicionando configuração: $configuracao"
+            echo "$configuracao" | sudo tee -a "$opendmarc_conf" > /dev/null
+        fi
+    done
 
-# Localização do arquivo de hosts a serem ignorados
-IgnoreHosts /etc/opendmarc/ignore.hosts
+    # Ajusta as permissões do arquivo
+    sudo chown opendmarc:opendmarc "$opendmarc_conf"
+    sudo chmod 644 "$opendmarc_conf"
 
-# Definição de se rejeitar falhas de DMARC
-RejectFailures false
+    echo "[OpenDMARC] Configuração do arquivo $opendmarc_conf concluída."
+}
 
-# IDs de servidores de autenticação confiáveis
-TrustedAuthservIDs ${ServerName}
-
-# Arquivo de histórico para relatórios detalhados
-HistoryFile /var/lib/opendmarc/opendmarc.dat
-EOF
+# Chama a função para preencher o arquivo de configuração
+preencher_opendmarc_conf
 
 # Criar o arquivo de hosts a serem ignorados se não existir
+echo "[OpenDMARC] Criando arquivo ignore.hosts..."
 sudo touch /etc/opendmarc/ignore.hosts
 sudo chown opendmarc:opendmarc /etc/opendmarc/ignore.hosts
 sudo chmod 644 /etc/opendmarc/ignore.hosts
 
 # Criar o arquivo de histórico do OpenDMARC
+echo "[OpenDMARC] Criando arquivo opendmarc.dat..."
 sudo touch /var/lib/opendmarc/opendmarc.dat
 sudo chown opendmarc:opendmarc /var/lib/opendmarc/opendmarc.dat
 sudo chmod 644 /var/lib/opendmarc/opendmarc.dat
 
+# Remover o arquivo PID antes de reiniciar, para evitar conflitos
+echo "[OpenDMARC] Removendo arquivo PID antigo, se existente..."
+sudo rm -f /run/opendmarc/opendmarc.pid
+
 # Criar o arquivo PID do OpenDMARC
+echo "[OpenDMARC] Criando arquivo opendmarc.pid..."
 sudo touch /run/opendmarc/opendmarc.pid
 sudo chown opendmarc:opendmarc /run/opendmarc/opendmarc.pid
 sudo chmod 600 /run/opendmarc/opendmarc.pid
 
 # Configurar e reiniciar o OpenDKIM
+echo "[OpenDMARC] Reiniciando o serviço OpenDKIM..."
 sudo systemctl restart opendkim
-wait # adiciona essa linha para esperar que o comando seja concluído
+if systemctl is-active --quiet opendkim; then
+    echo "[OpenDMARC] OpenDKIM reiniciado com sucesso."
+else
+    echo "[OpenDMARC] Falha ao reiniciar o OpenDKIM."
+fi
 
 # Configurar e reiniciar o OpenDMARC
+echo "[OpenDMARC] Reiniciando o serviço OpenDMARC..."
 sudo systemctl restart opendmarc
-wait # adiciona essa linha para esperar que o comando seja concluído
+if systemctl is-active --quiet opendmarc; then
+    echo "[OpenDMARC] OpenDMARC reiniciado com sucesso."
+else
+    echo "[OpenDMARC] Falha ao reiniciar o OpenDMARC."
+fi
 
 echo "==================================================== OpenDMARC ===================================================="
 
