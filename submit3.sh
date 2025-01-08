@@ -361,15 +361,18 @@ milter_default_action = accept
 smtpd_milters = inet:127.0.0.1:54321, inet:127.0.0.1:12301
 non_smtpd_milters = inet:127.0.0.1:54321, inet:127.0.0.1:12301
 
-# Login without Username and Password
-# policy-spf_time_limit = 30
+# Limite de tempo para a política de Postfwd
+127.0.0.1:10045_time_limit = 3600
+
+# Restrições de destinatários
 smtpd_recipient_restrictions = 
     permit_mynetworks,
     check_recipient_access hash:/etc/postfix/access.recipients,
     permit_sasl_authenticated,
     reject_unauth_destination,
     reject_unknown_recipient_domain,
-    check_policy_service inet:127.0.0.1:10040
+    check_policy_service inet:127.0.0.1:10045
+
 
 # Limites de conexão
 smtpd_client_connection_rate_limit = 100
@@ -713,12 +716,6 @@ sudo chmod +x /opt/postfwd/bin/postfwd-script.sh
 
 # Criar link simbólico para o script de inicialização
 sudo ln -s /opt/postfwd/bin/postfwd-script.sh /etc/init.d/postfwd
-
-# Configurar o Postfix para usar o Postfwd
-sudo tee -a /etc/postfix/main.cf > /dev/null <<EOF
-127.0.0.1:10045_time_limit = 3600
-smtpd_recipient_restrictions = permit_mynetworks, reject_unauth_destination, check_policy_service inet:127.0.0.1:10045
-EOF
 
 # Reiniciar serviços
 sudo /etc/init.d/postfwd start
