@@ -136,15 +136,17 @@ sudo chown -R opendkim:opendkim /etc/opendkim/
 sudo chmod -R 750 /etc/opendkim/
 
 # Configuração do arquivo default do OpenDKIM
-echo "RUNDIR=/run/opendkim
-SOCKET=\"inet:12301@localhost\"
+sudo tee /etc/default/opendkim > /dev/null <<EOF
+RUNDIR=/run/opendkim
+SOCKET="inet:12301@127.0.0.1"
 USER=opendkim
 GROUP=opendkim
 PIDFILE=\$RUNDIR/\$NAME.pid
-EXTRAAFTER=" | sudo tee /etc/default/opendkim > /dev/null
+EOF
 
 # Configuração do arquivo de configuração do OpenDKIM
-echo "AutoRestart             Yes
+sudo tee /etc/opendkim.conf > /dev/null <<EOF
+AutoRestart             Yes
 AutoRestartRate         10/1h
 UMask                   002
 Syslog                  yes
@@ -162,18 +164,20 @@ UserID                  opendkim:opendkim
 Domain                  ${ServerName}
 KeyFile                 /etc/opendkim/keys/mail.private
 Selector                mail
-Socket                  inet:12301@localhost
-RequireSafeKeys         false" | sudo tee /etc/opendkim.conf > /dev/null
+Socket                  inet:12301@127.0.0.1
+RequireSafeKeys         false
+EOF
 
 # Definição dos hosts confiáveis para o DKIM
-echo "127.0.0.1
+sudo tee /etc/opendkim/TrustedHosts > /dev/null <<EOF
+127.0.0.1
 localhost
 $ServerName
-*.$Domain" | sudo tee /etc/opendkim/TrustedHosts > /dev/null
+*.$Domain
+EOF
 
 # Geração das chaves DKIM
 sudo opendkim-genkey -b 2048 -s mail -d $ServerName -D /etc/opendkim/keys/
-wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Alterar permissões do arquivo de chave DKIM
 sudo chown opendkim:opendkim /etc/opendkim/keys/mail.private
@@ -354,8 +358,8 @@ alias_database = hash:/etc/aliases
 # DKIM Settings
 milter_protocol = 6
 milter_default_action = accept
-smtpd_milters = inet:localhost:12301
-non_smtpd_milters = inet:localhost:12301
+smtpd_milters = inet:127.0.0.1:54321, inet:127.0.0.1:12301
+non_smtpd_milters = inet:127.0.0.1:54321, inet:127.0.0.1:12301
 
 # Login without Username and Password
 # policy-spf_time_limit = 30
@@ -428,7 +432,7 @@ smtpd_sasl_tls_security_options = noanonymous
 smtpd_tls_auth_only = yes
 
 myorigin = /etc/mailname
-mydestination = $ServerName, $Domain, localhost
+mydestination = $ServerName, localhost
 relayhost =
 mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
 mailbox_size_limit = 0
@@ -847,7 +851,7 @@ sudo tee /etc/opendmarc.conf > /dev/null <<EOF
 Syslog true
 
 # Definição do socket onde o OpenDMARC escuta
-Socket inet:54321@localhost
+Socket inet:54321@127.0.0.1
 
 # Definição do arquivo PID para controle do processo
 PidFile /run/opendmarc/opendmarc.pid
