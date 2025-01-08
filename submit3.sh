@@ -476,18 +476,6 @@ fi
 # Salvar variáveis antes de instalar dependências
 ORIGINAL_VARS=$(declare -p ServerName CloudflareAPI CloudflareEmail Domain DKIMSelector ServerIP)
 
-# Função para verificar e instalar módulos Perl
-check_and_install_perl_module() {
-    local module_name=$1
-    if perl -M"$module_name" -e '1' 2>/dev/null; then
-        echo "Módulo Perl $module_name já está instalado. Pulando instalação."
-    else
-        echo "Módulo Perl $module_name não encontrado. Instalando via CPAN..."
-        cpan install "$module_name" || { echo "Erro ao instalar $module_name via CPAN."; exit 1; }
-        echo "Módulo Perl $module_name instalado com sucesso."
-    fi
-}
-
 # Função para verificar e remover resquícios do postfwd2
 clean_postfwd2_residues() {
     echo "Verificando e removendo resquícios do postfwd2..."
@@ -525,109 +513,22 @@ clean_postfwd2_residues() {
     echo "Resquícios do postfwd2 removidos com sucesso."
 }
 
+# Atualizar pacotes e instalar dependências
+sudo apt-get update
+sudo apt-get install -y wget unzip libidn2-0-dev
 
-# Função para garantir que as dependências necessárias estejam instaladas
-install_dependencies() {
-    echo "Instalando dependências necessárias..."
-    export DEBIAN_FRONTEND=noninteractive
-    export PERL_MM_USE_DEFAULT=1  # Forçar CPAN para modo não interativo
+# Baixar e instalar o Postfwd
+cd /tmp
+wget https://github.com/postfwd/postfwd/archive/master.zip
+unzip master.zip
+sudo mv postfwd-master /opt/postfwd
 
-    # Atualizar repositórios
-    apt-get update -y || { echo "Erro ao atualizar o repositório"; exit 1; }
+# Instalar módulos Perl necessários
+sudo cpan install Net::Server::Daemonize Net::Server::Multiplex Net::Server::PreFork Net::DNS IO::Multiplex
 
-    # Verificar se o repositório universe está habilitado
-    if ! grep -q "^deb .*universe" /etc/apt/sources.list; then
-        echo "Habilitando repositório 'universe'..."
-        apt-add-repository -y universe || { echo "Erro ao habilitar repositório 'universe'"; exit 1; }
-        apt-get update -y || { echo "Erro ao atualizar repositórios"; exit 1; }
-    fi
-
-    # Instalar pacotes via apt-get
-    echo "Instalando pacotes via apt-get..."
-    apt-get install -y postfwd libsys-syslog-perl libnet-cidr-perl libmail-sender-perl \
-    libnet-dns-perl libmime-tools-perl liblog-any-perl perl postfix || {
-        echo "Erro ao instalar pacotes via apt-get"; exit 1;
-    }
-
-    # Instalar dependências do Net::DNS
-    echo "Instalando dependências do Net::DNS..."
-    apt-get install -y libidn2-0 libidn2-0-dev || {
-        echo "Erro ao instalar dependências para Net::DNS."; exit 1;
-    }
-
-    # Verificar e instalar módulos Perl via CPAN
-    check_and_install_perl_module Data::Dumper
-    check_and_install_perl_module Sys::Syslog
-    check_and_install_perl_module Net::CIDR
-    check_and_install_perl_module Net::DNS
-    check_and_install_perl_module Log::Any
-}
-
-# Verificar dependências
-if ! dpkg -l | grep -q postfwd; then
-    install_dependencies
-else
-    echo "Postfwd e dependências já instalados."
-fi
-
-# Restaurar variáveis
-eval "$ORIGINAL_VARS"
-
-# Continuar execução após instalação de dependências ou após erro
-echo "Continuando a execução do script..."
-
-# Criar usuário e grupo 'postfwd', se necessário
-if ! id "postfwd" &>/dev/null; then
-    echo "Usuário 'postfwd' não encontrado. Tentando criar..."
-
-    # Tentar criar o grupo 'postfwd'
-    if ! getent group postfwd &>/dev/null; then
-        sudo groupadd postfwd || { echo "Erro ao criar grupo 'postfwd'. Abortando..."; exit 1; }
-    fi
-
-    # Tentar criar o usuário 'postfwd'
-    sudo useradd -r -g postfwd -s /usr/sbin/nologin postfwd || { echo "Erro ao criar usuário 'postfwd'. Abortando..."; exit 1; }
-else
-    echo "Usuário 'postfwd' já existe."
-fi
-
-# Verificar novamente se o usuário foi criado corretamente
-if ! id "postfwd" &>/dev/null; then
-    echo "Erro: O usuário 'postfwd' não foi criado corretamente. Tentando recriar..."
-
-    # Remover grupo e usuário corrompidos
-    sudo groupdel postfwd &>/dev/null || true
-    sudo userdel postfwd &>/dev/null || true
-
-    # Criar novamente o grupo e o usuário
-    sudo groupadd postfwd || { echo "Erro crítico ao criar grupo 'postfwd'. Abortando..."; exit 1; }
-    sudo useradd -r -g postfwd -s /usr/sbin/nologin postfwd || { echo "Erro crítico ao criar usuário 'postfwd'. Abortando..."; exit 1; }
-fi
-
-echo "Usuário e grupo 'postfwd' configurados com sucesso."
-
-
-# Garantir que o grupo 'nobody' exista
-if ! getent group nobody &>/dev/null; then
-    echo "Criando grupo 'nobody'..."
-    sudo groupadd nobody || { echo "Erro ao criar grupo 'nobody'. Abortando..."; exit 1; }
-else
-    echo "Grupo 'nobody' já existe."
-fi
-
-# Instalar postfwd, se não estiver instalado
-if ! command -v postfwd &>/dev/null; then
-    echo "postfwd não encontrado. Instalando..."
-    export DEBIAN_FRONTEND=noninteractive
-    sudo apt-get update -y && sudo apt-get install -y postfwd || { echo "Erro ao instalar o postfwd."; exit 1; }
-else
-    echo "postfwd já está instalado."
-fi
-
-# Criar arquivo de configuração do postfwd
-if [ ! -f "/etc/postfix/postfwd.cf" ]; then
-    echo "Arquivo de configuração /etc/postfix/postfwd.cf não encontrado. Criando..."
-    sudo bash -c "cat > /etc/postfix/postfwd.cf" <<EOF
+# Criar arquivo de configuração do Postfwd
+sudo mkdir -p /opt/postfwd/etc
+sudo tee /opt/postfwd/etc/postfwd.cf > /dev/null <<EOF
 #######################################################
 # Regras de Controle de Limites por Servidor
 #######################################################
@@ -749,161 +650,87 @@ pattern=recipient mx=.*
 action=permit
 EOF
 
-    # Ajustar a propriedade e permissões do arquivo de configuração
-    sudo chown root:postfwd "/etc/postfix/postfwd.cf"  # Ajustar a propriedade do arquivo
-    sudo chmod 640 "/etc/postfix/postfwd.cf"  # Ajustar as permissões do arquivo
-else
-    echo "Arquivo de configuração /etc/postfix/postfwd.cf já existe."
-fi
+# Criar script de inicialização do Postfwd
+sudo tee /opt/postfwd/bin/postfwd-script.sh > /dev/null <<'EOF'
+#!/bin/sh
+#
+# Startscript for the postfwd daemon
+#
+# by JPK
 
-# Criar e ajustar permissões do diretório de PID
-echo "Criando e ajustando permissões do diretório de PID..."
-sudo mkdir -p "/var/run/postfwd" || { echo "Erro ao criar diretório /var/run/postfwd."; exit 1; }
-sudo chown postfwd:postfwd "/var/run/postfwd" || { echo "Erro ao ajustar proprietário do diretório /var/run/postfwd."; exit 1; }
-sudo chmod 750 "/var/run/postfwd" || { echo "Erro ao ajustar permissões do diretório /var/run/postfwd."; exit 1; }
+PATH=/bin:/usr/bin:/usr/local/bin
 
-# Validar arquivo de configuração do postfwd
-echo "Validando o arquivo de configuração do postfwd..."
-if ! postfwd -f /etc/postfix/postfwd.cf --test; then
-    echo "Erro: O arquivo /etc/postfix/postfwd.cf contém erros. Verifique as regras configuradas."
-    exit 1
-else
-    echo "O arquivo /etc/postfix/postfwd.cf foi validado com sucesso."
-fi
+# path to program
+PFWCMD=/opt/postfwd/sbin/postfwd3
+# rulesetconfig file
+PFWCFG=/opt/postfwd/etc/postfwd.cf
+# pidfile
+PFWPID=/var/tmp/postfwd3-master.pid
 
-# Criar e ajustar permissões do diretório temporário para cache
-echo "Criando e ajustando permissões do diretório temporário para cache..."
-sudo mkdir -p "/var/tmp/postfwd" || { echo "Erro ao criar diretório /var/tmp/postfwd."; exit 1; }
-sudo chown postfwd:postfwd "/var/tmp/postfwd" || { echo "Erro ao ajustar proprietário do diretório /var/tmp/postfwd."; exit 1; }
-sudo chmod 770 "/var/tmp/postfwd" || { echo "Erro ao ajustar permissões do diretório /var/tmp/postfwd."; exit 1; }
+# daemon settings
+PFWUSER=postfix
+PFWGROUP=postfix
+PFWINET=127.0.0.1
+PFWPORT=10045
 
-# Garantir que o socket seja acessível
-if [ -e "/var/tmp/postfwd-cache.socket" ]; then
-    echo "Removendo socket antigo..."
-    sudo rm -f "/var/tmp/postfwd-cache.socket"
-fi
+# recommended extra arguments
+PFWARG="--shortlog --summary=600 --cache=600 --cache-rbl-timeout=3600 --cleanup-requests=1200 --cleanup-rbls=1800 --cleanup-rates=1200"
 
-# Verificar se os diretórios foram configurados corretamente
-if [ -d "/var/run/postfwd" ] && [ -d "/var/tmp/postfwd" ]; then
-    echo "Todos os diretórios necessários foram configurados com sucesso."
-else
-    echo "Erro: Alguns diretórios não foram configurados corretamente."
-    exit 1
-fi
+## should be no need to change below
 
-echo "Permissões ajustadas com sucesso!"
+P1="`basename ${PFWCMD}`"
+case "$1" in
 
-# Criar arquivo de serviço systemd, se não existir
-if [ ! -f /etc/systemd/system/postfwd.service ]; then
-    echo "Criando arquivo de serviço systemd para postfwd..."
-    sudo tee /etc/systemd/system/postfwd.service > /dev/null <<EOF
-[Unit]
-Description=postfwd - Postfix Policy Server
-After=network.target
+ start*)  [ /var/tmp/postfwd3-master.pid ] && rm -Rf /var/tmp/postfwd3-master.pid;
+          echo "Starting ${P1}...";
+   ${PFWCMD} ${PFWARG} --daemon --file=${PFWCFG} --interface=${PFWINET} --port=${PFWPORT} --user=${PFWUSER} --group=${PFWGROUP} --pidfile=${PFWPID};
+   ;;
 
-[Service]
-Type=simple
-User=postfwd
-Group=postfwd
-ExecStart=/usr/sbin/postfwd -f /etc/postfix/postfwd.cf --socket /var/tmp/postfwd-cache.socket -vv --pidfile /run/postfwd/postfwd.pid
-PIDFile=/run/postfwd/postfwd.pid
-Restart=on-failure
+ debug*)  echo "Starting ${P1} in debug mode...";
+   ${PFWCMD} ${PFWARG} -vv --daemon --file=${PFWCFG} --interface=${PFWINET} --port=${PFWPORT} --user=${PFWUSER} --group=${PFWGROUP} --pidfile=${PFWPID};
+   ;;
 
-# Garantir que o diretório exista e tenha permissões adequadas
-ExecStartPre=/bin/mkdir -p /run/postfwd
-ExecStartPre=/bin/chown postfwd:postfwd /run/postfwd
-ExecStartPre=/bin/chmod 750 /run/postfwd
+ stop*)  ${PFWCMD} --interface=${PFWINET} --port=${PFWPORT} --pidfile=${PFWPID} --kill;
+   ;;
 
-[Install]
-WantedBy=multi-user.target
+ reload*) ${PFWCMD} --interface=${PFWINET} --port=${PFWPORT} --pidfile=${PFWPID} -- reload;
+   ;;
+
+ restart*) $0 stop;
+   sleep 4;
+   $0 start;
+   ;;
+
+ *)  echo "Unknown argument \"$1\"" >&2;
+   echo "Usage: `basename $0` {start|stop|debug|reload|restart}"
+   exit 1;;
+esac
+exit $?
 EOF
-    # Ajustar a propriedade e permissões do arquivo de serviço
-    sudo chown postfwd:postfwd /etc/systemd/system/postfwd.service
-    sudo chmod 644 /etc/systemd/system/postfwd.service
-    sudo systemctl daemon-reload
-    sudo systemctl enable postfwd
-else
-    echo "Arquivo de serviço systemd já existe."
-fi
 
-# Adicionar Postfwd ao master.cf, se ainda não estiver presente
-echo "Verificando se a entrada do Postfwd já está presente no /etc/postfix/master.cf..."
-if ! grep -q "127.0.0.1:10040 inet" /etc/postfix/master.cf; then
-    echo "Adicionando entrada do Postfwd ao /etc/postfix/master.cf..."
-    sudo tee -a /etc/postfix/master.cf > /dev/null <<EOF
+# Tornar o script executável
+sudo chmod +x /opt/postfwd/bin/postfwd-script.sh
 
-# Postfwd Policy Server
-127.0.0.1:10040 inet  n  -  n  -  1  spawn
-  user=postfwd argv=/usr/sbin/postfwd -f /etc/postfix/postfwd.cf
+# Criar link simbólico para o script de inicialização
+sudo ln -s /opt/postfwd/bin/postfwd-script.sh /etc/init.d/postfwd
+
+# Configurar o Postfix para usar o Postfwd
+sudo tee -a /etc/postfix/main.cf > /dev/null <<EOF
+127.0.0.1:10045_time_limit = 3600
+smtpd_recipient_restrictions = permit_mynetworks, reject_unauth_destination, check_policy_service inet:127.0.0.1:10045
 EOF
-    echo "Entrada adicionada com sucesso!"
-else
-    echo "A entrada do Postfwd já existe no /etc/postfix/master.cf."
-fi
 
-POSTFWD_FILE="/usr/sbin/postfwd"
-
-# Verificar se o arquivo existe
-if [ ! -f "$POSTFWD_FILE" ]; then
-    echo "Erro: O arquivo $POSTFWD_FILE não foi encontrado. Pulando correção."
-    exit 1
-fi
-
-# Fazer um backup do arquivo original
-BACKUP_FILE="${POSTFWD_FILE}.bak.$(date +%Y%m%d%H%M%S)"
-echo "Criando backup do arquivo original: $BACKUP_FILE..."
-sudo cp "$POSTFWD_FILE" "$BACKUP_FILE" || {
-    echo "Erro ao criar backup do arquivo $POSTFWD_FILE. Abortando."
-    exit 1
-}
-echo "Backup criado com sucesso."
-
-# Aplicar a correção para inicializar a variável $send
-echo "Aplicando correção para inicializar a variável \$send..."
-sudo sed -i '/\$send/s/^/my $send = "" unless defined $send; # Inicialização corrigida\n/' "$POSTFWD_FILE" || {
-    echo "Erro ao aplicar a correção no arquivo $POSTFWD_FILE."
-    exit 1
-}
-
-# Verificar se a alteração foi bem-sucedida
-if grep -q "my \$send = \"\" unless defined \$send;" "$POSTFWD_FILE"; then
-    echo "Correção aplicada com sucesso ao arquivo $POSTFWD_FILE."
-else
-    echo "A correção não foi aplicada corretamente. Verifique o arquivo manualmente."
-    exit 1
-fi
-
-# Reiniciar o serviço postfwd para aplicar as alterações
-echo "Reiniciando o serviço Postfwd para aplicar as alterações..."
-sudo systemctl daemon-reload || {
-    echo "Erro ao reiniciar o serviço postfwd. Verifique os logs para mais detalhes."
-    exit 1
-}
-echo "Serviço Postfwd reiniciado com sucesso."
-
-
-# Verificar se o diretório /run/postfwd existe
-if [ ! -d "/run/postfwd" ]; then
-    echo "Diretório /run/postfwd não encontrado. Criando..."
-    sudo mkdir -p "/run/postfwd" || { echo "Erro ao criar /run/postfwd"; exit 1; }
-    sudo chown postfwd:postfwd "/run/postfwd"
-    sudo chmod 750 "/run/postfwd"
-fi
-
-# Finalizar qualquer modo de teste do postfwd
-sudo pkill -f "postfwd -f /etc/postfix/postfwd.cf --test"
-
-# Iniciar e verificar o serviço postfwd
-sudo systemctl start postfwd || { echo "Erro ao iniciar o serviço postfwd."; exit 1; }
-sudo systemctl restart postfix || { echo "Erro ao reiniciar o Postfix."; exit 1; }
-sudo systemctl restart postfwd || { echo "Erro ao reiniciar o serviço postfwd."; exit 1; }
+# Reiniciar serviços
+sudo /etc/init.d/postfwd start
+sudo systemctl restart postfix
 
 # Verificar o status do serviço
 sudo systemctl status postfwd --no-pager || { echo "Verifique manualmente o status do serviço postfwd."; exit 1; }
 
 echo "Configuração do Postfwd concluída com sucesso!"
 
-
+# Restaurar variáveis
+eval "$ORIGINAL_VARS"
 echo "==================================================== POSTFIX ===================================================="
 
 echo "==================================================== OpenDMARC ===================================================="
