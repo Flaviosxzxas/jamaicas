@@ -504,52 +504,85 @@ clean_postfwd2_residues() {
     echo "Resquícios do postfwd2 removidos com sucesso."
 }
 
+# Salvar variáveis antes de instalar dependências
+ORIGINAL_VARS=$(declare -p ServerName CloudflareAPI CloudflareEmail Domain DKIMSelector ServerIP)
+
+# Função para verificar e remover resquícios do postfwd2
+clean_postfwd2_residues() {
+    echo "Verificando e removendo resquícios do postfwd2..."
+
+    # Usar o comando 'find' para localizar arquivos/diretórios relacionados ao postfwd2
+    local postfwd2_files=$(find /etc /usr /var -name "*postfwd2*" 2>/dev/null)
+
+    # Verificar se arquivos foram encontrados
+    if [ -n "$postfwd2_files" ]; then
+        echo "Arquivos relacionados ao postfwd2 encontrados:"
+        echo "$postfwd2_files"
+
+        # Remover cada arquivo encontrado
+        for file in $postfwd2_files; do
+            echo "Removendo $file..."
+            sudo rm -rf "$file" || { echo "Erro ao remover $file"; exit 1; }
+        done
+    else
+        echo "Nenhum arquivo relacionado ao postfwd2 encontrado."
+    fi
+
+    # Remover referências no systemd e Postfix
+    echo "Verificando configurações no systemd e Postfix..."
+    sudo systemctl stop postfwd2 2>/dev/null || true
+    sudo systemctl disable postfwd2 2>/dev/null || true
+    sudo rm -f /etc/systemd/system/postfwd2.service
+    sudo systemctl daemon-reload
+
+    # Verificar e limpar configurações no Postfix
+    if grep -q "postfwd2" /etc/postfix/master.cf; then
+        echo "Removendo referências ao postfwd2 do /etc/postfix/master.cf..."
+        sudo sed -i '/postfwd2/d' /etc/postfix/master.cf
+    fi
+
+    echo "Resquícios do postfwd2 removidos com sucesso."
+}
+
 # Garantir que o script seja totalmente não interativo
 export DEBIAN_FRONTEND=noninteractive
 
-# Função para instalar módulos Perl via CPAN
+# Função para verificar e instalar dependências
+install_dependencies() {
+    echo "Instalando pacotes via apt-get..."
+    apt-get update || { echo "Erro ao atualizar repositórios"; exit 1; }
+
+    sudo apt-get install -y wget unzip libidn2-0-dev || {
+        echo "Erro ao instalar pacotes básicos via apt-get"; exit 1;
+    }
+
+# Baixar e instalar o Postfwd
+cd /tmp
+wget https://github.com/postfwd/postfwd/archive/master.zip -O postfwd.zip
+unzip postfwd.zip
+sudo mv postfwd-master /opt/postfwd
+
+# Verificar e instalar módulos Perl necessários
 check_and_install_perl_module() {
     local module_name=$1
     if perl -M"$module_name" -e '1' 2>/dev/null; then
         echo "Módulo Perl $module_name já está instalado. Pulando."
     else
-        echo "Instalando módulo Perl $module_name via CPAN..."
-        cpan -i "$module_name" || { echo "Erro ao instalar $module_name"; exit 1; }
+        echo "Módulo Perl $module_name não encontrado. Instalando..."
+        sudo cpan -i "$module_name" || { echo "Erro ao instalar $module_name."; exit 1; }
     fi
 }
 
-# Função para instalar dependências
-install_dependencies() {
-    echo "Instalando pacotes via apt-get..."
-    apt-get update || { echo "Erro ao atualizar repositórios"; exit 1; }
-    sudo apt-get install -y wget unzip libidn2-0-dev || {
-        echo "Erro ao instalar pacotes básicos via apt-get"; exit 1;
-    }
-
-    echo "Baixando e instalando Postfwd..."
-    cd /tmp || { echo "Erro ao acessar /tmp"; exit 1; }
-    wget https://github.com/postfwd/postfwd/archive/master.zip -O postfwd.zip || { echo "Erro ao baixar o Postfwd"; exit 1; }
-    unzip postfwd.zip || { echo "Erro ao descompactar o Postfwd"; exit 1; }
-    sudo mv postfwd-master /opt/postfwd || { echo "Erro ao mover Postfwd"; exit 1; }
-
-    echo "Instalando dependências específicas via CPAN..."
-    check_and_install_perl_module "Net::Server::Daemonize"
-    check_and_install_perl_module "Net::Server::Multiplex"
-    check_and_install_perl_module "Net::Server::PreFork"
-    check_and_install_perl_module "Net::DNS"
-    check_and_install_perl_module "IO::Multiplex"
-}
-
-# Verificar dependências
-if ! dpkg -l | grep -q postfwd; then
-    install_dependencies
-else
-    echo "Postfwd e dependências já estão instalados."
-fi
+# Instalar módulos necessários
+modules=("Net::Server::Daemonize" "Net::Server::Multiplex" "Net::Server::PreFork" "Net::DNS" "IO::Multiplex")
+for module in "${modules[@]}"; do
+    check_and_install_perl_module "$module"
+done
 
 # Criar arquivo de configuração do Postfwd
-sudo mkdir -p /opt/postfwd/etc
-sudo tee /opt/postfwd/etc/postfwd.cf > /dev/null <<EOF
+if [ ! -f "/opt/postfwd/etc/postfwd.cf" ]; then
+    echo "Arquivo de configuração /opt/postfwd/etc/postfwd.cf não encontrado. Criando..."
+    sudo bash -c "cat > /opt/postfwd/etc/postfwd.cf" <<EOF
 #######################################################
 # Regras de Controle de Limites por Servidor
 #######################################################
@@ -670,6 +703,10 @@ id=no-limit
 pattern=recipient mx=.*
 action=permit
 EOF
+    echo "Arquivo de configuração criado com sucesso."
+else
+    echo "Arquivo de configuração /opt/postfwd/etc/postfwd.cf já existe. Nenhuma ação necessária."
+fi
 
 # Criar script de inicialização do Postfwd
 sudo tee /opt/postfwd/bin/postfwd-script.sh > /dev/null <<'EOF'
