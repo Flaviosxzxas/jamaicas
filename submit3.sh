@@ -507,7 +507,7 @@ install_dependencies() {
 
     # Instalar pacotes via apt-get
     echo "Instalando pacotes via apt-get..."
-    apt-get install -y postfwd libsys-syslog-perl libnet-cidr-perl libmail-sender-perl \
+    apt-get install -y postfwd2 libsys-syslog-perl libnet-cidr-perl libmail-sender-perl \
     libnet-dns-perl libmime-tools-perl liblog-any-perl perl postfix || {
         echo "Erro ao instalar pacotes via apt-get"; exit 1;
     }
@@ -775,7 +775,7 @@ Restart=on-failure
 
 # Garantir que o diretório de PID exista antes de iniciar o serviço
 ExecStartPre=/bin/mkdir -p /run/postfwd
-ExecStartPre=/bin/chown postfwd:postfwd /run/postfw
+ExecStartPre=/bin/chown postfwd:postfwd /run/postfwd
 
 [Install]
 WantedBy=multi-user.target
@@ -804,7 +804,7 @@ else
     echo "A entrada do Postfwd já existe no /etc/postfix/master.cf."
 fi
 
-POSTFWD_FILE="/usr/sbin/postfwd"
+POSTFWD_FILE="/usr/sbin/postfwd2"
 
 # Verificar se o arquivo existe
 if [ ! -f "$POSTFWD_FILE" ]; then
@@ -828,6 +828,9 @@ sudo sed -i '/\$send/s/^/my $send = ""; # Inicialização adicionada\n/' "$POSTF
 }
 
 echo "O arquivo $POSTFWD_FILE foi corrigido com sucesso."
+
+# Finalizar qualquer modo de teste do Postfwd2
+sudo pkill -f "postfwd2 -f /etc/postfix/postfwd.cf --test"
 
 # Iniciar e verificar o serviço postfwd
 sudo systemctl start postfwd || { echo "Erro ao iniciar o serviço postfwd."; exit 1; }
