@@ -725,11 +725,26 @@ sudo mkdir -p "/var/run/postfwd" || { echo "Erro ao criar diretório /var/run/po
 sudo chown postfwd:postfwd "/var/run/postfwd" || { echo "Erro ao ajustar proprietário do diretório /var/run/postfwd."; exit 1; }
 sudo chmod 750 "/var/run/postfwd" || { echo "Erro ao ajustar permissões do diretório /var/run/postfwd."; exit 1; }
 
+# Validar arquivo de configuração do Postfwd2
+echo "Validando o arquivo de configuração do Postfwd2..."
+if ! postfwd2 -f /etc/postfix/postfwd.cf --test; then
+    echo "Erro: O arquivo /etc/postfix/postfwd.cf contém erros. Verifique as regras configuradas."
+    exit 1
+else
+    echo "O arquivo /etc/postfix/postfwd.cf foi validado com sucesso."
+fi
+
 # Criar e ajustar permissões do diretório temporário para cache
 echo "Criando e ajustando permissões do diretório temporário para cache..."
 sudo mkdir -p "/var/tmp" || { echo "Erro ao criar diretório /var/tmp."; exit 1; }
 sudo chown postfwd:postfwd "/var/tmp" || { echo "Erro ao ajustar proprietário do diretório /var/tmp."; exit 1; }
-sudo chmod 750 "/var/tmp" || { echo "Erro ao ajustar permissões do diretório /var/tmp."; exit 1; }
+sudo chmod 770 "/var/tmp" || { echo "Erro ao ajustar permissões do diretório /var/tmp."; exit 1; }
+
+# Garantir que o socket seja acessível
+if [ -e "/var/tmp/postfwd2-cache.socket" ]; then
+    echo "Removendo socket antigo..."
+    sudo rm -f "/var/tmp/postfwd2-cache.socket"
+fi
 
 
 # Verificar se os diretórios foram configurados corretamente
@@ -754,9 +769,13 @@ After=network.target
 Type=simple
 User=postfwd
 Group=postfwd
-ExecStart=/usr/sbin/postfwd2 -f /etc/postfix/postfwd.cf -vv --pidfile /run/postfwd/postfwd.pid
+ExecStart=/usr/sbin/postfwd2 -f /etc/postfix/postfwd.cf --socket /var/tmp/postfwd2-cache.socket -vv --pidfile /run/postfwd/postfwd.pid
 PIDFile=/run/postfwd/postfwd.pid
 Restart=on-failure
+
+# Garantir que o diretório de PID exista antes de iniciar o serviço
+ExecStartPre=/bin/mkdir -p /run/postfwd
+ExecStartPre=/bin/chown postfwd:postfwd /run/postfw
 
 [Install]
 WantedBy=multi-user.target
