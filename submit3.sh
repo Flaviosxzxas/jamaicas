@@ -845,26 +845,42 @@ POSTFWD_FILE="/usr/sbin/postfwd"
 
 # Verificar se o arquivo existe
 if [ ! -f "$POSTFWD_FILE" ]; then
-    echo "Erro: O arquivo $POSTFWD_FILE não foi encontrado."
+    echo "Erro: O arquivo $POSTFWD_FILE não foi encontrado. Pulando correção."
     exit 1
 fi
 
-# Backup do arquivo original
-BACKUP_FILE="${POSTFWD_FILE}.bak.$(date +%F_%T)"
+# Fazer um backup do arquivo original
+BACKUP_FILE="${POSTFWD_FILE}.bak.$(date +%Y%m%d%H%M%S)"
+echo "Criando backup do arquivo original: $BACKUP_FILE..."
 sudo cp "$POSTFWD_FILE" "$BACKUP_FILE" || {
-    echo "Erro ao criar backup do arquivo original."
+    echo "Erro ao criar backup do arquivo $POSTFWD_FILE. Abortando."
+    exit 1
+}
+echo "Backup criado com sucesso."
+
+# Aplicar a correção para inicializar a variável $send
+echo "Aplicando correção para inicializar a variável \$send..."
+sudo sed -i '/\$send/s/^/my $send = "" unless defined $send; # Inicialização corrigida\n/' "$POSTFWD_FILE" || {
+    echo "Erro ao aplicar a correção no arquivo $POSTFWD_FILE."
     exit 1
 }
 
-echo "Backup criado: $BACKUP_FILE"
+# Verificar se a alteração foi bem-sucedida
+if grep -q "my \$send = \"\" unless defined \$send;" "$POSTFWD_FILE"; then
+    echo "Correção aplicada com sucesso ao arquivo $POSTFWD_FILE."
+else
+    echo "A correção não foi aplicada corretamente. Verifique o arquivo manualmente."
+    exit 1
+fi
 
-# Corrigir o problema da variável $send não inicializada
-sudo sed -i '/\$send/s/^/my $send = ""; # Inicialização adicionada\n/' "$POSTFWD_FILE" || {
-    echo "Erro ao corrigir o arquivo Postfwd."
+# Reiniciar o serviço postfwd para aplicar as alterações
+echo "Reiniciando o serviço Postfwd para aplicar as alterações..."
+sudo systemctl daemon-reload || {
+    echo "Erro ao reiniciar o serviço postfwd. Verifique os logs para mais detalhes."
     exit 1
 }
+echo "Serviço Postfwd reiniciado com sucesso."
 
-echo "O arquivo $POSTFWD_FILE foi corrigido com sucesso."
 
 # Verificar se o diretório /run/postfwd existe
 if [ ! -d "/run/postfwd" ]; then
@@ -886,7 +902,6 @@ sudo systemctl restart postfwd || { echo "Erro ao reiniciar o serviço postfwd."
 sudo systemctl status postfwd --no-pager || { echo "Verifique manualmente o status do serviço postfwd."; exit 1; }
 
 echo "Configuração do Postfwd concluída com sucesso!"
-
 
 
 echo "==================================================== POSTFIX ===================================================="
