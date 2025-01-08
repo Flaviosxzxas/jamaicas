@@ -735,16 +735,15 @@ fi
 
 # Criar e ajustar permissões do diretório temporário para cache
 echo "Criando e ajustando permissões do diretório temporário para cache..."
-sudo mkdir -p "/var/tmp" || { echo "Erro ao criar diretório /var/tmp."; exit 1; }
-sudo chmod 1777 "/var/tmp" || { echo "Erro ao ajustar permissões do diretório /var/tmp."; exit 1; }
+sudo mkdir -p "/var/tmp/postfwd" || { echo "Erro ao criar diretório /var/tmp/postfwd."; exit 1; }
+sudo chown postfwd:postfwd "/var/tmp/postfwd" || { echo "Erro ao ajustar proprietário do diretório /var/tmp/postfwd."; exit 1; }
+sudo chmod 770 "/var/tmp/postfwd" || { echo "Erro ao ajustar permissões do diretório /var/tmp/postfwd."; exit 1; }
 
 # Garantir que o socket seja acessível
 if [ -e "/var/tmp/postfwd-cache.socket" ]; then
     echo "Removendo socket antigo..."
     sudo rm -f "/var/tmp/postfwd-cache.socket"
 fi
-
-
 
 # Verificar se os diretórios foram configurados corretamente
 if [ -d "/var/run/postfwd" ] && [ -d "/var/tmp/postfwd" ]; then
