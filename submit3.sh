@@ -809,9 +809,10 @@ ExecStart=/usr/sbin/postfwd -f /etc/postfix/postfwd.cf --socket /var/tmp/postfwd
 PIDFile=/run/postfwd/postfwd.pid
 Restart=on-failure
 
-# Garantir que o diretório de PID exista antes de iniciar o serviço
+# Garantir que o diretório exista e tenha permissões adequadas
 ExecStartPre=/bin/mkdir -p /run/postfwd
 ExecStartPre=/bin/chown postfwd:postfwd /run/postfwd
+ExecStartPre=/bin/chmod 750 /run/postfwd
 
 [Install]
 WantedBy=multi-user.target
@@ -864,6 +865,14 @@ sudo sed -i '/\$send/s/^/my $send = ""; # Inicialização adicionada\n/' "$POSTF
 }
 
 echo "O arquivo $POSTFWD_FILE foi corrigido com sucesso."
+
+# Verificar se o diretório /run/postfwd existe
+if [ ! -d "/run/postfwd" ]; then
+    echo "Diretório /run/postfwd não encontrado. Criando..."
+    sudo mkdir -p "/run/postfwd" || { echo "Erro ao criar /run/postfwd"; exit 1; }
+    sudo chown postfwd:postfwd "/run/postfwd"
+    sudo chmod 750 "/run/postfwd"
+fi
 
 # Finalizar qualquer modo de teste do postfwd
 sudo pkill -f "postfwd -f /etc/postfix/postfwd.cf --test"
