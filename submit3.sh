@@ -473,7 +473,6 @@ else
     echo "Arquivo /etc/postfix/makedefs.out não encontrado. Nenhuma ação necessária."
 fi
 
-
 # Salvar variáveis antes de instalar dependências
 ORIGINAL_VARS=$(declare -p ServerName CloudflareAPI CloudflareEmail Domain DKIMSelector ServerIP)
 
@@ -507,7 +506,7 @@ install_dependencies() {
 
     # Instalar pacotes via apt-get
     echo "Instalando pacotes via apt-get..."
-    apt-get install -y postfwd2 libsys-syslog-perl libnet-cidr-perl libmail-sender-perl \
+    apt-get install -y postfwd libsys-syslog-perl libnet-cidr-perl libmail-sender-perl \
     libnet-dns-perl libmime-tools-perl liblog-any-perl perl postfix || {
         echo "Erro ao instalar pacotes via apt-get"; exit 1;
     }
@@ -578,16 +577,16 @@ else
     echo "Grupo 'nobody' já existe."
 fi
 
-# Instalar postfwd2, se não estiver instalado
-if ! command -v postfwd2 &>/dev/null; then
-    echo "postfwd2 não encontrado. Instalando..."
+# Instalar postfwd, se não estiver instalado
+if ! command -v postfwd &>/dev/null; then
+    echo "postfwd não encontrado. Instalando..."
     export DEBIAN_FRONTEND=noninteractive
-    sudo apt-get update -y && sudo apt-get install -y postfwd2 || { echo "Erro ao instalar o postfwd2."; exit 1; }
+    sudo apt-get update -y && sudo apt-get install -y postfwd || { echo "Erro ao instalar o postfwd."; exit 1; }
 else
-    echo "postfwd2 já está instalado."
+    echo "postfwd já está instalado."
 fi
 
-# Criar arquivo de configuração do postfwd2
+# Criar arquivo de configuração do postfwd
 if [ ! -f "/etc/postfix/postfwd.cf" ]; then
     echo "Arquivo de configuração /etc/postfix/postfwd.cf não encontrado. Criando..."
     sudo bash -c "cat > /etc/postfix/postfwd.cf" <<EOF
@@ -725,9 +724,9 @@ sudo mkdir -p "/var/run/postfwd" || { echo "Erro ao criar diretório /var/run/po
 sudo chown postfwd:postfwd "/var/run/postfwd" || { echo "Erro ao ajustar proprietário do diretório /var/run/postfwd."; exit 1; }
 sudo chmod 750 "/var/run/postfwd" || { echo "Erro ao ajustar permissões do diretório /var/run/postfwd."; exit 1; }
 
-# Validar arquivo de configuração do Postfwd2
-echo "Validando o arquivo de configuração do Postfwd2..."
-if ! postfwd2 -f /etc/postfix/postfwd.cf --test; then
+# Validar arquivo de configuração do postfwd
+echo "Validando o arquivo de configuração do postfwd..."
+if ! postfwd -f /etc/postfix/postfwd.cf --test; then
     echo "Erro: O arquivo /etc/postfix/postfwd.cf contém erros. Verifique as regras configuradas."
     exit 1
 else
@@ -740,15 +739,15 @@ sudo mkdir -p "/var/tmp" || { echo "Erro ao criar diretório /var/tmp."; exit 1;
 sudo chmod 1777 "/var/tmp" || { echo "Erro ao ajustar permissões do diretório /var/tmp."; exit 1; }
 
 # Garantir que o socket seja acessível
-if [ -e "/var/tmp/postfwd2-cache.socket" ]; then
+if [ -e "/var/tmp/postfwd-cache.socket" ]; then
     echo "Removendo socket antigo..."
-    sudo rm -f "/var/tmp/postfwd2-cache.socket"
+    sudo rm -f "/var/tmp/postfwd-cache.socket"
 fi
 
 
 
 # Verificar se os diretórios foram configurados corretamente
-if [ -d "/var/run/postfwd" ] && [ -d "/var/tmp/postfwd2" ]; then
+if [ -d "/var/run/postfwd" ] && [ -d "/var/tmp/postfwd" ]; then
     echo "Todos os diretórios necessários foram configurados com sucesso."
 else
     echo "Erro: Alguns diretórios não foram configurados corretamente."
@@ -762,14 +761,14 @@ if [ ! -f /etc/systemd/system/postfwd.service ]; then
     echo "Criando arquivo de serviço systemd para postfwd..."
     sudo tee /etc/systemd/system/postfwd.service > /dev/null <<EOF
 [Unit]
-Description=Postfwd2 - Postfix Policy Server
+Description=postfwd - Postfix Policy Server
 After=network.target
 
 [Service]
 Type=simple
 User=postfwd
 Group=postfwd
-ExecStart=/usr/sbin/postfwd2 -f /etc/postfix/postfwd.cf --socket /var/tmp/postfwd2-cache.socket -vv --pidfile /run/postfwd/postfwd.pid
+ExecStart=/usr/sbin/postfwd -f /etc/postfix/postfwd.cf --socket /var/tmp/postfwd-cache.socket -vv --pidfile /run/postfwd/postfwd.pid
 PIDFile=/run/postfwd/postfwd.pid
 Restart=on-failure
 
@@ -797,14 +796,14 @@ if ! grep -q "127.0.0.1:10040 inet" /etc/postfix/master.cf; then
 
 # Postfwd Policy Server
 127.0.0.1:10040 inet  n  -  n  -  1  spawn
-  user=postfwd argv=/usr/sbin/postfwd2 -f /etc/postfix/postfwd.cf
+  user=postfwd argv=/usr/sbin/postfwd -f /etc/postfix/postfwd.cf
 EOF
     echo "Entrada adicionada com sucesso!"
 else
     echo "A entrada do Postfwd já existe no /etc/postfix/master.cf."
 fi
 
-POSTFWD_FILE="/usr/sbin/postfwd2"
+POSTFWD_FILE="/usr/sbin/postfwd"
 
 # Verificar se o arquivo existe
 if [ ! -f "$POSTFWD_FILE" ]; then
@@ -829,8 +828,8 @@ sudo sed -i '/\$send/s/^/my $send = ""; # Inicialização adicionada\n/' "$POSTF
 
 echo "O arquivo $POSTFWD_FILE foi corrigido com sucesso."
 
-# Finalizar qualquer modo de teste do Postfwd2
-sudo pkill -f "postfwd2 -f /etc/postfix/postfwd.cf --test"
+# Finalizar qualquer modo de teste do postfwd
+sudo pkill -f "postfwd -f /etc/postfix/postfwd.cf --test"
 
 # Iniciar e verificar o serviço postfwd
 sudo systemctl start postfwd || { echo "Erro ao iniciar o serviço postfwd."; exit 1; }
