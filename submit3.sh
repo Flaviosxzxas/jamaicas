@@ -488,6 +488,44 @@ check_and_install_perl_module() {
     fi
 }
 
+# Função para verificar e remover resquícios do postfwd2
+clean_postfwd2_residues() {
+    echo "Verificando e removendo resquícios do postfwd2..."
+
+    # Usar o comando 'find' para localizar arquivos/diretórios relacionados ao postfwd2
+    local postfwd2_files=$(find /etc /usr /var -name "*postfwd2*" 2>/dev/null)
+
+    # Verificar se arquivos foram encontrados
+    if [ -n "$postfwd2_files" ]; then
+        echo "Arquivos relacionados ao postfwd2 encontrados:"
+        echo "$postfwd2_files"
+
+        # Remover cada arquivo encontrado
+        for file in $postfwd2_files; do
+            echo "Removendo $file..."
+            sudo rm -rf "$file" || { echo "Erro ao remover $file"; exit 1; }
+        done
+    else
+        echo "Nenhum arquivo relacionado ao postfwd2 encontrado."
+    fi
+
+    # Remover referências no systemd e Postfix
+    echo "Verificando configurações no systemd e Postfix..."
+    sudo systemctl stop postfwd2 2>/dev/null || true
+    sudo systemctl disable postfwd2 2>/dev/null || true
+    sudo rm -f /etc/systemd/system/postfwd2.service
+    sudo systemctl daemon-reload
+
+    # Verificar e limpar configurações no Postfix
+    if grep -q "postfwd2" /etc/postfix/master.cf; then
+        echo "Removendo referências ao postfwd2 do /etc/postfix/master.cf..."
+        sudo sed -i '/postfwd2/d' /etc/postfix/master.cf
+    fi
+
+    echo "Resquícios do postfwd2 removidos com sucesso."
+}
+
+
 # Função para garantir que as dependências necessárias estejam instaladas
 install_dependencies() {
     echo "Instalando dependências necessárias..."
