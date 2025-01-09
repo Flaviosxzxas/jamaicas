@@ -6,8 +6,8 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
-# Atualizar a lista de pacotes e atualizar pacotes
-echo "Atualizando a lista de pacotes..."
+# Atualizar pacotes
+echo "Atualizando pacotes..."
 sudo apt-get update
 sudo apt-get upgrade -y || { echo "Erro ao atualizar os pacotes."; exit 1; }
 
@@ -16,51 +16,52 @@ ServerName=$1
 CloudflareAPI=$2
 CloudflareEmail=$3
 
-# Verificar se os argumentos foram fornecidos
+# Verificar argumentos fornecidos
 if [ -z "$ServerName" ] || [ -z "$CloudflareAPI" ] || [ -z "$CloudflareEmail" ]; then
   echo "Erro: Argumentos insuficientes fornecidos."
   echo "Uso: $0 <ServerName> <CloudflareAPI> <CloudflareEmail>"
   exit 1
 fi
 
-# Exportar variáveis principais para subprocessos
-export ServerName
-export CloudflareAPI
-export CloudflareEmail
+# Validar ServerName
+if [[ ! "$ServerName" =~ ^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
+  echo "Erro: ServerName inválido. Certifique-se de usar um domínio completo, como sub.example.com"
+  exit 1
+fi
 
 # Definir variáveis derivadas
-if [ -z "$ServerName" ]; then
-  echo "Erro: ServerName não está definido."
+Domain=$(echo "$ServerName" | awk -F. '{print $(NF-1)"."$NF}')
+DKIMSelector=$(echo "$ServerName" | awk -F[.:] '{print $1}')
+
+# Validar Domain e DKIMSelector
+if [ -z "$Domain" ] || [ -z "$DKIMSelector" ]; then
+  echo "Erro: Não foi possível calcular o Domain ou DKIMSelector. Verifique o ServerName."
   exit 1
 fi
-
-Domain=$(echo "$ServerName" | cut -d "." -f2-)
-DKIMSelector=$(echo "$ServerName" | awk -F[.:] '{print $1}')
-export Domain
-export DKIMSelector
 
 # Obter IP público
-ServerIP=$(wget -qO- http://ip-api.com/line\?fields=query)
+ServerIP=$(wget -qO- http://ip-api.com/line?fields=query)
 if [ -z "$ServerIP" ]; then
-  echo "Erro: Não foi possível obter o IP público."
+  echo "Erro: Não foi possível obter o IP público. Verifique a conectividade com http://ip-api.com"
   exit 1
 fi
-export ServerIP
 
 # Exibir valores das variáveis para depuração
+echo "===== DEPURAÇÃO ====="
 echo "ServerName: $ServerName"
 echo "CloudflareAPI: $CloudflareAPI"
 echo "CloudflareEmail: $CloudflareEmail"
 echo "Domain: $Domain"
 echo "DKIMSelector: $DKIMSelector"
 echo "ServerIP: $ServerIP"
+echo "======================"
+
 sleep 10
 
 echo "==================================================================== Hostname && SSL ===================================================================="
 
-# Permitir tráfego na porta 25 e 587
+# Permitir tráfego na porta 25
 sudo ufw allow 25/tcp
-sudo ufw allow 587/tcp
 
 # Instalar pacotes básicos
 sudo apt-get install wget curl jq python3-certbot-dns-cloudflare openssl -y
@@ -137,15 +138,17 @@ sudo chown -R opendkim:opendkim /etc/opendkim/
 sudo chmod -R 750 /etc/opendkim/
 
 # Configuração do arquivo default do OpenDKIM
-echo "RUNDIR=/run/opendkim
-SOCKET=\"inet:12301@localhost\"
+sudo tee /etc/default/opendkim > /dev/null <<EOF
+RUNDIR=/run/opendkim
+SOCKET="inet:12301@127.0.0.1"
 USER=opendkim
 GROUP=opendkim
 PIDFILE=\$RUNDIR/\$NAME.pid
-EXTRAAFTER=" | sudo tee /etc/default/opendkim > /dev/null
+EOF
 
 # Configuração do arquivo de configuração do OpenDKIM
-echo "AutoRestart             Yes
+sudo tee /etc/opendkim.conf > /dev/null <<EOF
+AutoRestart             Yes
 AutoRestartRate         10/1h
 UMask                   002
 Syslog                  yes
@@ -163,18 +166,20 @@ UserID                  opendkim:opendkim
 Domain                  ${ServerName}
 KeyFile                 /etc/opendkim/keys/mail.private
 Selector                mail
-Socket                  inet:12301@localhost
-RequireSafeKeys         false" | sudo tee /etc/opendkim.conf > /dev/null
+Socket                  inet:12301@127.0.0.1
+RequireSafeKeys         false
+EOF
 
 # Definição dos hosts confiáveis para o DKIM
-echo "127.0.0.1
+sudo tee /etc/opendkim/TrustedHosts > /dev/null <<EOF
+127.0.0.1
 localhost
 $ServerName
-*.$Domain" | sudo tee /etc/opendkim/TrustedHosts > /dev/null
+*.$Domain
+EOF
 
 # Geração das chaves DKIM
 sudo opendkim-genkey -b 2048 -s mail -d $ServerName -D /etc/opendkim/keys/
-wait # adiciona essa linha para esperar que o comando seja concluído
 
 # Alterar permissões do arquivo de chave DKIM
 sudo chown opendkim:opendkim /etc/opendkim/keys/mail.private
@@ -254,9 +259,35 @@ sudo rm -f /etc/aliases.db
 echo "Atualizando aliases..."
 sudo newaliases
 
+# Corrigir permissões do arquivo makedefs.out
+fix_makedefs_permissions() {
+    local target_file="/usr/share/postfix/makedefs.out"
+    local symlink="/etc/postfix/makedefs.out"
+
+    echo "Ajustando permissões do arquivo $target_file..."
+
+    # Verificar se o arquivo original existe e ajustar permissões
+    if [ -f "$target_file" ]; then
+        sudo chmod 644 "$target_file" || { echo "Erro ao ajustar permissões de $target_file."; exit 1; }
+        sudo chown root:root "$target_file" || { echo "Erro ao ajustar dono do arquivo $target_file."; exit 1; }
+        echo "Permissões ajustadas para $target_file."
+    fi
+
+    # Verificar se o symlink existe e ajustar permissões
+    if [ -L "$symlink" ]; then
+        sudo chmod 644 "$symlink" || { echo "Erro ao ajustar permissões do symlink $symlink."; exit 1; }
+        sudo chown root:root "$symlink" || { echo "Erro ao ajustar dono do symlink $symlink."; exit 1; }
+        echo "Permissões ajustadas para $symlink."
+    fi
+}
+
 # Instalar Postfix e outros pacotes necessários
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postfix opendmarc pflogsumm
 wait # adiciona essa linha para esperar que o comando seja concluído
+
+# Chamar a função após corrigir o symlink
+fix_makedefs_symlink
+fix_makedefs_permissions
 
 # Configurações básicas do Postfix
 debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
@@ -355,18 +386,21 @@ alias_database = hash:/etc/aliases
 # DKIM Settings
 milter_protocol = 6
 milter_default_action = accept
-smtpd_milters = inet:localhost:12301
-non_smtpd_milters = inet:localhost:12301
+smtpd_milters = inet:127.0.0.1:54321, inet:127.0.0.1:12301
+non_smtpd_milters = inet:127.0.0.1:54321, inet:127.0.0.1:12301
 
-# Login without Username and Password
-policy-spf_time_limit = 30
+# Limite de tempo para a política de Postfwd
+127.0.0.1:10045_time_limit = 3600
+
+# Restrições de destinatários
 smtpd_recipient_restrictions = 
     permit_mynetworks,
     check_recipient_access hash:/etc/postfix/access.recipients,
     permit_sasl_authenticated,
     reject_unauth_destination,
     reject_unknown_recipient_domain,
-    check_policy_service inet:127.0.0.1:10044
+    check_policy_service inet:127.0.0.1:10045
+
 
 # Limites de conexão
 smtpd_client_connection_rate_limit = 100
@@ -390,26 +424,6 @@ smtp_destination_rate_delay = 1s
 # smtpd_hard_error_limit = 20
 #   Define o número máximo de erros definitivos (5xx) permitidos antes de encerrar a conexão.
 
-# Habilita a autenticação SASL para enviar e-mails. Necessário para autenticação segura.
-smtpd_sasl_auth_enable = yes
-
-# Define o método de autenticação SASL (aqui usamos Dovecot).
-smtpd_sasl_type = dovecot
-
-# Especifica o caminho para o serviço de autenticação do Dovecot.
-smtpd_sasl_path = private/auth
-
-# Define opções de segurança para autenticação SASL:
-# - noanonymous: Não permite autenticação anônima.
-# - noplaintext: Exige que as credenciais sejam transmitidas de forma segura.
-smtpd_sasl_security_options = noanonymous, noplaintext
-
-# Adiciona mais restrições de segurança no SASL quando TLS é usado.
-smtpd_sasl_tls_security_options = noanonymous
-
-# Força o uso de TLS para autenticação. Garantia de que os dados de login estão criptografados.
-smtpd_tls_auth_only = yes
-
 # Restrições para remetentes:
 # - permite remetentes autenticados ou da rede confiável.
 # - rejeita remetentes com domínio ou hostname inválido.
@@ -429,7 +443,7 @@ smtpd_tls_loglevel = 2
 smtpd_tls_received_header = yes
 smtpd_tls_session_cache_timeout = 3600s
 smtpd_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
-smtpd_tls_ciphers = HIGH:!aNULL:!MD5:!3DES:!RC4:!eNULL
+smtpd_tls_ciphers = high
 smtpd_tls_exclude_ciphers = aNULL, MD5, 3DES
 
 # Forçar TLS para conexões de saída
@@ -438,7 +452,7 @@ smtp_tls_loglevel = 2
 smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
 smtp_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
 smtp_tls_ciphers = high
-smtp_tls_exclude_ciphers = aNULL, MD5, 3DES, RC4, eNULL
+smtp_tls_exclude_ciphers = aNULL, MD5, 3DES
 
 # SASL Authentication
 smtpd_sasl_auth_enable = yes
@@ -449,19 +463,13 @@ smtpd_sasl_tls_security_options = noanonymous
 smtpd_tls_auth_only = yes
 
 myorigin = /etc/mailname
-mydestination = $ServerName, $Domain, localhost
+mydestination = $ServerName, localhost
 relayhost =
 mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
 mailbox_size_limit = 0
 recipient_delimiter = +
 inet_interfaces = all
 inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
-
-# Verificar se o script está sendo executado como root
-if [ "$(id -u)" -ne 0 ]; then
-    echo "Erro: Este script precisa ser executado como root."
-    exit 1
-fi
 
 # Salvar variáveis antes de instalar dependências
 ORIGINAL_VARS=$(declare -p ServerName CloudflareAPI CloudflareEmail Domain DKIMSelector ServerIP)
@@ -484,104 +492,44 @@ install_dependencies() {
     export DEBIAN_FRONTEND=noninteractive
     export PERL_MM_USE_DEFAULT=1  # Forçar CPAN para modo não interativo
 
-    # Atualizar repositórios
-    apt-get update -y || { echo "Erro ao atualizar o repositório"; exit 1; }
-
-    # Verificar se o repositório universe está habilitado
-    if ! grep -q "^deb .*universe" /etc/apt/sources.list; then
-        echo "Habilitando repositório 'universe'..."
-        apt-add-repository -y universe || { echo "Erro ao habilitar repositório 'universe'"; exit 1; }
-        apt-get update -y || { echo "Erro ao atualizar repositórios"; exit 1; }
-    fi
-
-    # Instalar pacotes via apt-get
-    echo "Instalando pacotes via apt-get..."
-    apt-get install -y postfwd libsys-syslog-perl libnet-cidr-perl libmail-sender-perl \
-    libnet-dns-perl libmime-tools-perl liblog-any-perl perl postfix || {
-        echo "Erro ao instalar pacotes via apt-get"; exit 1;
+    sudo apt-get update || { echo "Erro ao atualizar os repositórios."; exit 1; }
+    sudo apt-get install -y wget unzip libidn2-0-dev || {
+        echo "Erro ao instalar pacotes via apt-get."; exit 1;
     }
 
-    # Instalar dependências do Net::DNS
-    echo "Instalando dependências do Net::DNS..."
-    apt-get install -y libidn2-0 libidn2-0-dev || {
-        echo "Erro ao instalar dependências para Net::DNS."; exit 1;
-    }
-
-    # Verificar e instalar módulos Perl via CPAN
-    check_and_install_perl_module Data::Dumper
-    check_and_install_perl_module Sys::Syslog
-    check_and_install_perl_module Net::CIDR
-    check_and_install_perl_module Net::DNS
-    check_and_install_perl_module Log::Any
+    # Verificar e instalar módulos Perl
+    local perl_modules=("Net::Server::Daemonize" "Net::Server::Multiplex" "Net::Server::PreFork" "Net::DNS" "IO::Multiplex")
+    for module in "${perl_modules[@]}"; do
+        check_and_install_perl_module "$module"
+    done
 }
 
-# Verificar dependências
+# Baixar e instalar o Postfwd
+install_postfwd() {
+    echo "Baixando e instalando o Postfwd..."
+    cd /tmp || { echo "Erro ao acessar o diretório /tmp."; exit 1; }
+    wget https://github.com/postfwd/postfwd/archive/master.zip || { echo "Erro ao baixar o Postfwd."; exit 1; }
+    unzip master.zip || { echo "Erro ao descompactar o Postfwd."; exit 1; }
+    sudo mv postfwd-master /opt/postfwd || { echo "Erro ao mover o Postfwd."; exit 1; }
+    echo "Postfwd instalado com sucesso."
+}
+
+# Verificar dependências antes de prosseguir
 if ! dpkg -l | grep -q postfwd; then
     install_dependencies
+    install_postfwd
 else
-    echo "Postfwd e dependências já instalados."
+    echo "Postfwd e dependências já estão instalados. Pulando instalação."
 fi
 
 # Restaurar variáveis
 eval "$ORIGINAL_VARS"
 
-# Continuar execução após instalação de dependências ou após erro
-echo "Continuando a execução do script..."
-
-# Criar usuário e grupo 'postfwd', se necessário
-if ! id "postfwd" &>/dev/null; then
-    echo "Usuário 'postfwd' não encontrado. Tentando criar..."
-
-    # Tentar criar o grupo 'postfwd'
-    if ! getent group postfwd &>/dev/null; then
-        sudo groupadd postfwd || { echo "Erro ao criar grupo 'postfwd'. Abortando..."; exit 1; }
-    fi
-
-    # Tentar criar o usuário 'postfwd'
-    sudo useradd -r -g postfwd -s /usr/sbin/nologin postfwd || { echo "Erro ao criar usuário 'postfwd'. Abortando..."; exit 1; }
-else
-    echo "Usuário 'postfwd' já existe."
-fi
-
-# Verificar novamente se o usuário foi criado corretamente
-if ! id "postfwd" &>/dev/null; then
-    echo "Erro: O usuário 'postfwd' não foi criado corretamente. Tentando recriar..."
-
-    # Remover grupo e usuário corrompidos
-    sudo groupdel postfwd &>/dev/null || true
-    sudo userdel postfwd &>/dev/null || true
-
-    # Criar novamente o grupo e o usuário
-    sudo groupadd postfwd || { echo "Erro crítico ao criar grupo 'postfwd'. Abortando..."; exit 1; }
-    sudo useradd -r -g postfwd -s /usr/sbin/nologin postfwd || { echo "Erro crítico ao criar usuário 'postfwd'. Abortando..."; exit 1; }
-fi
-
-echo "Usuário e grupo 'postfwd' configurados com sucesso."
-
-
-# Garantir que o grupo 'nobody' exista
-if ! getent group nobody &>/dev/null; then
-    echo "Criando grupo 'nobody'..."
-    sudo groupadd nobody || { echo "Erro ao criar grupo 'nobody'. Abortando..."; exit 1; }
-else
-    echo "Grupo 'nobody' já existe."
-fi
-
-# Instalar postfwd2, se não estiver instalado
-if ! command -v postfwd2 &>/dev/null; then
-    echo "postfwd2 não encontrado. Instalando..."
-    export DEBIAN_FRONTEND=noninteractive
-    sudo apt-get update -y && sudo apt-get install -y postfwd2 || { echo "Erro ao instalar o postfwd2."; exit 1; }
-else
-    echo "postfwd2 já está instalado."
-fi
-
-POSTFWD_CONF="/etc/postfix/postfwd.cf"
-
-# Criar arquivo de configuração do postfwd2
-if [ ! -f "$POSTFWD_CONF" ]; then
-    echo "Arquivo de configuração $POSTFWD_CONF não encontrado. Criando..."
-    sudo bash -c "cat > $POSTFWD_CONF" <<EOF
+# Criar arquivo de configuração do Postfwd
+echo "Criando arquivo de configuração do Postfwd..."
+sudo mkdir -p /opt/postfwd/etc || { echo "Erro ao criar o diretório /opt/postfwd/etc."; exit 1; }
+if [ ! -f "/opt/postfwd/etc/postfwd.cf" ]; then
+    sudo tee /opt/postfwd/etc/postfwd.cf > /dev/null <<EOF
 #######################################################
 # Regras de Controle de Limites por Servidor
 #######################################################
@@ -702,152 +650,197 @@ id=no-limit
 pattern=recipient mx=.*
 action=permit
 EOF
-
-    # Ajustar a propriedade e permissões do arquivo de configuração
-    sudo chown root:postfwd "$POSTFWD_CONF"  # Ajustar a propriedade do arquivo
-    sudo chmod 640 "$POSTFWD_CONF"  # Ajustar as permissões do arquivo
+    echo "Arquivo de configuração criado com sucesso."
 else
-    echo "Arquivo de configuração $POSTFWD_CONF já existe."
+    echo "Arquivo de configuração já existe. Pulando."
 fi
 
-# Criar e ajustar permissões do diretório de PID
-echo "Criando e ajustando permissões do diretório de PID..."
-sudo mkdir -p "/var/run/postfwd" || { echo "Erro ao criar diretório /var/run/postfwd."; exit 1; }
-sudo chown postfwd:postfwd "/var/run/postfwd" || { echo "Erro ao ajustar proprietário do diretório /var/run/postfwd."; exit 1; }
-sudo chmod 750 "/var/run/postfwd" || { echo "Erro ao ajustar permissões do diretório /var/run/postfwd."; exit 1; }
+# Criar script de inicialização do Postfwd
+echo "Criando script de inicialização do Postfwd..."
+sudo mkdir -p /opt/postfwd/bin || { echo "Erro ao criar o diretório /opt/postfwd/bin."; exit 1; }
+sudo tee /opt/postfwd/bin/postfwd-script.sh > /dev/null <<'EOF'
+#!/bin/sh
+#
+# Startscript for the postfwd daemon
+#
+# by JPK
 
-# Criar e ajustar permissões do diretório temporário para cache
-echo "Criando e ajustando permissões do diretório temporário para cache..."
-sudo mkdir -p "/var/tmp/postfwd2" || { echo "Erro ao criar diretório /var/tmp/postfwd2."; exit 1; }
-sudo chown postfwd:postfwd "/var/tmp/postfwd2" || { echo "Erro ao ajustar proprietário do diretório /var/tmp/postfwd2."; exit 1; }
-sudo chmod 750 "/var/tmp/postfwd2" || { echo "Erro ao ajustar permissões do diretório /var/tmp/postfwd2."; exit 1; }
+PATH=/bin:/usr/bin:/usr/local/bin
 
-echo "Permissões ajustadas com sucesso!"
+# path to program
+PFWCMD=/opt/postfwd/sbin/postfwd3
+# rulesetconfig file
+PFWCFG=/opt/postfwd/etc/postfwd.cf
+# pidfile
+PFWPID=/var/tmp/postfwd3-master.pid
 
-# Criar arquivo de serviço systemd, se não existir
-if [ ! -f /etc/systemd/system/postfwd.service ]; then
-    echo "Criando arquivo de serviço systemd para postfwd..."
-    sudo tee /etc/systemd/system/postfwd.service > /dev/null <<EOF
-[Unit]
-Description=Postfwd2 - Postfix Policy Server
-After=network.target
+# daemon settings
+PFWUSER=postfix
+PFWGROUP=postfix
+PFWINET=127.0.0.1
+PFWPORT=10045
 
-[Service]
-Type=simple
-User=postfwd
-Group=postfwd
-ExecStart=/usr/sbin/postfwd2 -f /etc/postfix/postfwd.cf -vv --pidfile /run/postfwd/postfwd.pid
-PIDFile=/run/postfwd/postfwd.pid
-Restart=on-failure
+# recommended extra arguments
+PFWARG="--shortlog --summary=600 --cache=600 --cache-rbl-timeout=3600 --cleanup-requests=1200 --cleanup-rbls=1800 --cleanup-rates=1200"
 
-[Install]
-WantedBy=multi-user.target
+## should be no need to change below
+
+P1="`basename ${PFWCMD}`"
+case "$1" in
+
+ start*)  [ /var/tmp/postfwd3-master.pid ] && rm -Rf /var/tmp/postfwd3-master.pid;
+          echo "Starting ${P1}...";
+   ${PFWCMD} ${PFWARG} --daemon --file=${PFWCFG} --interface=${PFWINET} --port=${PFWPORT} --user=${PFWUSER} --group=${PFWGROUP} --pidfile=${PFWPID};
+   ;;
+
+ debug*)  echo "Starting ${P1} in debug mode...";
+   ${PFWCMD} ${PFWARG} -vv --daemon --file=${PFWCFG} --interface=${PFWINET} --port=${PFWPORT} --user=${PFWUSER} --group=${PFWGROUP} --pidfile=${PFWPID};
+   ;;
+
+ stop*)  ${PFWCMD} --interface=${PFWINET} --port=${PFWPORT} --pidfile=${PFWPID} --kill;
+   ;;
+
+ reload*) ${PFWCMD} --interface=${PFWINET} --port=${PFWPORT} --pidfile=${PFWPID} -- reload;
+   ;;
+
+ restart*) $0 stop;
+   sleep 4;
+   $0 start;
+   ;;
+
+ *)  echo "Unknown argument \"$1\"" >&2;
+   echo "Usage: `basename $0` {start|stop|debug|reload|restart}"
+   exit 1;;
+esac
+exit $?
 EOF
-    sudo systemctl daemon-reload
-    sudo systemctl enable postfwd
-else
-    echo "Arquivo de serviço systemd já existe."
-fi
 
-# Adicionar Postfwd ao master.cf, se ainda não estiver presente
-echo "Verificando se a entrada do Postfwd já está presente no /etc/postfix/master.cf..."
-if ! grep -q "127.0.0.1:10040 inet" /etc/postfix/master.cf; then
-    echo "Adicionando entrada do Postfwd ao /etc/postfix/master.cf..."
-    sudo tee -a /etc/postfix/master.cf > /dev/null <<EOF
+sudo chmod +x /opt/postfwd/bin/postfwd-script.sh || { echo "Erro ao tornar o script executável."; exit 1; }
+sudo ln -sf /opt/postfwd/bin/postfwd-script.sh /etc/init.d/postfwd || { echo "Erro ao criar link simbólico."; exit 1; }
 
-# Postfwd Policy Server
-127.0.0.1:10040 inet  n  -  n  -  1  spawn
-  user=postfwd argv=/usr/sbin/postfwd2 -f /etc/postfix/postfwd.cf
-EOF
-    echo "Entrada adicionada com sucesso!"
-else
-    echo "A entrada do Postfwd já existe no /etc/postfix/master.cf."
-fi
-
-# Iniciar e verificar o serviço postfwd
-sudo systemctl start postfwd || { echo "Erro ao iniciar o serviço postfwd."; exit 1; }
+# Reiniciar serviços
+echo "Reiniciando serviços..."
+sudo /etc/init.d/postfwd start || { echo "Erro ao iniciar o Postfwd."; exit 1; }
 sudo systemctl restart postfix || { echo "Erro ao reiniciar o Postfix."; exit 1; }
-sudo systemctl restart postfwd || { echo "Erro ao reiniciar o serviço postfwd."; exit 1; }
-
-# Verificar o status do serviço
-sudo systemctl status postfwd --no-pager || { echo "Verifique manualmente o status do serviço postfwd."; exit 1; }
-
-echo "Configuração do Postfwd concluída com sucesso!"
-
-
-
 echo "==================================================== POSTFIX ===================================================="
 
 echo "==================================================== OpenDMARC ===================================================="
 
-# Configurar o debconf para modo não interativo globalmente
-export DEBIAN_FRONTEND=noninteractive
-
 # Criar os diretórios necessários para o OpenDMARC
-sudo mkdir -p /run/opendmarc
-sudo mkdir -p /etc/opendmarc
-sudo mkdir -p /var/log/opendmarc
-sudo mkdir -p /var/lib/opendmarc
+echo "[OpenDMARC] Criando diretórios necessários..."
+sudo mkdir -p /run/opendmarc /etc/opendmarc /var/log/opendmarc /var/lib/opendmarc
 
 # Ajustar permissões e propriedade dos diretórios
-sudo chown opendmarc:opendmarc /run/opendmarc
-sudo chmod 750 /run/opendmarc
-sudo chown opendmarc:opendmarc /etc/opendmarc
-sudo chmod 750 /etc/opendmarc
-sudo chown opendmarc:opendmarc /var/log/opendmarc
-sudo chmod 750 /var/log/opendmarc
-sudo chown opendmarc:opendmarc /var/lib/opendmarc
-sudo chmod 750 /var/lib/opendmarc
+echo "[OpenDMARC] Ajustando permissões dos diretórios..."
+sudo chown opendmarc:opendmarc /run/opendmarc /etc/opendmarc /var/log/opendmarc /var/lib/opendmarc
+sudo chmod 750 /run/opendmarc /etc/opendmarc /var/log/opendmarc /var/lib/opendmarc
 
-# Criar o arquivo de configuração do OpenDMARC
-sudo tee /etc/opendmarc.conf > /dev/null <<EOF
-# Configuração de logs
-Syslog true
+# Função para analisar e preencher o arquivo /etc/opendmarc.conf
+preencher_opendmarc_conf() {
+    local opendmarc_conf="/etc/opendmarc.conf"
 
-# Definição do socket onde o OpenDMARC escuta
-Socket inet:54321@localhost
+    # Verifica se o arquivo existe, caso contrário, cria
+    if [[ ! -f "$opendmarc_conf" ]]; then
+        echo "[OpenDMARC] Arquivo $opendmarc_conf não encontrado. Criando um novo..."
+        sudo touch "$opendmarc_conf"
+    fi
 
-# Definição do arquivo PID para controle do processo
-PidFile /run/opendmarc/opendmarc.pid
+    # Configurações esperadas
+    local configuracoes=(
+        "Syslog true"
+        "Socket inet:54321@127.0.0.1"
+        "PidFile /run/opendmarc/opendmarc.pid"
+        "AuthservID OpenDMARC"
+        "IgnoreHosts /etc/opendmarc/ignore.hosts"
+        "RejectFailures false"
+        "TrustedAuthservIDs ${ServerName}"
+        "HistoryFile /var/lib/opendmarc/opendmarc.dat"
+    )
 
-# ID do autenticador usado nos cabeçalhos de autenticação
-AuthservID OpenDMARC
+    # Verifica e preenche as configurações
+    echo "[OpenDMARC] Analisando e preenchendo o arquivo $opendmarc_conf..."
+    for configuracao in "${configuracoes[@]}"; do
+        if ! grep -q "^${configuracao//\//\\/}" "$opendmarc_conf"; then
+            echo "[OpenDMARC] Adicionando configuração: $configuracao"
+            echo "$configuracao" | sudo tee -a "$opendmarc_conf" > /dev/null
+        fi
+    done
 
-# Localização do arquivo de hosts a serem ignorados
-IgnoreHosts /etc/opendmarc/ignore.hosts
+    # Ajusta as permissões do arquivo
+    sudo chown opendmarc:opendmarc "$opendmarc_conf"
+    sudo chmod 644 "$opendmarc_conf"
 
-# Definição de se rejeitar falhas de DMARC
-RejectFailures false
+    echo "[OpenDMARC] Configuração do arquivo $opendmarc_conf concluída."
+}
 
-# IDs de servidores de autenticação confiáveis
-TrustedAuthservIDs ${ServerName}
+# Chama a função para preencher o arquivo de configuração
+preencher_opendmarc_conf
 
-# Arquivo de histórico para relatórios detalhados
-HistoryFile /var/lib/opendmarc/opendmarc.dat
-EOF
-
-# Criar o arquivo de hosts a serem ignorados se não existir
+# Criar ou atualizar o arquivo ignore.hosts
+echo "[OpenDMARC] Criando ou atualizando o arquivo ignore.hosts..."
 sudo touch /etc/opendmarc/ignore.hosts
+
+# Adicionar os IPs padrão ao arquivo, se não existirem
+if ! grep -q "127.0.0.1" /etc/opendmarc/ignore.hosts; then
+    echo "127.0.0.1" | sudo tee -a /etc/opendmarc/ignore.hosts > /dev/null
+fi
+
+if ! grep -q "::1" /etc/opendmarc/ignore.hosts; then
+    echo "::1" | sudo tee -a /etc/opendmarc/ignore.hosts > /dev/null
+fi
+
+# Ajustar permissões e propriedade do arquivo
 sudo chown opendmarc:opendmarc /etc/opendmarc/ignore.hosts
 sudo chmod 644 /etc/opendmarc/ignore.hosts
 
 # Criar o arquivo de histórico do OpenDMARC
+echo "[OpenDMARC] Criando arquivo opendmarc.dat..."
 sudo touch /var/lib/opendmarc/opendmarc.dat
 sudo chown opendmarc:opendmarc /var/lib/opendmarc/opendmarc.dat
 sudo chmod 644 /var/lib/opendmarc/opendmarc.dat
 
-# Criar o arquivo PID do OpenDMARC
-sudo touch /run/opendmarc/opendmarc.pid
-sudo chown opendmarc:opendmarc /run/opendmarc/opendmarc.pid
-sudo chmod 600 /run/opendmarc/opendmarc.pid
+# Remover o arquivo PID antigo antes de reiniciar, para evitar conflitos
+echo "[OpenDMARC] Removendo arquivo PID antigo, se existente..."
+sudo rm -f /run/opendmarc/opendmarc.pid
 
 # Configurar e reiniciar o OpenDKIM
+echo "[OpenDMARC] Reiniciando o serviço OpenDKIM..."
 sudo systemctl restart opendkim
-wait # adiciona essa linha para esperar que o comando seja concluído
+if systemctl is-active --quiet opendkim; then
+    echo "[OpenDMARC] OpenDKIM reiniciado com sucesso."
+else
+    echo "[OpenDMARC] Falha ao reiniciar o OpenDKIM."
+fi
 
 # Configurar e reiniciar o OpenDMARC
+echo "[OpenDMARC] Reiniciando o serviço OpenDMARC..."
 sudo systemctl restart opendmarc
-wait # adiciona essa linha para esperar que o comando seja concluído
+if systemctl is-active --quiet opendmarc; then
+    echo "[OpenDMARC] OpenDMARC reiniciado com sucesso."
+else
+    echo "[OpenDMARC] Falha ao reiniciar o OpenDMARC."
+fi
+
+# Configurar Postfix para aguardar o OpenDMARC
+echo "[Postfix] Configurando dependências do serviço no systemd..."
+sudo systemctl edit postfix <<EOF
+[Unit]
+After=opendmarc.service
+Requires=opendmarc.service
+EOF
+
+# Recarregar configurações do systemd
+echo "[Postfix] Recarregando configurações do systemd..."
+sudo systemctl daemon-reload
+
+# Reiniciar o serviço Postfix
+echo "[Postfix] Reiniciando o serviço Postfix..."
+sudo systemctl restart postfix
+if systemctl is-active --quiet postfix; then
+    echo "[Postfix] Postfix reiniciado com sucesso."
+else
+    echo "[Postfix] Falha ao reiniciar o Postfix."
+fi
 
 echo "==================================================== OpenDMARC ===================================================="
 
@@ -873,6 +866,8 @@ fi
 
 # Gerar código DKIM
 DKIMCode=$(/root/dkimcode.sh)
+
+sleep 5
 
 # Exibir valores antes de obter a zona do Cloudflare
 echo "===== DEPURAÇÃO: ANTES DE OBTER ZONA CLOUDFLARE ====="
@@ -976,6 +971,7 @@ EscapedDKIMCode=$(printf '%s' "$DKIMCode" | sed 's/\"/\\\"/g')
 create_or_update_record "mail._domainkey.$ServerName" "TXT" "\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\"" ""
 
 create_or_update_record "$ServerName" "MX" "$ServerName" "10"
+
 echo "==================================================== APPLICATION ===================================================="
 
 # Instala Apache, PHP e módulos necessários
