@@ -446,24 +446,30 @@ inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 # Salvar variáveis antes de instalar dependências
 ORIGINAL_VARS=$(declare -p ServerName CloudflareAPI CloudflareEmail Domain DKIMSelector ServerIP)
 
-#!/bin/bash
+set -e  # Para interromper o script na primeira falha
 
 # Atualizar pacotes e instalar dependências
-sudo apt-get update
-sudo apt-get install -y wget unzip libidn2-0-dev
+echo "Atualizando pacotes e instalando dependências..."
+sudo apt-get update || { echo "Erro ao atualizar os repositórios."; exit 1; }
+sudo apt-get install -y wget unzip libidn2-0-dev || { echo "Erro ao instalar pacotes."; exit 1; }
 
 # Baixar e instalar o Postfwd
-cd /tmp
-wget https://github.com/postfwd/postfwd/archive/master.zip
-unzip master.zip
-sudo mv postfwd-master /opt/postfwd
+echo "Baixando e instalando o Postfwd..."
+cd /tmp || { echo "Erro ao acessar o diretório /tmp."; exit 1; }
+wget https://github.com/postfwd/postfwd/archive/master.zip || { echo "Erro ao baixar o Postfwd."; exit 1; }
+unzip master.zip || { echo "Erro ao descompactar o Postfwd."; exit 1; }
+sudo mv postfwd-master /opt/postfwd || { echo "Erro ao mover o Postfwd."; exit 1; }
 
 # Instalar módulos Perl necessários
-sudo cpan install Net::Server::Daemonize Net::Server::Multiplex Net::Server::PreFork Net::DNS IO::Multiplex
+echo "Instalando módulos Perl necessários..."
+sudo cpan install Net::Server::Daemonize Net::Server::Multiplex Net::Server::PreFork Net::DNS IO::Multiplex || {
+    echo "Erro ao instalar módulos Perl via CPAN."; exit 1;
+}
 
 # Criar arquivo de configuração do Postfwd
+echo "Criando arquivo de configuração do Postfwd..."
+sudo mkdir -p /opt/postfwd/etc || { echo "Erro ao criar o diretório /opt/postfwd/etc."; exit 1; }
 if [ ! -f "/opt/postfwd/etc/postfwd.cf" ]; then
-    echo "Arquivo de configuração /opt/postfwd/etc/postfwd.cf não encontrado. Criando..."
     sudo tee /opt/postfwd/etc/postfwd.cf > /dev/null <<EOF
 #######################################################
 # Regras de Controle de Limites por Servidor
@@ -585,8 +591,14 @@ id=no-limit
 pattern=recipient mx=.*
 action=permit
 EOF
+    echo "Arquivo de configuração criado com sucesso."
+else
+    echo "Arquivo de configuração já existe. Pulando."
+fi
 
 # Criar script de inicialização do Postfwd
+echo "Criando script de inicialização do Postfwd..."
+sudo mkdir -p /opt/postfwd/bin || { echo "Erro ao criar o diretório /opt/postfwd/bin."; exit 1; }
 sudo tee /opt/postfwd/bin/postfwd-script.sh > /dev/null <<'EOF'
 #!/bin/sh
 #
@@ -644,17 +656,13 @@ esac
 exit $?
 EOF
 
-# Tornar o script executável
-sudo chmod +x /opt/postfwd/bin/postfwd-script.sh
-
-# Criar link simbólico para o script de inicialização
-sudo ln -s /opt/postfwd/bin/postfwd-script.sh /etc/init.d/postfwd
+sudo chmod +x /opt/postfwd/bin/postfwd-script.sh || { echo "Erro ao tornar o script executável."; exit 1; }
+sudo ln -sf /opt/postfwd/bin/postfwd-script.sh /etc/init.d/postfwd || { echo "Erro ao criar link simbólico."; exit 1; }
 
 # Reiniciar serviços
-sudo /etc/init.d/postfwd start
-sudo systemctl restart postfix
-
-echo "Configuração concluída com sucesso."
+echo "Reiniciando serviços..."
+sudo /etc/init.d/postfwd start || { echo "Erro ao iniciar o Postfwd."; exit 1; }
+sudo systemctl restart postfix || { echo "Erro ao reiniciar o Postfix."; exit 1; }
 
 
 # Restaurar variáveis
