@@ -257,46 +257,43 @@ sudo rm -f /etc/aliases.db
 echo "Atualizando aliases..."
 sudo newaliases
 
-# Função para verificar e corrigir o symlink para makedefs.out
-fix_makedefs_symlink() {
+# Função para renomear e desativar o makedefs.out
+fix_makedefs_out() {
     local target_file="/etc/postfix/makedefs.out"
     local source_file="/usr/share/postfix/makedefs.out"
+    local postfix_files="/etc/postfix/postfix-files"
 
-    echo "Verificando o symlink $target_file..."
+    echo "Verificando e corrigindo o makedefs.out..."
 
-    if [ -L "$target_file" ]; then
-        if [ "$(readlink -f "$target_file")" != "$source_file" ]; then
-            echo "O symlink $target_file está incorreto. Corrigindo..."
-            sudo ln -sf "$source_file" "$target_file" || {
-                echo "Erro ao corrigir o symlink $target_file."
-                exit 1
-            }
-        else
-            echo "O symlink $target_file está correto."
-        fi
-    elif [ -f "$target_file" ]; then
-        echo "$target_file é um arquivo regular. Removendo e criando o symlink..."
-        sudo rm -f "$target_file"
-        sudo ln -s "$source_file" "$target_file" || {
-            echo "Erro ao criar o symlink $target_file."
-            exit 1
+    # Verificar se o arquivo existe e renomeá-lo
+    if [ -f "$source_file" ]; then
+        echo "Renomeando $source_file para $source_file.bak..."
+        sudo mv "$source_file" "$source_file.bak" || {
+            echo "Erro ao renomear $source_file."; exit 1;
         }
+        echo "Arquivo $source_file renomeado com sucesso."
     else
-        echo "$target_file não existe. Criando o symlink..."
-        sudo ln -s "$source_file" "$target_file" || {
-            echo "Erro ao criar o symlink $target_file."
-            exit 1
-        }
+        echo "O arquivo $source_file não existe. Pulando renomeação."
     fi
-    echo "Symlink para $target_file corrigido com sucesso."
+
+    # Comentar a linha correspondente no postfix-files
+    if grep -q "makedefs.out" "$postfix_files"; then
+        echo "Comentando referência ao makedefs.out em $postfix_files..."
+        sudo sed -i '/makedefs.out/s/^/#/' "$postfix_files" || {
+            echo "Erro ao comentar referência ao makedefs.out."; exit 1;
+        }
+        echo "Referência ao makedefs.out comentada com sucesso."
+    else
+        echo "Nenhuma referência ao makedefs.out encontrada em $postfix_files."
+    fi
 }
 
 # Instalar Postfix e outros pacotes necessários
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postfix opendmarc pflogsumm
 wait # adiciona essa linha para esperar que o comando seja concluído
 
-# Verificar e corrigir o symlink para makedefs.out
-fix_makedefs_symlink
+# Aplicar a correção para makedefs.out
+fix_makedefs_out
 
 # Configurações básicas do Postfix
 debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
