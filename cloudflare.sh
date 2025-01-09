@@ -63,34 +63,60 @@ if [ -z "$CloudflareZoneID" ]; then
   exit 1
 fi
 
-# Função para adicionar registros
-add_record() {
+# Função para criar ou atualizar registros DNS
+create_or_update_record() {
   local record_type=$1
   local record_name=$2
   local record_content=$3
-  local record_ttl=60
+  local record_ttl=120
   local record_priority=$4
+  local record_proxied=false
 
-  echo "  -- Adicionando registro $record_type para $record_name"
-  if [ "$record_type" == "MX" ]; then
-    curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+  echo "  -- Criando ou atualizando registro $record_type para $record_name"
+
+  # Verificar se o registro já existe
+  existing_record=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records?name=$record_name&type=$record_type" \
+    -H "X-Auth-Email: $CloudflareEmail" \
+    -H "X-Auth-Key: $CloudflareAPI" \
+    -H "Content-Type: application/json" | jq -r '.result[0].id')
+
+  # Atualizar ou criar o registro
+  if [ -n "$existing_record" ]; then
+    # Atualizar registro existente
+    echo "Registro existente encontrado. Atualizando..."
+    curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records/$existing_record" \
       -H "X-Auth-Email: $CloudflareEmail" \
       -H "X-Auth-Key: $CloudflareAPI" \
       -H "Content-Type: application/json" \
-      --data '{"type":"'"$record_type"'", "name":"'"$record_name"'", "content":"'"$record_content"'", "ttl":'"$record_ttl"', "priority":'"$record_priority"', "proxied":false}'
+      --data '{
+        "type": "'"$record_type"'",
+        "name": "'"$record_name"'",
+        "content": "'"$record_content"'",
+        "ttl": '"$record_ttl"',
+        "proxied": '"$record_proxied"'
+      }'
   else
-    curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+    # Criar novo registro
+    echo "Nenhum registro existente encontrado. Criando novo..."
+    curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
       -H "X-Auth-Email: $CloudflareEmail" \
       -H "X-Auth-Key: $CloudflareAPI" \
       -H "Content-Type: application/json" \
-      --data '{"type":"'"$record_type"'", "name":"'"$record_name"'", "content":"'"$record_content"'", "ttl":'"$record_ttl"', "proxied":false}'
+      --data '{
+        "type": "'"$record_type"'",
+        "name": "'"$record_name"'",
+        "content": "'"$record_content"'",
+        "ttl": '"$record_ttl"',
+        "proxied": '"$record_proxied"'
+      }'
   fi
 }
 
-# Adicionar Registros
-add_record "A" "$DKIMSelector" "$ServerIP" ""
-add_record "TXT" "$ServerName" "v=spf1 a:$ServerName ~all" ""
-add_record "TXT" "_dmarc.$ServerName" "v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmarc@$ServerName; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r" ""
-add_record "TXT" "mail._domainkey.$ServerName" "v=DKIM1; h=sha256; k=rsa; p=$DKIMCode" ""
-add_record "MX" "$ServerName" "$ServerName" "10"
+# Adicionar ou atualizar registros
+create_or_update_record "A" "$DKIMSelector" "$ServerIP" ""
+create_or_update_record "TXT" "$ServerName" "v=spf1 a:$ServerName ~all" ""
+create_or_update_record "TXT" "_dmarc.$ServerName" "v=DMARC1; p=reject; rua=mailto:dmarc-reports@$ServerName; sp=reject; adkim=s; aspf=s" ""
+create_or_update_record "TXT" "mail._domainkey.$ServerName" "v=DKIM1; h=sha256; k=rsa; p=$DKIMCode" ""
+create_or_update_record "MX" "$ServerName" "$ServerName" "10"
+
 
