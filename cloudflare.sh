@@ -49,86 +49,48 @@ sudo chmod 755 /root/dkimcode.sh
 
 echo "==================================================== CLOUDFLARE ===================================================="
 
-# Gerar código DKIM
+# DKIM
 DKIMCode=$(/root/dkimcode.sh)
 
-# Obter o ID da zona do Cloudflare
-echo "  -- Obtendo Zona"
+# Obter o ID da Zona
 CloudflareZoneID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$Domain&status=active" \
   -H "X-Auth-Email: $CloudflareEmail" \
   -H "X-Auth-Key: $CloudflareAPI" \
   -H "Content-Type: application/json" | jq -r '.result[0].id')
 
 if [ -z "$CloudflareZoneID" ]; then
-  echo "Erro: Não foi possível obter o ID da zona do Cloudflare." >&2
+  echo "Erro: Não foi possível obter o ID da zona do Cloudflare."
   exit 1
 fi
 
-# Função para obter detalhes de um registro existente
-get_record_details() {
-  local record_name=$1
-  local record_type=$2
-  curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records?name=$record_name&type=$record_type" \
-    -H "X-Auth-Email: $CloudflareEmail" \
-    -H "X-Auth-Key: $CloudflareAPI" \
-    -H "Content-Type: application/json"
-}
-
-# Função para verificar a existência de um registro
-record_exists() {
-  local record_name=$1
-  local record_type=$2
-  get_record_details "$record_name" "$record_type" | jq -r '.result | length'
-}
-
-create_or_update_record() {
-  local record_name=$1
-  local record_type=$2
+# Função para adicionar registros
+add_record() {
+  local record_type=$1
+  local record_name=$2
   local record_content=$3
-  local record_ttl=120
+  local record_ttl=60
   local record_priority=$4
-  local record_proxied=false
 
-  # Excluir o registro existente antes de criar
-  delete_record "$record_name" "$record_type"
-
-  echo "  -- Criando registro $record_type para $record_name"
+  echo "  -- Adicionando registro $record_type para $record_name"
   if [ "$record_type" == "MX" ]; then
-    data=$(jq -n --arg type "$record_type" --arg name "$record_name" --arg content "$record_content" --arg ttl "$record_ttl" --argjson proxied "$record_proxied" --arg priority "$record_priority" \
-          '{type: $type, name: $name, content: $content, ttl: ($ttl | tonumber), proxied: $proxied, priority: ($priority | tonumber)}')
+    curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+      -H "X-Auth-Email: $CloudflareEmail" \
+      -H "X-Auth-Key: $CloudflareAPI" \
+      -H "Content-Type: application/json" \
+      --data '{"type":"'"$record_type"'", "name":"'"$record_name"'", "content":"'"$record_content"'", "ttl":'"$record_ttl"', "priority":'"$record_priority"', "proxied":false}'
   else
-    data=$(jq -n --arg type "$record_type" --arg name "$record_name" --arg content "$record_content" --arg ttl "$record_ttl" --argjson proxied "$record_proxied" \
-          '{type: $type, name: $name, content: $content, ttl: ($ttl | tonumber), proxied: $proxied}')
+    curl -s -o /dev/null -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+      -H "X-Auth-Email: $CloudflareEmail" \
+      -H "X-Auth-Key: $CloudflareAPI" \
+      -H "Content-Type: application/json" \
+      --data '{"type":"'"$record_type"'", "name":"'"$record_name"'", "content":"'"$record_content"'", "ttl":'"$record_ttl"', "proxied":false}'
   fi
-
-  # Enviar solicitação para criar o registro
-  response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
-       -H "X-Auth-Email: $CloudflareEmail" \
-       -H "X-Auth-Key: $CloudflareAPI" \
-       -H "Content-Type: application/json" \
-       --data "$data")
-
-  echo "  -- Registro $record_type para $record_name criado/atualizado com sucesso"
 }
 
+# Adicionar Registros
+add_record "A" "$DKIMSelector" "$ServerIP" ""
+add_record "TXT" "$ServerName" "v=spf1 a:$ServerName ~all" ""
+add_record "TXT" "_dmarc.$ServerName" "v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmarc@$ServerName; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r" ""
+add_record "TXT" "mail._domainkey.$ServerName" "v=DKIM1; h=sha256; k=rsa; p=$DKIMCode" ""
+add_record "MX" "$ServerName" "$ServerName" "10"
 
-# Criar ou atualizar registros DNS
-echo "  -- Configurando registros DNS"
-create_or_update_record "$DKIMSelector" "A" "$ServerIP" ""
-create_or_update_record "$ServerName" "TXT" "\"v=spf1 a:$ServerName ~all\"" ""
-create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmarc@$ServerName; rf=afrf; fo=0:1:d:s; ri=86000; adkim=r; aspf=r\"" ""
-# Atualização para garantir que o DKIM seja uma única string
-DKIMCode=$(echo "$DKIMCode" | tr -d '\n' | tr -s ' ')  # Limpar quebras de linha e espaços extras
-
-# Verifique se a chave DKIM não está vazia
-if [ -z "$DKIMCode" ]; then
-  echo "Erro: A chave DKIM gerada está vazia." >&2
-  exit 1
-fi
-
-# Escapar aspas na chave DKIM
-EscapedDKIMCode=$(printf '%s' "$DKIMCode" | sed 's/\"/\\\"/g')
-
-# Criar ou atualizar o registro DKIM
-create_or_update_record "mail._domainkey.$ServerName" "TXT" "\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\"" ""
-create_or_update_record "$ServerName" "MX" "$ServerName" "10"
