@@ -446,8 +446,6 @@ inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 # Salvar variáveis antes de instalar dependências
 ORIGINAL_VARS=$(declare -p ServerName CloudflareAPI CloudflareEmail Domain DKIMSelector ServerIP)
 
-set -e  # Para interromper o script na primeira falha
-
 # Atualizar pacotes e instalar dependências
 echo "Atualizando pacotes e instalando dependências..."
 sudo apt-get update || { echo "Erro ao atualizar os repositórios."; exit 1; }
@@ -468,6 +466,11 @@ sudo cpan install Net::Server::Daemonize Net::Server::Multiplex Net::Server::Pre
 
 # Restaurar variáveis antes de criar o arquivo de configuração
 eval "$ORIGINAL_VARS"
+
+# Verificar as variáveis restauradas
+echo "CloudflareAPI: $CloudflareAPI"
+echo "CloudflareEmail: $CloudflareEmail"
+echo "CloudflareZoneID: $CloudflareZoneID"
 
 # Criar arquivo de configuração do Postfwd
 echo "Criando arquivo de configuração do Postfwd..."
