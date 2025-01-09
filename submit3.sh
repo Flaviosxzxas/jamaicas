@@ -446,40 +446,62 @@ inet_protocols = all" | sudo tee /etc/postfix/main.cf > /dev/null
 # Salvar variáveis antes de instalar dependências
 ORIGINAL_VARS=$(declare -p ServerName CloudflareAPI CloudflareEmail Domain DKIMSelector ServerIP)
 
-# Atualizar pacotes e instalar dependências
-echo "Atualizando pacotes e instalando dependências..."
-sudo apt-get update || { echo "Erro ao atualizar os repositórios."; exit 1; }
-sudo apt-get install -y wget unzip libidn2-0-dev || { echo "Erro ao instalar pacotes."; exit 1; }
-
-# Baixar e instalar o Postfwd
-echo "Baixando e instalando o Postfwd..."
-cd /tmp || { echo "Erro ao acessar o diretório /tmp."; exit 1; }
-wget https://github.com/postfwd/postfwd/archive/master.zip || { echo "Erro ao baixar o Postfwd."; exit 1; }
-unzip master.zip || { echo "Erro ao descompactar o Postfwd."; exit 1; }
-sudo mv postfwd-master /opt/postfwd || { echo "Erro ao mover o Postfwd."; exit 1; }
-
-# Instalar módulos Perl necessários
-echo "Instalando módulos Perl necessários..."
-sudo cpan install Net::Server::Daemonize Net::Server::Multiplex Net::Server::PreFork Net::DNS IO::Multiplex || {
-    echo "Erro ao instalar módulos Perl via CPAN."; exit 1;
+# Função para verificar e instalar módulos Perl
+check_and_install_perl_module() {
+    local module_name=$1
+    if perl -M"$module_name" -e '1' 2>/dev/null; then
+        echo "Módulo Perl $module_name já está instalado. Pulando instalação."
+    else
+        echo "Módulo Perl $module_name não encontrado. Instalando via CPAN..."
+        cpan install "$module_name" || { echo "Erro ao instalar $module_name via CPAN."; exit 1; }
+        echo "Módulo Perl $module_name instalado com sucesso."
+    fi
 }
 
-# Restaurar variáveis antes de criar o arquivo de configuração
-eval "$ORIGINAL_VARS"
+# Função para garantir que as dependências necessárias estejam instaladas
+install_dependencies() {
+    echo "Instalando dependências necessárias..."
+    export DEBIAN_FRONTEND=noninteractive
+    export PERL_MM_USE_DEFAULT=1  # Forçar CPAN para modo não interativo
 
-# Verificar as variáveis restauradas
-echo "CloudflareAPI: $CloudflareAPI"
-echo "CloudflareEmail: $CloudflareEmail"
-echo "CloudflareZoneID: $CloudflareZoneID"
+    sudo apt-get update || { echo "Erro ao atualizar os repositórios."; exit 1; }
+    sudo apt-get install -y wget unzip libidn2-0-dev || {
+        echo "Erro ao instalar pacotes via apt-get."; exit 1;
+    }
+
+    # Verificar e instalar módulos Perl
+    local perl_modules=("Net::Server::Daemonize" "Net::Server::Multiplex" "Net::Server::PreFork" "Net::DNS" "IO::Multiplex")
+    for module in "${perl_modules[@]}"; do
+        check_and_install_perl_module "$module"
+    done
+}
+
+# Baixar e instalar o Postfwd
+install_postfwd() {
+    echo "Baixando e instalando o Postfwd..."
+    cd /tmp || { echo "Erro ao acessar o diretório /tmp."; exit 1; }
+    wget https://github.com/postfwd/postfwd/archive/master.zip || { echo "Erro ao baixar o Postfwd."; exit 1; }
+    unzip master.zip || { echo "Erro ao descompactar o Postfwd."; exit 1; }
+    sudo mv postfwd-master /opt/postfwd || { echo "Erro ao mover o Postfwd."; exit 1; }
+    echo "Postfwd instalado com sucesso."
+}
+
+# Verificar dependências antes de prosseguir
+if ! dpkg -l | grep -q postfwd; then
+    install_dependencies
+    install_postfwd
+else
+    echo "Postfwd e dependências já estão instalados. Pulando instalação."
+fi
+
+# Restaurar variáveis
+eval "$ORIGINAL_VARS"
 
 # Criar arquivo de configuração do Postfwd
 echo "Criando arquivo de configuração do Postfwd..."
 sudo mkdir -p /opt/postfwd/etc || { echo "Erro ao criar o diretório /opt/postfwd/etc."; exit 1; }
-
 if [ ! -f "/opt/postfwd/etc/postfwd.cf" ]; then
-    echo "Arquivo de configuração /opt/postfwd/etc/postfwd.cf não encontrado. Criando..."
     sudo tee /opt/postfwd/etc/postfwd.cf > /dev/null <<EOF
-#######################################################
 #######################################################
 # Regras de Controle de Limites por Servidor
 #######################################################
