@@ -726,6 +726,8 @@ echo "==================================================== POSTFIX =============
 
 echo "==================================================== OpenDMARC ===================================================="
 
+#!/bin/bash
+
 # Criar os diretórios necessários para o OpenDMARC
 echo "[OpenDMARC] Criando diretórios necessários..."
 sudo mkdir -p /run/opendmarc /etc/opendmarc /var/log/opendmarc /var/lib/opendmarc
@@ -753,7 +755,7 @@ preencher_opendmarc_conf() {
         "AuthservID OpenDMARC"
         "IgnoreHosts /etc/opendmarc/ignore.hosts"
         "RejectFailures false"
-        "TrustedAuthservIDs HOSTNAME"
+        "TrustedAuthservIDs ${ServerName}"
         "HistoryFile /var/lib/opendmarc/opendmarc.dat"
     )
 
@@ -776,9 +778,20 @@ preencher_opendmarc_conf() {
 # Chama a função para preencher o arquivo de configuração
 preencher_opendmarc_conf
 
-# Criar o arquivo de hosts a serem ignorados se não existir
-echo "[OpenDMARC] Criando arquivo ignore.hosts..."
+# Criar ou atualizar o arquivo ignore.hosts
+echo "[OpenDMARC] Criando ou atualizando o arquivo ignore.hosts..."
 sudo touch /etc/opendmarc/ignore.hosts
+
+# Adicionar os IPs padrão ao arquivo, se não existirem
+if ! grep -q "127.0.0.1" /etc/opendmarc/ignore.hosts; then
+    echo "127.0.0.1" | sudo tee -a /etc/opendmarc/ignore.hosts > /dev/null
+fi
+
+if ! grep -q "::1" /etc/opendmarc/ignore.hosts; then
+    echo "::1" | sudo tee -a /etc/opendmarc/ignore.hosts > /dev/null
+fi
+
+# Ajustar permissões e propriedade do arquivo
 sudo chown opendmarc:opendmarc /etc/opendmarc/ignore.hosts
 sudo chmod 644 /etc/opendmarc/ignore.hosts
 
@@ -788,15 +801,9 @@ sudo touch /var/lib/opendmarc/opendmarc.dat
 sudo chown opendmarc:opendmarc /var/lib/opendmarc/opendmarc.dat
 sudo chmod 644 /var/lib/opendmarc/opendmarc.dat
 
-# Remover o arquivo PID antes de reiniciar, para evitar conflitos
+# Remover o arquivo PID antigo antes de reiniciar, para evitar conflitos
 echo "[OpenDMARC] Removendo arquivo PID antigo, se existente..."
 sudo rm -f /run/opendmarc/opendmarc.pid
-
-# Criar o arquivo PID do OpenDMARC
-echo "[OpenDMARC] Criando arquivo opendmarc.pid..."
-sudo touch /run/opendmarc/opendmarc.pid
-sudo chown opendmarc:opendmarc /run/opendmarc/opendmarc.pid
-sudo chmod 600 /run/opendmarc/opendmarc.pid
 
 # Configurar e reiniciar o OpenDKIM
 echo "[OpenDMARC] Reiniciando o serviço OpenDKIM..."
@@ -814,6 +821,27 @@ if systemctl is-active --quiet opendmarc; then
     echo "[OpenDMARC] OpenDMARC reiniciado com sucesso."
 else
     echo "[OpenDMARC] Falha ao reiniciar o OpenDMARC."
+fi
+
+# Configurar Postfix para aguardar o OpenDMARC
+echo "[Postfix] Configurando dependências do serviço no systemd..."
+sudo systemctl edit postfix <<EOF
+[Unit]
+After=opendmarc.service
+Requires=opendmarc.service
+EOF
+
+# Recarregar configurações do systemd
+echo "[Postfix] Recarregando configurações do systemd..."
+sudo systemctl daemon-reload
+
+# Reiniciar o serviço Postfix
+echo "[Postfix] Reiniciando o serviço Postfix..."
+sudo systemctl restart postfix
+if systemctl is-active --quiet postfix; then
+    echo "[Postfix] Postfix reiniciado com sucesso."
+else
+    echo "[Postfix] Falha ao reiniciar o Postfix."
 fi
 
 echo "==================================================== OpenDMARC ===================================================="
