@@ -443,7 +443,7 @@ smtpd_tls_loglevel = 2
 smtpd_tls_received_header = yes
 smtpd_tls_session_cache_timeout = 3600s
 smtpd_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
-smtpd_tls_ciphers = HIGH:!aNULL:!MD5:!3DES:!RC4:!eNULL
+smtpd_tls_ciphers = high
 smtpd_tls_exclude_ciphers = aNULL, MD5, 3DES
 
 # Forçar TLS para conexões de saída
@@ -452,7 +452,7 @@ smtp_tls_loglevel = 2
 smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
 smtp_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
 smtp_tls_ciphers = high
-smtp_tls_exclude_ciphers = aNULL, MD5, 3DES, RC4, eNULL
+smtp_tls_exclude_ciphers = aNULL, MD5, 3DES
 
 # SASL Authentication
 smtpd_sasl_auth_enable = yes
