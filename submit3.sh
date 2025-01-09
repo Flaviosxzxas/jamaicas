@@ -433,7 +433,7 @@ smtp_destination_rate_delay = 1s
 smtpd_helo_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_invalid_helo_hostname, reject_non_fqdn_helo_hostname, reject_unknown_helo_hostname
 
 
-# Configurações TLS para recepção (SMTPD)
+# TLS parameters
 smtpd_tls_cert_file=/etc/letsencrypt/live/$ServerName/fullchain.pem
 smtpd_tls_key_file=/etc/letsencrypt/live/$ServerName/privkey.pem
 smtpd_tls_security_level = may
@@ -444,7 +444,7 @@ smtpd_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
 smtpd_tls_ciphers = HIGH:!aNULL:!MD5:!3DES:!RC4:!eNULL
 smtpd_tls_exclude_ciphers = aNULL, MD5, 3DES
 
-# Configurações TLS para envio (SMTP)
+# Forçar TLS para conexões de saída
 smtp_tls_security_level = may
 smtp_tls_loglevel = 2
 smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
