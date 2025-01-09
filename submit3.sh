@@ -466,11 +466,17 @@ sudo cpan install Net::Server::Daemonize Net::Server::Multiplex Net::Server::Pre
     echo "Erro ao instalar módulos Perl via CPAN."; exit 1;
 }
 
+# Restaurar variáveis antes de criar o arquivo de configuração
+eval "$ORIGINAL_VARS"
+
 # Criar arquivo de configuração do Postfwd
 echo "Criando arquivo de configuração do Postfwd..."
 sudo mkdir -p /opt/postfwd/etc || { echo "Erro ao criar o diretório /opt/postfwd/etc."; exit 1; }
+
 if [ ! -f "/opt/postfwd/etc/postfwd.cf" ]; then
+    echo "Arquivo de configuração /opt/postfwd/etc/postfwd.cf não encontrado. Criando..."
     sudo tee /opt/postfwd/etc/postfwd.cf > /dev/null <<EOF
+#######################################################
 #######################################################
 # Regras de Controle de Limites por Servidor
 #######################################################
@@ -663,10 +669,6 @@ sudo ln -sf /opt/postfwd/bin/postfwd-script.sh /etc/init.d/postfwd || { echo "Er
 echo "Reiniciando serviços..."
 sudo /etc/init.d/postfwd start || { echo "Erro ao iniciar o Postfwd."; exit 1; }
 sudo systemctl restart postfix || { echo "Erro ao reiniciar o Postfix."; exit 1; }
-
-
-# Restaurar variáveis
-eval "$ORIGINAL_VARS"
 echo "==================================================== POSTFIX ===================================================="
 
 echo "==================================================== OpenDMARC ===================================================="
