@@ -61,6 +61,8 @@ fi
 # Gerar código DKIM
 DKIMCode=$(/root/dkimcode.sh)
 
+sleep 5
+
 # Exibir valores antes de obter a zona do Cloudflare
 echo "===== DEPURAÇÃO: ANTES DE OBTER ZONA CLOUDFLARE ====="
 echo "DKIMCode: $DKIMCode"
