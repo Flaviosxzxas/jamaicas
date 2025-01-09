@@ -257,34 +257,25 @@ sudo rm -f /etc/aliases.db
 echo "Atualizando aliases..."
 sudo newaliases
 
-# Função para renomear e desativar o makedefs.out
-fix_makedefs_out() {
-    local target_file="/etc/postfix/makedefs.out"
-    local source_file="/usr/share/postfix/makedefs.out"
-    local postfix_files="/etc/postfix/postfix-files"
+# Corrigir permissões do arquivo makedefs.out
+fix_makedefs_permissions() {
+    local target_file="/usr/share/postfix/makedefs.out"
+    local symlink="/etc/postfix/makedefs.out"
 
-    echo "Verificando e corrigindo o makedefs.out..."
+    echo "Ajustando permissões do arquivo $target_file..."
 
-    # Verificar se o arquivo existe e renomeá-lo
-    if [ -f "$source_file" ]; then
-        echo "Renomeando $source_file para $source_file.bak..."
-        sudo mv "$source_file" "$source_file.bak" || {
-            echo "Erro ao renomear $source_file."; exit 1;
-        }
-        echo "Arquivo $source_file renomeado com sucesso."
-    else
-        echo "O arquivo $source_file não existe. Pulando renomeação."
+    # Verificar se o arquivo original existe e ajustar permissões
+    if [ -f "$target_file" ]; then
+        sudo chmod 644 "$target_file" || { echo "Erro ao ajustar permissões de $target_file."; exit 1; }
+        sudo chown root:root "$target_file" || { echo "Erro ao ajustar dono do arquivo $target_file."; exit 1; }
+        echo "Permissões ajustadas para $target_file."
     fi
 
-    # Comentar a linha correspondente no postfix-files
-    if grep -q "makedefs.out" "$postfix_files"; then
-        echo "Comentando referência ao makedefs.out em $postfix_files..."
-        sudo sed -i '/makedefs.out/s/^/#/' "$postfix_files" || {
-            echo "Erro ao comentar referência ao makedefs.out."; exit 1;
-        }
-        echo "Referência ao makedefs.out comentada com sucesso."
-    else
-        echo "Nenhuma referência ao makedefs.out encontrada em $postfix_files."
+    # Verificar se o symlink existe e ajustar permissões
+    if [ -L "$symlink" ]; then
+        sudo chmod 644 "$symlink" || { echo "Erro ao ajustar permissões do symlink $symlink."; exit 1; }
+        sudo chown root:root "$symlink" || { echo "Erro ao ajustar dono do symlink $symlink."; exit 1; }
+        echo "Permissões ajustadas para $symlink."
     fi
 }
 
@@ -292,8 +283,9 @@ fix_makedefs_out() {
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postfix opendmarc pflogsumm
 wait # adiciona essa linha para esperar que o comando seja concluído
 
-# Aplicar a correção para makedefs.out
-fix_makedefs_out
+# Chamar a função após corrigir o symlink
+fix_makedefs_symlink
+fix_makedefs_permissions
 
 # Configurações básicas do Postfix
 debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
