@@ -257,9 +257,46 @@ sudo rm -f /etc/aliases.db
 echo "Atualizando aliases..."
 sudo newaliases
 
+# Função para verificar e corrigir o symlink para makedefs.out
+fix_makedefs_symlink() {
+    local target_file="/etc/postfix/makedefs.out"
+    local source_file="/usr/share/postfix/makedefs.out"
+
+    echo "Verificando o symlink $target_file..."
+
+    if [ -L "$target_file" ]; then
+        if [ "$(readlink -f "$target_file")" != "$source_file" ]; then
+            echo "O symlink $target_file está incorreto. Corrigindo..."
+            sudo ln -sf "$source_file" "$target_file" || {
+                echo "Erro ao corrigir o symlink $target_file."
+                exit 1
+            }
+        else
+            echo "O symlink $target_file está correto."
+        fi
+    elif [ -f "$target_file" ]; then
+        echo "$target_file é um arquivo regular. Removendo e criando o symlink..."
+        sudo rm -f "$target_file"
+        sudo ln -s "$source_file" "$target_file" || {
+            echo "Erro ao criar o symlink $target_file."
+            exit 1
+        }
+    else
+        echo "$target_file não existe. Criando o symlink..."
+        sudo ln -s "$source_file" "$target_file" || {
+            echo "Erro ao criar o symlink $target_file."
+            exit 1
+        }
+    fi
+    echo "Symlink para $target_file corrigido com sucesso."
+}
+
 # Instalar Postfix e outros pacotes necessários
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postfix opendmarc pflogsumm
 wait # adiciona essa linha para esperar que o comando seja concluído
+
+# Verificar e corrigir o symlink para makedefs.out
+fix_makedefs_symlink
 
 # Configurações básicas do Postfix
 debconf-set-selections <<< "postfix postfix/mailname string '"$ServerName"'"
