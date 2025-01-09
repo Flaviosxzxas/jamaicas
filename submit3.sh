@@ -464,7 +464,7 @@ sudo cpan install Net::Server::Daemonize Net::Server::Multiplex Net::Server::Pre
 # Criar arquivo de configuração do Postfwd
 if [ ! -f "/opt/postfwd/etc/postfwd.cf" ]; then
     echo "Arquivo de configuração /opt/postfwd/etc/postfwd.cf não encontrado. Criando..."
-    sudo bash -c "cat > /opt/postfwd/etc/postfwd.cf" <<EOF
+    sudo tee /opt/postfwd/etc/postfwd.cf > /dev/null <<EOF
 #######################################################
 # Regras de Controle de Limites por Servidor
 #######################################################
