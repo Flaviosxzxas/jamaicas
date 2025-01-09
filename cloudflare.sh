@@ -81,7 +81,6 @@ record_exists() {
   get_record_details "$record_name" "$record_type" | jq -r '.result | length'
 }
 
-# Função para criar ou atualizar registros DNS
 create_or_update_record() {
   local record_name=$1
   local record_type=$2
@@ -90,43 +89,28 @@ create_or_update_record() {
   local record_priority=$4
   local record_proxied=false
 
-  # Obter os detalhes do registro existente
-  response=$(get_record_details "$record_name" "$record_type")
-  existing_content=$(echo "$response" | jq -r '.result[0].content')
-  existing_ttl=$(echo "$response" | jq -r '.result[0].ttl')
-  existing_priority=$(echo "$response" | jq -r '.result[0].priority')
+  # Excluir o registro existente antes de criar
+  delete_record "$record_name" "$record_type"
 
-  # Verificar se o registro está atualizado
-  if [ "$record_type" == "MX" ] && [ "$existing_content" == "$record_content" ] && [ "$existing_ttl" -eq "$record_ttl" ] && [ "$existing_priority" -eq "$record_priority" ]; then
-    echo "Registro $record_type para $record_name já está atualizado. Pulando."
-  elif [ "$record_type" != "MX" ] && [ "$existing_content" == "$record_content" ] && [ "$existing_ttl" -eq "$record_ttl" ]; then
-    echo "Registro $record_type para $record_name já está atualizado. Pulando."
+  echo "  -- Criando registro $record_type para $record_name"
+  if [ "$record_type" == "MX" ]; then
+    data=$(jq -n --arg type "$record_type" --arg name "$record_name" --arg content "$record_content" --arg ttl "$record_ttl" --argjson proxied "$record_proxied" --arg priority "$record_priority" \
+          '{type: $type, name: $name, content: $content, ttl: ($ttl | tonumber), proxied: $proxied, priority: ($priority | tonumber)}')
   else
-    echo "  -- Criando ou atualizando registro $record_type para $record_name"
-    if [ "$record_type" == "MX" ]; then
-      data=$(jq -n --arg type "$record_type" --arg name "$record_name" --arg content "$record_content" --arg ttl "$record_ttl" --argjson proxied "$record_proxied" --arg priority "$record_priority" \
-            '{type: $type, name: $name, content: $content, ttl: ($ttl | tonumber), proxied: $proxied, priority: ($priority | tonumber)}')
-    else
-      data=$(jq -n --arg type "$record_type" --arg name "$record_name" --arg content "$record_content" --arg ttl "$record_ttl" --argjson proxied "$record_proxied" \
-            '{type: $type, name: $name, content: $content, ttl: ($ttl | tonumber), proxied: $proxied}')
-    fi
-
-    # Verificar se o JSON foi gerado corretamente
-    if [ -z "$data" ]; then
-      echo "Erro ao gerar o corpo do JSON. Verifique as variáveis." >&2
-      return 1
-    fi
-
-    # Enviar a solicitação para criar ou atualizar o registro
-    response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
-         -H "X-Auth-Email: $CloudflareEmail" \
-         -H "X-Auth-Key: $CloudflareAPI" \
-         -H "Content-Type: application/json" \
-         --data "$data")
-
-    echo "$response"
+    data=$(jq -n --arg type "$record_type" --arg name "$record_name" --arg content "$record_content" --arg ttl "$record_ttl" --argjson proxied "$record_proxied" \
+          '{type: $type, name: $name, content: $content, ttl: ($ttl | tonumber), proxied: $proxied}')
   fi
+
+  # Enviar solicitação para criar o registro
+  response=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records" \
+       -H "X-Auth-Email: $CloudflareEmail" \
+       -H "X-Auth-Key: $CloudflareAPI" \
+       -H "Content-Type: application/json" \
+       --data "$data")
+
+  echo "  -- Registro $record_type para $record_name criado/atualizado com sucesso"
 }
+
 
 # Criar ou atualizar registros DNS
 echo "  -- Configurando registros DNS"
