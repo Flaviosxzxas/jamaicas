@@ -370,7 +370,7 @@ myhostname = $ServerName
 smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
 biff = no
 readme_directory = no
-compatibility_level = 3.6
+compatibility_level = 3
 
 header_checks = regexp:/etc/postfix/header_checks
 alias_maps = hash:/etc/aliases
