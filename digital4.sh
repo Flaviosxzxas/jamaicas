@@ -70,29 +70,6 @@ sleep 10
 echo "==================================================================== Hostname && SSL ===================================================================="
 
 # ============================================
-#  Verificar se o ufw está ativo
-# ============================================
-if ! ufw status | grep -q "Status: active"; then
-  echo "UFW não está ativo. Ativando..."
-  ufw enable
-else
-  echo "UFW já está ativo."
-fi
-
-# ============================================
-#  Bloquear todas as conexões externas para a porta 25
-# ============================================
-ufw deny 25/tcp
-
-# ============================================
-#  Permitir tráfego local na porta 25
-# ============================================
-ufw allow from 127.0.0.1 to any port 25 proto tcp
-
-# Recarregar o firewall para aplicar as regras
-ufw reload
-
-# ============================================
 #  Instalar pacotes básicos
 # ============================================
 apt-get install -y wget curl jq python3-certbot-dns-cloudflare openssl
