@@ -15,7 +15,7 @@ echo "Atualizando pacotes..."
 apt-get update
 apt-get upgrade -y || { echo "Erro ao atualizar os pacotes."; exit 1; }
 
-# ============================================
+# ============================================ 
 #  Definir variáveis principais
 # ============================================
 ServerName=$1
