@@ -72,7 +72,13 @@ echo "==================================================================== Hostn
 # ============================================
 #  Abrir porta 25 no UFW
 # ============================================
-ufw allow 25/tcp
+# Bloquear todas as conexões externas para a porta 25
+ufw deny 25/tcp
+
+# Permitir tráfego local na porta 25
+ufw allow from 127.0.0.1 to any port 25 proto tcp
+
+ufw reload
 
 # ============================================
 #  Instalar pacotes básicos
@@ -434,8 +440,8 @@ relayhost =
 mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
 mailbox_size_limit = 0
 recipient_delimiter = +
-inet_interfaces = all
-inet_protocols = all
+inet_interfaces = loopback-only
+inet_protocols = ipv4
 EOF
 
 # Salvar variáveis antes de instalar dependências
