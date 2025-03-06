@@ -8,9 +8,6 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
-# ============================================
-#  Atualizar pacotes
-# ============================================
 export DEBIAN_FRONTEND=noninteractive
 
 echo "Atualizando pacotes..."
