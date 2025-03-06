@@ -11,13 +11,17 @@ fi
 # ============================================
 #  Atualizar pacotes
 # ============================================
-echo "Atualizando pacotes..."
 export DEBIAN_FRONTEND=noninteractive
+
+echo "Atualizando pacotes..."
 apt-get update
 apt-get -y upgrade \
   -o Dpkg::Options::="--force-confdef" \
   -o Dpkg::Options::="--force-confold" \
-  || { echo "Erro ao atualizar os pacotes."; exit 1; }
+  || {
+    echo "Erro ao atualizar os pacotes."
+    exit 1
+  }
 
 # ============================================
 #  Definir variáveis principais
