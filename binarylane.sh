@@ -919,7 +919,122 @@ exit();
 ?>
 EOF
 
+# -----------------------------------------------------------
+# AQUI CRIAMOS O unsubscribe.php COM O CÓDIGO PARA DESCADASTRO
+# -----------------------------------------------------------
+cat <<'EOF' > /var/www/html/unsubscribe.php
+<?php
+/**
+ * unsubscribe.php
+ *
+ * Exemplo de script que lida com descadastramentos de lista de e-mails
+ * via GET e POST (One-Click Unsubscribe).
+ */
+
+// Caminho do arquivo onde salvaremos os e-mails descadastrados
+$unsubFile = __DIR__ . '/unsubscribed_emails.txt';
+
+/**
+ * Função simples para processar e-mail e salvar (exemplo).
+ * Em produção, você poderia remover o e-mail de um BD ou
+ * marcar em sua plataforma de mailing.
+ */
+function unsubscribeEmail($email, $unsubFile) {
+    // Filtra o e-mail para evitar problemas básicos de segurança/formatação
+    $email = filter_var($email, FILTER_SANITIZE_EMAIL);
+
+    // Verifica se ainda parece um e-mail válido
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return false; // E-mail inválido
+    }
+
+    // Neste exemplo, apenas registramos num arquivo de texto
+    file_put_contents($unsubFile, $email . PHP_EOL, FILE_APPEND | LOCK_EX);
+    return true;
+}
+
+// Detecta se estamos em POST (One-Click) ou GET (clique manual)
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!empty($_POST['email'])) {
+        $email = $_POST['email'];
+        $ok = unsubscribeEmail($email, $unsubFile);
+        if ($ok) {
+            echo "OK: E-mail '{$email}' removido via POST.";
+        } else {
+            echo "ERRO: E-mail inválido ou problema ao processar (POST).";
+        }
+    } else {
+        echo "ERRO: Parâmetro 'email' não encontrado no POST.";
+    }
+} else {
+    // GET (clique manual no link unsubscribe.php?email=...)
+    if (!empty($_GET['email'])) {
+        $email = $_GET['email'];
+        $ok = unsubscribeEmail($email, $unsubFile);
+        if ($ok) {
+            echo "OK: E-mail '{$email}' removido via GET.";
+        } else {
+            echo "ERRO: E-mail inválido ou problema ao processar (GET).";
+        }
+    } else {
+        echo "ERRO: Parâmetro 'email' não encontrado no GET.";
+    }
+}
+?>
+EOF
+
+# Criar arquivo de registro e ajustar permissões
+touch /var/www/html/unsubscribed_emails.txt
+chown www-data:www-data /var/www/html/unsubscribed_emails.txt
+chmod 664 /var/www/html/unsubscribed_emails.txt
+
+# Reiniciar Apache para aplicar essas mudanças mínimas
 systemctl restart apache2
+
+# ============================================
+#  Habilitar SSL no Apache e redirecionamento
+# ============================================
+echo "Habilitando SSL e Rewrite no Apache..."
+a2enmod ssl
+a2enmod rewrite
+
+# Cria o VirtualHost para forçar HTTPS
+cat <<EOF > "/etc/apache2/sites-available/ssl-$ServerName.conf"
+<VirtualHost *:80>
+    ServerName $ServerName
+    DocumentRoot /var/www/html
+
+    # Redireciona todo HTTP para HTTPS
+    RewriteEngine On
+    RewriteCond %{SERVER_NAME} =$ServerName
+    RewriteRule ^ https://%{SERVER_NAME}%{REQUEST_URI} [END,NE,R=permanent]
+</VirtualHost>
+
+<IfModule mod_ssl.c>
+<VirtualHost *:443>
+    ServerName $ServerName
+    DocumentRoot /var/www/html
+
+    SSLEngine on
+
+    SSLCertificateFile /etc/letsencrypt/live/$ServerName/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/$ServerName/privkey.pem
+    # Opcional: aproveita config SSL da Let's Encrypt
+    # Se existir /etc/letsencrypt/options-ssl-apache.conf
+    # descomente a linha abaixo:
+    #Include /etc/letsencrypt/options-ssl-apache.conf
+
+    <Directory /var/www/html>
+       AllowOverride All
+       Require all granted
+    </Directory>
+</VirtualHost>
+</IfModule>
+EOF
+
+# Habilita o novo VirtualHost e recarrega
+a2ensite "ssl-$ServerName"
+systemctl reload apache2
 
 echo "==================================================== APPLICATION ===================================================="
 
