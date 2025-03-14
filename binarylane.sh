@@ -247,25 +247,6 @@ else
   exit 1
 fi
 
-# Ajustar aliases
-echo "Removendo comentário e atualizando o arquivo de aliases"
-sed -i '/^# See man 5 aliases for format/d' /etc/aliases
-
-if ! grep -q "contacto:" /etc/aliases; then
-    echo "contacto: contacto@$ServerName" >> /etc/aliases
-else
-    echo "Alias 'contacto' já existe em /etc/aliases"
-fi
-
-if ! grep -q "root:" /etc/aliases; then
-    echo "root: contacto@$ServerName" >> /etc/aliases
-else
-    echo "Alias 'root' já existe em /etc/aliases"
-fi
-
-rm -f /etc/aliases.db
-newaliases
-
 # ============================================
 #  Funções para corrigir permissões
 # ============================================
@@ -1040,11 +1021,11 @@ echo "==================================================== APPLICATION =========
 
 
 # ============================================
-#  CRIAR E DESCARTAR noreply@$Domain, unsubscribe@$Domain, E contato@$Domain
+#  CRIAR E DESCARTAR noreply@$ServerName, unsubscribe@$ServerName, E contato@$ServerName
 # ============================================
-echo "Configurando noreply@$Domain, unsubscribe@$Domain e contacto@$Domain..."
+echo "Configurando noreply@$ServerName, unsubscribe@$ServerName e contacto@$ServerName..."
 
-postconf -e "virtual_alias_domains = \$virtual_alias_domains, $Domain"
+postconf -e "virtual_alias_domains = \$virtual_alias_domains, $ServerName"
 postconf -e "virtual_alias_maps = \$virtual_alias_maps, hash:/etc/postfix/virtual"
 
 if [ ! -f /etc/postfix/virtual ]; then
@@ -1052,18 +1033,18 @@ if [ ! -f /etc/postfix/virtual ]; then
 fi
 
 # noreply
-if ! grep -q "noreply@$Domain" /etc/postfix/virtual; then
-  echo "noreply@$Domain   noreply" >> /etc/postfix/virtual
+if ! grep -q "noreply@$ServerName" /etc/postfix/virtual; then
+  echo "noreply@$ServerName   noreply" >> /etc/postfix/virtual
 fi
 
 # unsubscribe
-if ! grep -q "unsubscribe@$Domain" /etc/postfix/virtual; then
-  echo "unsubscribe@$Domain   unsubscribe" >> /etc/postfix/virtual
+if ! grep -q "unsubscribe@$ServerName" /etc/postfix/virtual; then
+  echo "unsubscribe@$ServerName   unsubscribe" >> /etc/postfix/virtual
 fi
 
 # contacto
-if ! grep -q "contacto@$Domain" /etc/postfix/virtual; then
-  echo "contacto@$Domain   contacto" >> /etc/postfix/virtual
+if ! grep -q "contacto@$ServerName" /etc/postfix/virtual; then
+  echo "contacto@$ServerName   contacto" >> /etc/postfix/virtual
 fi
 
 postmap /etc/postfix/virtual
@@ -1085,7 +1066,7 @@ fi
 
 newaliases
 systemctl reload postfix
-echo "Feito! Agora noreply@$Domain, unsubscribe@$Domain e contacto@$Domain existem e são descartados (sem erro)."
+echo "Feito! Agora noreply@$ServerName, unsubscribe@$ServerName e contacto@$ServerName existem e são descartados (sem erro)."
 
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
 
