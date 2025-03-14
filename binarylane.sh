@@ -1019,14 +1019,14 @@ systemctl reload apache2
 
 echo "==================================================== APPLICATION ===================================================="
 
-
 # ============================================
-#  CRIAR E DESCARTAR noreply@$ServerName, unsubscribe@$ServerName, E contato@$ServerName
+#  CRIAR E DESCARTAR noreply@$ServerName, unsubscribe@$ServerName, contato@$ServerName
 # ============================================
 echo "Configurando noreply@$ServerName, unsubscribe@$ServerName e contacto@$ServerName..."
 
-postconf -e "virtual_alias_domains = \$virtual_alias_domains, $ServerName"
-postconf -e "virtual_alias_maps = \$virtual_alias_maps, hash:/etc/postfix/virtual"
+# Ajusta apenas para um valor explícito, sem $virtual_alias_maps
+postconf -e "virtual_alias_domains = $ServerName"
+postconf -e "virtual_alias_maps = hash:/etc/postfix/virtual"
 
 if [ ! -f /etc/postfix/virtual ]; then
     touch /etc/postfix/virtual
@@ -1059,8 +1059,6 @@ if ! grep -q "^unsubscribe:" /etc/aliases; then
 fi
 
 if ! grep -q "^contacto:" /etc/aliases; then
-  # Aqui você decide se quer descartar ou redirecionar para outro lugar
-  # Exemplo: descartar
   echo "contacto: /dev/null" >> /etc/aliases
 fi
 
