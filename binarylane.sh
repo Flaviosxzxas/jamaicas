@@ -1038,6 +1038,44 @@ systemctl reload apache2
 
 echo "==================================================== APPLICATION ===================================================="
 
+
+# ============================================
+#  CRIAR E DESCARTAR noreply@$Domain e unsubscribe@$Domain
+# ============================================
+echo "Configurando noreply@$Domain e unsubscribe@$Domain para descartar mensagens..."
+
+postconf -e "virtual_alias_domains = \$virtual_alias_domains, $Domain"
+postconf -e "virtual_alias_maps = \$virtual_alias_maps, hash:/etc/postfix/virtual"
+
+if [ ! -f /etc/postfix/virtual ]; then
+    touch /etc/postfix/virtual
+fi
+
+# noreply
+if ! grep -q "noreply@$Domain" /etc/postfix/virtual; then
+  echo "noreply@$Domain   noreply" >> /etc/postfix/virtual
+fi
+
+# unsubscribe
+if ! grep -q "unsubscribe@$Domain" /etc/postfix/virtual; then
+  echo "unsubscribe@$Domain   unsubscribe" >> /etc/postfix/virtual
+fi
+
+postmap /etc/postfix/virtual
+
+# Descartar local "noreply" e "unsubscribe"
+if ! grep -q "^noreply:" /etc/aliases; then
+  echo "noreply: /dev/null" >> /etc/aliases
+fi
+if ! grep -q "^unsubscribe:" /etc/aliases; then
+  echo "unsubscribe: /dev/null" >> /etc/aliases
+fi
+
+newaliases
+
+systemctl reload postfix
+echo "Feito! Agora noreply@$Domain e unsubscribe@$Domain existem e descartam as mensagens."
+
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
 
 echo "======================================================= FIM =========================================================="
