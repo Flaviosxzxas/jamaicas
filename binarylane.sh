@@ -1040,9 +1040,9 @@ echo "==================================================== APPLICATION =========
 
 
 # ============================================
-#  CRIAR E DESCARTAR noreply@$Domain e unsubscribe@$Domain
+#  CRIAR E DESCARTAR noreply@$Domain, unsubscribe@$Domain, E contato@$Domain
 # ============================================
-echo "Configurando noreply@$Domain e unsubscribe@$Domain para descartar mensagens..."
+echo "Configurando noreply@$Domain, unsubscribe@$Domain e contacto@$Domain..."
 
 postconf -e "virtual_alias_domains = \$virtual_alias_domains, $Domain"
 postconf -e "virtual_alias_maps = \$virtual_alias_maps, hash:/etc/postfix/virtual"
@@ -1061,20 +1061,31 @@ if ! grep -q "unsubscribe@$Domain" /etc/postfix/virtual; then
   echo "unsubscribe@$Domain   unsubscribe" >> /etc/postfix/virtual
 fi
 
+# contacto
+if ! grep -q "contacto@$Domain" /etc/postfix/virtual; then
+  echo "contacto@$Domain   contacto" >> /etc/postfix/virtual
+fi
+
 postmap /etc/postfix/virtual
 
-# Descartar local "noreply" e "unsubscribe"
+# Descartar local "noreply", "unsubscribe" e "contacto"
 if ! grep -q "^noreply:" /etc/aliases; then
   echo "noreply: /dev/null" >> /etc/aliases
 fi
+
 if ! grep -q "^unsubscribe:" /etc/aliases; then
   echo "unsubscribe: /dev/null" >> /etc/aliases
 fi
 
-newaliases
+if ! grep -q "^contacto:" /etc/aliases; then
+  # Aqui você decide se quer descartar ou redirecionar para outro lugar
+  # Exemplo: descartar
+  echo "contacto: /dev/null" >> /etc/aliases
+fi
 
+newaliases
 systemctl reload postfix
-echo "Feito! Agora noreply@$Domain e unsubscribe@$Domain existem e descartam as mensagens."
+echo "Feito! Agora noreply@$Domain, unsubscribe@$Domain e contacto@$Domain existem e são descartados (sem erro)."
 
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
 
