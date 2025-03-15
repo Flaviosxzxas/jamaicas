@@ -410,7 +410,7 @@ smtpd_sasl_tls_security_options = noanonymous
 smtpd_tls_auth_only = yes
 
 myorigin = /etc/mailname
-mydestination = $ServerName, localhost
+mydestination = localhost
 relayhost =
 mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
 mailbox_size_limit = 0
