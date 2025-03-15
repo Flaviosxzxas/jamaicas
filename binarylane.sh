@@ -1027,6 +1027,7 @@ echo "Configurando noreply@$ServerName, unsubscribe@$ServerName e contacto@$Serv
 # Ajusta apenas para um valor explícito, sem $virtual_alias_maps
 postconf -e "virtual_alias_domains = $ServerName"
 postconf -e "virtual_alias_maps = hash:/etc/postfix/virtual"
+postconf -e "local_recipient_maps ="
 
 if [ ! -f /etc/postfix/virtual ]; then
     touch /etc/postfix/virtual
