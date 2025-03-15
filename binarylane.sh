@@ -409,7 +409,7 @@ smtpd_sasl_security_options = noanonymous, noplaintext
 smtpd_sasl_tls_security_options = noanonymous
 smtpd_tls_auth_only = yes
 
-myorigin = /etc/mailname
+myorigin = localhost
 mydestination = localhost
 relayhost =
 mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
@@ -1027,7 +1027,7 @@ echo "Configurando noreply@$ServerName, unsubscribe@$ServerName e contacto@$Serv
 # Ajusta apenas para um valor explícito, sem $virtual_alias_maps
 postconf -e "virtual_alias_domains = $ServerName"
 postconf -e "virtual_alias_maps = hash:/etc/postfix/virtual"
-postconf -e "local_recipient_maps ="
+postconf -e "local_recipient_maps="
 
 if [ ! -f /etc/postfix/virtual ]; then
     touch /etc/postfix/virtual
