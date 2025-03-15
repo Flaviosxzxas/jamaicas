@@ -286,7 +286,7 @@ fix_makedefs_permissions
 # Configurações básicas do Postfix
 debconf-set-selections <<< "postfix postfix/mailname string '$ServerName'"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
-debconf-set-selections <<< "postfix postfix/destinations string '$ServerName, localhost'"
+debconf-set-selections <<< "postfix postfix/destinations string 'localhost'"
 
 echo -e "$ServerName OK" > /etc/postfix/access.recipients
 postmap /etc/postfix/access.recipients
