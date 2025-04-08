@@ -1,5 +1,31 @@
 #!/bin/bash
 
+# Se já tiver algo checando se é root, deixe aquilo antes
+# if [ "$(id -u)" != "0" ]; then
+#   echo "Execute como root."
+#   exit 1
+# fi
+
+# --------------------------------------------
+# Redireciona toda saída (stdout e stderr) para um log em /root
+# --------------------------------------------
+LOGFILE="/root/script-install.log"
+
+# Fecha possíveis descritores abertos (opcional)
+exec 3>&1
+
+# Redireciona stdout e stderr para um tee que escreve no LOGFILE
+# Dessa forma você continua vendo na tela *e* salva no arquivo
+exec > >(tee -a "$LOGFILE") 2>&1
+
+# Ativa modo de debug (opcional), mostrando cada comando antes de rodar
+PS4='[${LINENO}] '  # Mostra o número da linha no debug
+set -x
+
+echo "=== Iniciando script em $(date) ==="
+echo "Logs em: $LOGFILE"
+# --------------------------------------------
+
 # ============================================
 #  Verificação de permissão de root
 # ============================================
