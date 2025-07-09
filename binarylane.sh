@@ -248,6 +248,20 @@ else
 fi
 
 # ============================================
+# Instalar dependências para gerar PDF protegido
+# ============================================
+echo "Instalando wkhtmltopdf, pdfkit e PyPDF2 para PDF protegido..."
+apt-get install -y wkhtmltopdf
+pip3 install pdfkit PyPDF2
+
+if [ $? -eq 0 ]; then
+    echo "Dependências de PDF instaladas com sucesso!"
+else
+    echo "Erro ao instalar dependências de PDF (wkhtmltopdf, pdfkit, PyPDF2)."
+    exit 1
+fi
+
+# ============================================
 #  Funções para corrigir permissões
 # ============================================
 fix_makedefs_symlink() {
