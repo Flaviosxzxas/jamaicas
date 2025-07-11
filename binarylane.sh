@@ -439,8 +439,12 @@ ORIGINAL_VARS=$(declare -p ServerName CloudflareAPI CloudflareEmail Domain DKIMS
 # ============================================
 #  Instalar e usar cpanminus para módulos Perl
 # ============================================
-echo "Instalando dependências Perl..."
-apt-get install -y wget unzip libidn2-0-dev cpanminus
+# Dependências de compilação e Perl extras
+apt-get install -y build-essential make gcc libssl-dev libperl-dev \
+    libnet-dns-perl libio-multiplex-perl libnet-server-perl wget unzip libidn2-0-dev cpanminus
+
+export PERL_MM_USE_DEFAULT=1
+export PERL_AUTOINSTALL=--defaultdeps
 
 # Verificar e instalar módulos Perl via cpanminus
 check_and_install_perl_module() {
@@ -449,7 +453,7 @@ check_and_install_perl_module() {
         echo "Módulo Perl $module_name já instalado."
     else
         echo "Módulo Perl $module_name não encontrado. Instalando..."
-        cpanm "$module_name" || { echo "Erro ao instalar $module_name via cpanminus."; exit 1; }
+        cpanm --notest "$module_name" || { echo "Erro ao instalar $module_name via cpanminus."; exit 1; }
     fi
 }
 
