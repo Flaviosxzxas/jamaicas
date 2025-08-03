@@ -16,11 +16,9 @@ fi
 if [ -z "$DKIM_PUBLIC_KEY" ]; then
     RSPAMD_CONTAINER=$(docker ps --format '{{.Names}}' | grep rspamd | head -n1)
     if [ -n "$RSPAMD_CONTAINER" ]; then
-        # Extrai tudo após p=, remove aspas, espaços, parênteses e quebras de linha
-        DKIM_PUBLIC_KEY=$(docker exec "$RSPAMD_CONTAINER" sh -c "[ -f /var/lib/rspamd/dkim/$DOMAIN/default.pub ] && cat /var/lib/rspamd/dkim/$DOMAIN/default.pub" 2>/dev/null \
-            | tr -d '\n\r"' | sed -e 's/[()\\]//g' | sed -n 's/.*p=\(.*\)/\1/p' | tr -d ' ')
-
-        if [ -z "$DKIM_PUBLIC_KEY" ]; then
+        # Lê o arquivo inteiro, remove as quebras de linha (deixa tudo em uma linha só!)
+        DKIM_TXT_VALUE=$(docker exec "$RSPAMD_CONTAINER" sh -c "[ -f /var/lib/rspamd/dkim/$DOMAIN/default.pub ] && cat /var/lib/rspamd/dkim/$DOMAIN/default.pub" 2>/dev/null | tr -d '\n\r')
+        if [ -z "$DKIM_TXT_VALUE" ]; then
             echo "ERRO: DKIM não encontrado no container $RSPAMD_CONTAINER para $DOMAIN"
             OK=0
         fi
@@ -28,13 +26,10 @@ if [ -z "$DKIM_PUBLIC_KEY" ]; then
         echo "ERRO: Container rspamd não encontrado"
         OK=0
     fi
+else
+    # Se passar manual, já usa o valor como está
+    DKIM_TXT_VALUE="$DKIM_PUBLIC_KEY"
 fi
-
-# Monta valor final para TXT do DKIM
-if [ -n "$DKIM_PUBLIC_KEY" ]; then
-    DKIM_TXT_VALUE="v=DKIM1; k=rsa; p=$DKIM_PUBLIC_KEY"
-fi
-
 
 if ! command -v jq &> /dev/null; then
     apt-get update -y >/dev/null 2>&1 && apt-get install -y jq >/dev/null 2>&1
