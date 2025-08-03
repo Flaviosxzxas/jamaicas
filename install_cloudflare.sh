@@ -16,8 +16,14 @@ fi
 if [ -z "$DKIM_PUBLIC_KEY" ]; then
     RSPAMD_CONTAINER=$(docker ps --format '{{.Names}}' | grep rspamd | head -n1)
     if [ -n "$RSPAMD_CONTAINER" ]; then
-        # Pega a linha inteira do DKIM, remove quebras de linha, espaços duplos, aspas e apóstrofos iniciais/finais
-        DKIM_PUBLIC_KEY=$(docker exec "$RSPAMD_CONTAINER" sh -c "[ -f /var/lib/rspamd/dkim/$DOMAIN/default.pub ] && cat /var/lib/rspamd/dkim/$DOMAIN/default.pub" 2>/dev/null | tr -d '\n' | tr -s ' ' | sed 's/^[\"\x27]\+//;s/[\"\x27]\+$//')
+        DKIM_PUBLIC_KEY=$(
+            docker exec "$RSPAMD_CONTAINER" sh -c "[ -f /var/lib/rspamd/dkim/$DOMAIN/default.pub ] && cat /var/lib/rspamd/dkim/$DOMAIN/default.pub" 2>/dev/null |
+            grep -v -E "^[#;']| IN TXT |^\(" |   # Remove linhas de exportação BIND/zona
+            tr -d '\n' | tr -s ' ' |
+            sed 's/^[\"\x27]\+//;s/[\"\x27]\+$//'  # Remove aspas e apóstrofos no começo/fim
+        )
+        # Limpa qualquer prefixo inválido (como 'default'._domainkey IN TXT (" ou similares):
+        DKIM_PUBLIC_KEY=$(echo "$DKIM_PUBLIC_KEY" | sed "s/.*v=DKIM1/v=DKIM1/")
         if [ -z "$DKIM_PUBLIC_KEY" ]; then
             echo "ERRO: DKIM não encontrado no container $RSPAMD_CONTAINER para $DOMAIN"
             OK=0
