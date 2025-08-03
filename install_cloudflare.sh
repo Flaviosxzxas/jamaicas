@@ -16,9 +16,10 @@ fi
 if [ -z "$DKIM_PUBLIC_KEY" ]; then
     RSPAMD_CONTAINER=$(docker ps --format '{{.Names}}' | grep rspamd | head -n1)
     if [ -n "$RSPAMD_CONTAINER" ]; then
-        # Pega a linha inteira do DKIM, remove só quebras de linha e espaços duplos
-        DKIM_PUBLIC_KEY=$(docker exec "$RSPAMD_CONTAINER" sh -c "[ -f /var/lib/rspamd/dkim/$DOMAIN/default.pub ] && cat /var/lib/rspamd/dkim/$DOMAIN/default.pub" 2>/dev/null | tr -d '\n' | tr -s ' ')
-        if [ -z "$DKIM_PUBLIC_KEY" ]; then
+        # Lê o arquivo inteiro, remove quebras de linha, tabs, espaços no início/fim (tudo numa linha só!)
+        DKIM_TXT_VALUE=$(docker exec "$RSPAMD_CONTAINER" sh -c "[ -f /var/lib/rspamd/dkim/$DOMAIN/default.pub ] && cat /var/lib/rspamd/dkim/$DOMAIN/default.pub" 2>/dev/null \
+            | tr -d '\n\r\t' | sed 's/^[ \t]*//;s/[ \t]*$//')
+        if [ -z "$DKIM_TXT_VALUE" ]; then
             echo "ERRO: DKIM não encontrado no container $RSPAMD_CONTAINER para $DOMAIN"
             OK=0
         fi
@@ -26,6 +27,9 @@ if [ -z "$DKIM_PUBLIC_KEY" ]; then
         echo "ERRO: Container rspamd não encontrado"
         OK=0
     fi
+else
+    # Se passar manual, já usa o valor como está
+    DKIM_TXT_VALUE="$DKIM_PUBLIC_KEY"
 fi
 
 if ! command -v jq &> /dev/null; then
@@ -56,10 +60,9 @@ cloudflare_dns_update() {
         -H "Content-Type: application/json")
     local record_id=$(echo "$result" | jq -r '.result[0].id')
 
-    # Monta o JSON seguro com jq para o DKIM (ou outros TXT)
     local data
-    # Monta o JSON correto para cada tipo
     if [ "$type" = "TXT" ]; then
+        # Aqui o content já está limpo (sem aspas, sem quebras, tudo numa linha só!)
         data=$(jq -n --arg type "$type" --arg name "$name" --arg content "$content" --arg ttl "120" '{
             type: $type,
             name: $name,
@@ -120,8 +123,10 @@ cloudflare_dns_update "A" "$DOMAIN" "$SERVER_IP" ""
 cloudflare_dns_update "MX" "$DOMAIN" "mail.$DOMAIN" ""
 cloudflare_dns_update "TXT" "$DOMAIN" "v=spf1 +a +mx +ip4:$SERVER_IP -all" ""
 cloudflare_dns_update "TXT" "_dmarc.$DOMAIN" "v=DMARC1; p=quarantine; rua=mailto:admin@$DOMAIN" ""
-if [ -n "$DKIM_PUBLIC_KEY" ]; then
-    cloudflare_dns_update "TXT" "default._domainkey.$DOMAIN" "$DKIM_PUBLIC_KEY" ""
+
+# Adiciona o DKIM apenas se estiver presente
+if [ -n "$DKIM_TXT_VALUE" ]; then
+    cloudflare_dns_update "TXT" "default._domainkey.$DOMAIN" "$DKIM_TXT_VALUE" ""
 fi
 
 if [ "$OK" -eq 1 ]; then
