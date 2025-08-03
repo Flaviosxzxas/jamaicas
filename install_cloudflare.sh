@@ -72,8 +72,9 @@ cloudflare_dns_update() {
 
     local success=$(echo "$resp" | jq -r '.success')
     if [ "$success" != "true" ]; then
-        local err=$(echo "$resp" | jq -r '.errors[0].message')
-        echo "ERRO: Falha ao criar/atualizar $type $name. Motivo: $err"
+        echo "ERRO: Falha ao criar/atualizar $type $name."
+        echo "RESPOSTA DO CLOUDFLARE:"
+        echo "$resp"
         OK=0
     fi
 }
