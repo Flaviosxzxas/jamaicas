@@ -58,37 +58,36 @@ cloudflare_dns_update() {
 
     # Monta o JSON seguro com jq para o DKIM (ou outros TXT)
     local data
+    # Monta o JSON correto para cada tipo
     if [ "$type" = "TXT" ]; then
-        if [[ "$name" == default._domainkey* ]]; then
-            data=$(jq -n --arg type "$type" --arg name "$name" --arg content "$content" --arg ttl "120" '{
-              type: $type,
-              name: $name,
-              content: $content,
-              ttl: ($ttl|tonumber)
-            }')
-        else
-            data=$(jq -n --arg type "$type" --arg name "$name" --arg content "$content" --arg ttl "120" '{
-              type: $type,
-              name: $name,
-              content: $content,
-              ttl: ($ttl|tonumber)
-            }')
-        fi
+        data=$(jq -n --arg type "$type" --arg name "$name" --arg content "$content" --arg ttl "120" '{
+            type: $type,
+            name: $name,
+            content: $content,
+            ttl: ($ttl|tonumber)
+        }')
     elif [ "$type" = "MX" ]; then
         data=$(jq -n --arg type "$type" --arg name "$name" --arg content "$content" --arg priority "10" --arg ttl "120" '{
-          type: $type,
-          name: $name,
-          content: $content,
-          priority: ($priority|tonumber),
-          ttl: ($ttl|tonumber)
+            type: $type,
+            name: $name,
+            content: $content,
+            priority: ($priority|tonumber),
+            ttl: ($ttl|tonumber)
+        }')
+    elif [ "$type" = "A" ] || [ "$type" = "AAAA" ] || [ "$type" = "CNAME" ]; then
+        data=$(jq -n --arg type "$type" --arg name "$name" --arg content "$content" --arg ttl "120" --argjson proxied false '{
+            type: $type,
+            name: $name,
+            content: $content,
+            ttl: ($ttl|tonumber),
+            proxied: $proxied
         }')
     else
-        data=$(jq -n --arg type "$type" --arg name "$name" --arg content "$content" --arg ttl "120" --argjson proxied false '{
-          type: $type,
-          name: $name,
-          content: $content,
-          ttl: ($ttl|tonumber),
-          proxied: $proxied
+        data=$(jq -n --arg type "$type" --arg name "$name" --arg content "$content" --arg ttl "120" '{
+            type: $type,
+            name: $name,
+            content: $content,
+            ttl: ($ttl|tonumber)
         }')
     fi
 
