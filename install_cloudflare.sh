@@ -12,18 +12,21 @@ if [ -z "$DOMAIN" ] || [ -z "$SERVER_IP" ] || [ -z "$CLOUDFLARE_API_KEY" ] || [ 
     exit 1
 fi
 
-# Busca DKIM automaticamente dentro do container se não passar manual
 if [ -z "$DKIM_PUBLIC_KEY" ]; then
     RSPAMD_CONTAINER=$(docker ps --format '{{.Names}}' | grep rspamd | head -n1)
     if [ -n "$RSPAMD_CONTAINER" ]; then
+        # Captura todas linhas do arquivo, remove aspas, parênteses, ponto e vírgula, concatena tudo
         DKIM_PUBLIC_KEY=$(
             docker exec "$RSPAMD_CONTAINER" sh -c "[ -f /var/lib/rspamd/dkim/$DOMAIN/default.pub ] && cat /var/lib/rspamd/dkim/$DOMAIN/default.pub" 2>/dev/null |
-            grep -v -E "^[#;']| IN TXT |^\(" |   # Remove linhas de exportação BIND/zona
-            tr -d '\n' | tr -s ' ' |
-            sed 's/^[\"\x27]\+//;s/[\"\x27]\+$//'  # Remove aspas e apóstrofos no começo/fim
+            grep -v -E "^[#;']| IN TXT " |      # Remove linhas BIND
+            tr -d '";()' |                     # Remove aspas, ponto e vírgula, parênteses
+            tr -d '\n' | tr -s ' ' |           # Junta tudo em uma linha só
+            sed -E 's/^[ \t]+|[ \t]+$//g'      # Remove espaços início/fim
         )
-        # Limpa qualquer prefixo inválido (como 'default'._domainkey IN TXT (" ou similares):
-        DKIM_PUBLIC_KEY=$(echo "$DKIM_PUBLIC_KEY" | sed "s/.*v=DKIM1/v=DKIM1/")
+        # Força prefixo correto (corrige se só veio o "p="):
+        if [[ "$DKIM_PUBLIC_KEY" =~ ^p= ]]; then
+            DKIM_PUBLIC_KEY="v=DKIM1; k=rsa; $DKIM_PUBLIC_KEY"
+        fi
         if [ -z "$DKIM_PUBLIC_KEY" ]; then
             echo "ERRO: DKIM não encontrado no container $RSPAMD_CONTAINER para $DOMAIN"
             OK=0
@@ -33,6 +36,7 @@ if [ -z "$DKIM_PUBLIC_KEY" ]; then
         OK=0
     fi
 fi
+
 
 if ! command -v jq &> /dev/null; then
     apt-get update -y >/dev/null 2>&1 && apt-get install -y jq >/dev/null 2>&1
