@@ -16,6 +16,7 @@ fi
 if [ -z "$DKIM_PUBLIC_KEY" ]; then
     RSPAMD_CONTAINER=$(docker ps --format '{{.Names}}' | grep rspamd | head -n1)
     if [ -n "$RSPAMD_CONTAINER" ]; then
+        # Pega a linha inteira do DKIM, remove só quebras de linha
         DKIM_PUBLIC_KEY=$(docker exec "$RSPAMD_CONTAINER" sh -c "[ -f /var/lib/rspamd/dkim/$DOMAIN/default.pub ] && cat /var/lib/rspamd/dkim/$DOMAIN/default.pub" 2>/dev/null | tr -d '\n' | tr -s ' ')
         if [ -z "$DKIM_PUBLIC_KEY" ]; then
             echo "ERRO: DKIM não encontrado no container $RSPAMD_CONTAINER para $DOMAIN"
@@ -71,7 +72,8 @@ cloudflare_dns_update() {
 
     local success=$(echo "$resp" | jq -r '.success')
     if [ "$success" != "true" ]; then
-        echo "ERRO: Falha ao criar/atualizar $type $name"
+        local err=$(echo "$resp" | jq -r '.errors[0].message')
+        echo "ERRO: Falha ao criar/atualizar $type $name. Motivo: $err"
         OK=0
     fi
 }
