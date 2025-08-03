@@ -1,37 +1,39 @@
 #!/bin/bash
 
+# USO: ./script.sh dominio.com IP CLOUDFLARE_API_KEY CLOUDFLARE_EMAIL
+
 DOMAIN="$1"
 SERVER_IP="$2"
 CLOUDFLARE_API_KEY="$3"
 CLOUDFLARE_EMAIL="$4"
-DKIM_PUBLIC_KEY="$5"
 OK=1
 
 if [ -z "$DOMAIN" ] || [ -z "$SERVER_IP" ] || [ -z "$CLOUDFLARE_API_KEY" ] || [ -z "$CLOUDFLARE_EMAIL" ]; then
-    echo "ERRO: Uso: $0 <DOMINIO> <IP> <CF_API_KEY> <CF_EMAIL> [DKIM_PUBLIC_KEY]"
+    echo "ERRO: Uso: $0 <DOMINIO> <IP> <CF_API_KEY> <CF_EMAIL>"
     exit 1
 fi
 
-# Busca DKIM automaticamente dentro do container se não passar manual
-if [ -z "$DKIM_PUBLIC_KEY" ]; then
-    RSPAMD_CONTAINER=$(docker ps --format '{{.Names}}' | grep rspamd | head -n1)
-    if [ -n "$RSPAMD_CONTAINER" ]; then
-        # Lê o arquivo inteiro, remove quebras de linha, tabs, espaços no início/fim (tudo numa linha só!)
-        DKIM_TXT_VALUE=$(docker exec "$RSPAMD_CONTAINER" sh -c "[ -f /var/lib/rspamd/dkim/$DOMAIN/default.pub ] && cat /var/lib/rspamd/dkim/$DOMAIN/default.pub" 2>/dev/null \
-            | tr -d '\n\r\t' | sed 's/^[ \t]*//;s/[ \t]*$//')
-        if [ -z "$DKIM_TXT_VALUE" ]; then
-            echo "ERRO: DKIM não encontrado no container $RSPAMD_CONTAINER para $DOMAIN"
-            OK=0
-        fi
-    else
-        echo "ERRO: Container rspamd não encontrado"
-        OK=0
-    fi
-else
-    # Se passar manual, já usa o valor como está
-    DKIM_TXT_VALUE="$DKIM_PUBLIC_KEY"
+# ------ CONFIG DO SELETOR ------
+DKIM_SELECTOR="default"    # ou 'mail' dependendo do seu setup
+DKIM_FILE="/etc/opendkim/keys/$DOMAIN/mail.txt"   # Ajuste para seu arquivo real
+
+if [ ! -f "$DKIM_FILE" ]; then
+    echo "ERRO: Arquivo de DKIM não encontrado: $DKIM_FILE"
+    exit 1
 fi
 
+# ----- EXTRAI SÓ A CHAVE PÚBLICA (SEM PREFIXO) -----
+PUBKEY=$(grep '^p=' "$DKIM_FILE" | sed 's/^p=//;s/[ \t\r\n]*//g')
+
+if [ -z "$PUBKEY" ]; then
+    echo "ERRO: Não foi possível extrair o valor da chave pública (p=) do arquivo DKIM."
+    exit 1
+fi
+
+# ----- MONTA O VALOR FINAL DO TXT -----
+DKIM_TXT_VALUE="v=DKIM1; k=rsa; p=$PUBKEY"
+
+# --- Instala dependências se necessário ---
 if ! command -v jq &> /dev/null; then
     apt-get update -y >/dev/null 2>&1 && apt-get install -y jq >/dev/null 2>&1
 fi
@@ -39,6 +41,7 @@ if ! command -v curl &> /dev/null; then
     apt-get update -y >/dev/null 2>&1 && apt-get install -y curl >/dev/null 2>&1
 fi
 
+# ------ Função para atualizar Cloudflare ------
 cloudflare_dns_update() {
     local type="$1"
     local name="$2"
@@ -62,28 +65,12 @@ cloudflare_dns_update() {
 
     local data
     if [ "$type" = "TXT" ]; then
-        # Aqui o content já está limpo (sem aspas, sem quebras, tudo numa linha só!)
+        # Envia o valor sem aspas duplas, tudo em uma linha só
         data=$(jq -n --arg type "$type" --arg name "$name" --arg content "$content" --arg ttl "120" '{
             type: $type,
             name: $name,
             content: $content,
             ttl: ($ttl|tonumber)
-        }')
-    elif [ "$type" = "MX" ]; then
-        data=$(jq -n --arg type "$type" --arg name "$name" --arg content "$content" --arg priority "10" --arg ttl "120" '{
-            type: $type,
-            name: $name,
-            content: $content,
-            priority: ($priority|tonumber),
-            ttl: ($ttl|tonumber)
-        }')
-    elif [ "$type" = "A" ] || [ "$type" = "AAAA" ] || [ "$type" = "CNAME" ]; then
-        data=$(jq -n --arg type "$type" --arg name "$name" --arg content "$content" --arg ttl "120" --argjson proxied false '{
-            type: $type,
-            name: $name,
-            content: $content,
-            ttl: ($ttl|tonumber),
-            proxied: $proxied
         }')
     else
         data=$(jq -n --arg type "$type" --arg name "$name" --arg content "$content" --arg ttl "120" '{
@@ -118,19 +105,11 @@ cloudflare_dns_update() {
     fi
 }
 
-cloudflare_dns_update "A" "mail.$DOMAIN" "$SERVER_IP" ""
-cloudflare_dns_update "A" "$DOMAIN" "$SERVER_IP" ""
-cloudflare_dns_update "MX" "$DOMAIN" "mail.$DOMAIN" ""
-cloudflare_dns_update "TXT" "$DOMAIN" "v=spf1 +a +mx +ip4:$SERVER_IP -all" ""
-cloudflare_dns_update "TXT" "_dmarc.$DOMAIN" "v=DMARC1; p=quarantine; rua=mailto:admin@$DOMAIN" ""
-
-# Adiciona o DKIM apenas se estiver presente
-if [ -n "$DKIM_TXT_VALUE" ]; then
-    cloudflare_dns_update "TXT" "default._domainkey.$DOMAIN" "$DKIM_TXT_VALUE" ""
-fi
+# --- Exemplo de uso ---
+cloudflare_dns_update "TXT" "$DKIM_SELECTOR._domainkey.$DOMAIN" "$DKIM_TXT_VALUE" ""
 
 if [ "$OK" -eq 1 ]; then
-    echo "OK"
+    echo "DKIM configurado corretamente no Cloudflare!"
 else
-    echo "ERRO"
+    echo "ERRO ao configurar DKIM."
 fi
