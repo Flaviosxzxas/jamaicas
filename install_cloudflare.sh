@@ -13,24 +13,20 @@ if [ -z "$DOMAIN" ] || [ -z "$SERVER_IP" ] || [ -z "$CLOUDFLARE_API_KEY" ] || [ 
 fi
 
 # Busca DKIM automaticamente dentro do container se não passar manual
-RSPAMD_CONTAINER=$(docker ps --format '{{.Names}}' | grep rspamd | head -n1)
 if [ -z "$DKIM_PUBLIC_KEY" ]; then
+    RSPAMD_CONTAINER=$(docker ps --format '{{.Names}}' | grep rspamd | head -n1)
     if [ -n "$RSPAMD_CONTAINER" ]; then
-        DKIM_PUBLIC_KEY=$(docker exec "$RSPAMD_CONTAINER" sh -c "cat /var/lib/rspamd/dkim/$DOMAIN/default.pub" 2>/dev/null | \
-            grep -v -E "^[#;']| IN TXT |^\(" | \
-            tr -d '";()' | \
-            tr -d '\n' | tr -s ' ' | \
-            sed -E 's/^[ \t]+|[ \t]+$//g' )
-        # Se veio só "p=", força prefixo
-        if [[ "$DKIM_PUBLIC_KEY" =~ ^p= ]]; then
-            DKIM_PUBLIC_KEY="v=DKIM1; k=rsa; $DKIM_PUBLIC_KEY"
+        # Pega a linha inteira do DKIM, remove só quebras de linha e espaços duplos
+        DKIM_PUBLIC_KEY=$(docker exec "$RSPAMD_CONTAINER" sh -c "[ -f /var/lib/rspamd/dkim/$DOMAIN/default.pub ] && cat /var/lib/rspamd/dkim/$DOMAIN/default.pub" 2>/dev/null | tr -d '\n' | tr -s ' ')
+        if [ -z "$DKIM_PUBLIC_KEY" ]; then
+            echo "ERRO: DKIM não encontrado no container $RSPAMD_CONTAINER para $DOMAIN"
+            OK=0
         fi
     else
         echo "ERRO: Container rspamd não encontrado"
         OK=0
     fi
 fi
-
 
 if ! command -v jq &> /dev/null; then
     apt-get update -y >/dev/null 2>&1 && apt-get install -y jq >/dev/null 2>&1
@@ -132,4 +128,4 @@ if [ "$OK" -eq 1 ]; then
     echo "OK"
 else
     echo "ERRO"
-fi
+fi 
