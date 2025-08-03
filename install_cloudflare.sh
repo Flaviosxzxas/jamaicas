@@ -16,7 +16,7 @@ fi
 if [ -z "$DKIM_PUBLIC_KEY" ]; then
     RSPAMD_CONTAINER=$(docker ps --format '{{.Names}}' | grep rspamd | head -n1)
     if [ -n "$RSPAMD_CONTAINER" ]; then
-        # Pega a linha inteira do DKIM, remove só quebras de linha
+        # Pega a linha inteira do DKIM, remove só quebras de linha e espaços duplos
         DKIM_PUBLIC_KEY=$(docker exec "$RSPAMD_CONTAINER" sh -c "[ -f /var/lib/rspamd/dkim/$DOMAIN/default.pub ] && cat /var/lib/rspamd/dkim/$DOMAIN/default.pub" 2>/dev/null | tr -d '\n' | tr -s ' ')
         if [ -z "$DKIM_PUBLIC_KEY" ]; then
             echo "ERRO: DKIM não encontrado no container $RSPAMD_CONTAINER para $DOMAIN"
@@ -56,18 +56,55 @@ cloudflare_dns_update() {
         -H "Content-Type: application/json")
     local record_id=$(echo "$result" | jq -r '.result[0].id')
 
-    if [ -z "$record_id" ] || [ "$record_id" = "null" ]; then
-        local resp=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records" \
-            -H "X-Auth-Email: $CLOUDFLARE_EMAIL" \
-            -H "X-Auth-Key: $CLOUDFLARE_API_KEY" \
-            -H "Content-Type: application/json" \
-            --data "{\"type\":\"$type\",\"name\":\"$name\",\"content\":\"$content\"$extra}")
+    # Monta o JSON seguro com jq para o DKIM (ou outros TXT)
+    local data
+    if [ "$type" = "TXT" ]; then
+        if [[ "$name" == default._domainkey* ]]; then
+            data=$(jq -n --arg type "$type" --arg name "$name" --arg content "$content" --arg ttl "120" '{
+              type: $type,
+              name: $name,
+              content: $content,
+              ttl: ($ttl|tonumber)
+            }')
+        else
+            data=$(jq -n --arg type "$type" --arg name "$name" --arg content "$content" --arg ttl "120" '{
+              type: $type,
+              name: $name,
+              content: $content,
+              ttl: ($ttl|tonumber)
+            }')
+        fi
+    elif [ "$type" = "MX" ]; then
+        data=$(jq -n --arg type "$type" --arg name "$name" --arg content "$content" --arg priority "10" --arg ttl "120" '{
+          type: $type,
+          name: $name,
+          content: $content,
+          priority: ($priority|tonumber),
+          ttl: ($ttl|tonumber)
+        }')
     else
-        local resp=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records/$record_id" \
+        data=$(jq -n --arg type "$type" --arg name "$name" --arg content "$content" --arg ttl "120" --argjson proxied false '{
+          type: $type,
+          name: $name,
+          content: $content,
+          ttl: ($ttl|tonumber),
+          proxied: $proxied
+        }')
+    fi
+
+    local resp
+    if [ -z "$record_id" ] || [ "$record_id" = "null" ]; then
+        resp=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records" \
             -H "X-Auth-Email: $CLOUDFLARE_EMAIL" \
             -H "X-Auth-Key: $CLOUDFLARE_API_KEY" \
             -H "Content-Type: application/json" \
-            --data "{\"type\":\"$type\",\"name\":\"$name\",\"content\":\"$content\"$extra}")
+            --data "$data")
+    else
+        resp=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records/$record_id" \
+            -H "X-Auth-Email: $CLOUDFLARE_EMAIL" \
+            -H "X-Auth-Key: $CLOUDFLARE_API_KEY" \
+            -H "Content-Type: application/json" \
+            --data "$data")
     fi
 
     local success=$(echo "$resp" | jq -r '.success')
@@ -79,13 +116,13 @@ cloudflare_dns_update() {
     fi
 }
 
-cloudflare_dns_update "A" "mail.$DOMAIN" "$SERVER_IP" ', "ttl":120, "proxied":false'
-cloudflare_dns_update "A" "$DOMAIN" "$SERVER_IP" ', "ttl":120, "proxied":false'
-cloudflare_dns_update "MX" "$DOMAIN" "mail.$DOMAIN" ', "ttl":120, "priority":10'
-cloudflare_dns_update "TXT" "$DOMAIN" "v=spf1 +a +mx +ip4:$SERVER_IP -all" ', "ttl":120'
-cloudflare_dns_update "TXT" "_dmarc.$DOMAIN" "v=DMARC1; p=quarantine; rua=mailto:admin@$DOMAIN" ', "ttl":120'
+cloudflare_dns_update "A" "mail.$DOMAIN" "$SERVER_IP" ""
+cloudflare_dns_update "A" "$DOMAIN" "$SERVER_IP" ""
+cloudflare_dns_update "MX" "$DOMAIN" "mail.$DOMAIN" ""
+cloudflare_dns_update "TXT" "$DOMAIN" "v=spf1 +a +mx +ip4:$SERVER_IP -all" ""
+cloudflare_dns_update "TXT" "_dmarc.$DOMAIN" "v=DMARC1; p=quarantine; rua=mailto:admin@$DOMAIN" ""
 if [ -n "$DKIM_PUBLIC_KEY" ]; then
-    cloudflare_dns_update "TXT" "default._domainkey.$DOMAIN" "$DKIM_PUBLIC_KEY" ', "ttl":120'
+    cloudflare_dns_update "TXT" "default._domainkey.$DOMAIN" "$DKIM_PUBLIC_KEY" ""
 fi
 
 if [ "$OK" -eq 1 ]; then
