@@ -16,9 +16,9 @@ fi
 if [ -z "$DKIM_PUBLIC_KEY" ]; then
     RSPAMD_CONTAINER=$(docker ps --format '{{.Names}}' | grep rspamd | head -n1)
     if [ -n "$RSPAMD_CONTAINER" ]; then
-        # Extrai a chave limpa: sem comentários, sem quebras, só a base64 mesmo
+        # Extraia só o conteúdo da chave pública (base64) após o p=
         DKIM_PUBLIC_KEY=$(docker exec "$RSPAMD_CONTAINER" sh -c "[ -f /var/lib/rspamd/dkim/$DOMAIN/default.pub ] && cat /var/lib/rspamd/dkim/$DOMAIN/default.pub" 2>/dev/null \
-            | grep -v -E "^[#;']| IN TXT |^\(" | tr -d '\n\r' | tr -d '";()' | tr -s ' ' | sed -E 's/^[ \t]+|[ \t]+$//g')
+            | grep -o 'p=[A-Za-z0-9+/=]\+' | head -n1 | sed 's/^p=//')
         if [ -z "$DKIM_PUBLIC_KEY" ]; then
             echo "ERRO: DKIM não encontrado no container $RSPAMD_CONTAINER para $DOMAIN"
             OK=0
@@ -29,7 +29,7 @@ if [ -z "$DKIM_PUBLIC_KEY" ]; then
     fi
 fi
 
-# Monta valor final para TXT do DKIM (já formatado corretamente)
+# Monta valor final para TXT do DKIM (sem espaço extra e sem duplicação de p=)
 if [ -n "$DKIM_PUBLIC_KEY" ]; then
     DKIM_TXT_VALUE="v=DKIM1; k=rsa; p=$DKIM_PUBLIC_KEY"
 fi
