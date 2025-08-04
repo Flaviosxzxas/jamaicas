@@ -118,3 +118,58 @@ if [ "$OK" -eq 1 ]; then
 else
     echo "ERRO ao configurar os registros."
 fi
+# Instalar Apache e Certbot caso não existam
+if ! command -v apache2 &> /dev/null; then
+    apt-get update -y && apt-get install -y apache2
+fi
+if ! command -v certbot &> /dev/null; then
+    apt-get install -y certbot python3-certbot-apache
+fi
+
+# Garante que /var/www/html existe
+mkdir -p /var/www/html
+
+# Habilitar módulos do Apache
+a2enmod ssl
+a2enmod rewrite
+
+# Emitir o certificado SSL Let's Encrypt, se não existir
+if [ ! -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+    certbot certonly --apache --agree-tos --register-unsafely-without-email -d "$DOMAIN" --non-interactive
+fi
+
+# Cria o VirtualHost para SSL e redirecionamento
+cat <<EOF > "/etc/apache2/sites-available/ssl-$DOMAIN.conf"
+<VirtualHost *:80>
+    ServerName $DOMAIN
+    DocumentRoot /var/www/html
+
+    RewriteEngine On
+    RewriteCond %{SERVER_NAME} =$DOMAIN
+    RewriteRule ^ https://%{SERVER_NAME}%{REQUEST_URI} [END,NE,R=permanent]
+</VirtualHost>
+
+<IfModule mod_ssl.c>
+<VirtualHost *:443>
+    ServerName $DOMAIN
+    DocumentRoot /var/www/html
+
+    SSLEngine on
+
+    SSLCertificateFile /etc/letsencrypt/live/$DOMAIN/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/$DOMAIN/privkey.pem
+    #Include /etc/letsencrypt/options-ssl-apache.conf
+
+    <Directory /var/www/html>
+       AllowOverride All
+       Require all granted
+    </Directory>
+</VirtualHost>
+</IfModule>
+EOF
+
+# Habilita o novo site SSL e reinicia/recarrega Apache
+a2ensite "ssl-$DOMAIN"
+systemctl reload apache2
+
+echo "Site HTTPS configurado e redirecionamento forçado para https://$DOMAIN/"
