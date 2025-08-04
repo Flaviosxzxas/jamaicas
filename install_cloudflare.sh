@@ -23,7 +23,7 @@ fi
 # Extrai só a parte depois do p=, removendo espaços, parênteses, ; e lixo do final
 PUBKEY=$(grep '^p=' "$DKIM_FILE" | sed 's/^p=//;s/[ \t\r\n]*//g' | tr -d '();')
 if [ -z "$PUBKEY" ]; then
-    PUBKEY=$(cat "$DKIM_FILE" | tr -d '\n' | sed -n 's/.*p=\(.*\)/\1/p' | tr -d '" ();')
+    PUBKEY=$(cat "$DKIM_FILE" | tr -d '\n\r\t"();' | sed -E 's/.*p=//;s/[ ]*//g')
 fi
 PUBKEY=$(echo "$PUBKEY" | sed 's/ *$//g')
 
