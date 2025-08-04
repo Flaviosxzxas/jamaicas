@@ -115,6 +115,8 @@ cloudflare_dns_update "TXT" "_dmarc.$DOMAIN" "$DMARC_TXT_VALUE" ""
 
 # ============ CONFIGURAÇÃO SSL APACHE AUTOMÁTICA ============
 
+WEBROOT="/opt/BillionMail/core/public"
+
 # Instalar Apache e Certbot caso não existam
 if ! command -v apache2 &> /dev/null; then
     apt-get update -y && apt-get install -y apache2
@@ -123,12 +125,11 @@ if ! command -v certbot &> /dev/null; then
     apt-get install -y certbot python3-certbot-apache
 fi
 
-mkdir -p /var/www/html
+mkdir -p $WEBROOT
 
 a2enmod ssl
 a2enmod rewrite
 
-# PARA SERVIÇOS QUE USAM A PORTA 80
 # PARA SERVIÇOS QUE USAM A PORTA 80
 echo "Parando possíveis serviços que usam a porta 80 (nginx, apache, docker)..."
 systemctl stop nginx 2>/dev/null
@@ -140,12 +141,12 @@ if [ ! -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
     certbot certonly --standalone --agree-tos --register-unsafely-without-email -d "$DOMAIN" --non-interactive
 fi
 
-# Só depois que o certificado existir, crie o virtualhost:
+# Só cria o VirtualHost se o SSL existe!
 if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
     cat <<EOF > "/etc/apache2/sites-available/ssl-$DOMAIN.conf"
 <VirtualHost *:80>
     ServerName $DOMAIN
-    DocumentRoot /opt/BillionMail/core/publi
+    DocumentRoot $WEBROOT
 
     RewriteEngine On
     RewriteCond %{SERVER_NAME} =$DOMAIN
@@ -155,15 +156,14 @@ if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
 <IfModule mod_ssl.c>
 <VirtualHost *:443>
     ServerName $DOMAIN
-    DocumentRoot /var/www/html
+    DocumentRoot $WEBROOT
 
     SSLEngine on
 
     SSLCertificateFile /etc/letsencrypt/live/$DOMAIN/fullchain.pem
     SSLCertificateKeyFile /etc/letsencrypt/live/$DOMAIN/privkey.pem
-    #Include /etc/letsencrypt/options-ssl-apache.conf
 
-    <Directory /opt/BillionMail/core/public>
+    <Directory $WEBROOT>
        AllowOverride All
        Require all granted
     </Directory>
@@ -179,3 +179,8 @@ else
     echo "ERRO: Certificado SSL não foi emitido corretamente, verifique o log do certbot!"
 fi
 
+if [ "$OK" -eq 1 ]; then
+    echo "Todos os registros configurados corretamente no Cloudflare!"
+else
+    echo "ERRO ao configurar os registros."
+fi
