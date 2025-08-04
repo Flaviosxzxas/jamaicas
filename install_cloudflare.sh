@@ -106,6 +106,7 @@ cloudflare_dns_update() {
     fi
 }
 
+cloudflare_dns_update "A" "$DOMAIN" "$SERVER_IP" ""
 cloudflare_dns_update "A" "mail.$DOMAIN" "$SERVER_IP" ""
 cloudflare_dns_update "MX" "$DOMAIN" "mail.$DOMAIN" "10"
 cloudflare_dns_update "TXT" "$DOMAIN" "$SPF_TXT_VALUE" ""
