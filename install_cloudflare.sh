@@ -129,6 +129,7 @@ a2enmod ssl
 a2enmod rewrite
 
 # PARA SERVIÇOS QUE USAM A PORTA 80
+# PARA SERVIÇOS QUE USAM A PORTA 80
 echo "Parando possíveis serviços que usam a porta 80 (nginx, apache, docker)..."
 systemctl stop nginx 2>/dev/null
 systemctl stop apache2 2>/dev/null
@@ -139,10 +140,9 @@ if [ ! -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
     certbot certonly --standalone --agree-tos --register-unsafely-without-email -d "$DOMAIN" --non-interactive
 fi
 
-# Sobe o Apache
-systemctl start apache2
-
-cat <<EOF > "/etc/apache2/sites-available/ssl-$DOMAIN.conf"
+# Só depois que o certificado existir, crie o virtualhost:
+if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+    cat <<EOF > "/etc/apache2/sites-available/ssl-$DOMAIN.conf"
 <VirtualHost *:80>
     ServerName $DOMAIN
     DocumentRoot /var/www/html
@@ -171,15 +171,11 @@ cat <<EOF > "/etc/apache2/sites-available/ssl-$DOMAIN.conf"
 </IfModule>
 EOF
 
-a2ensite "ssl-$DOMAIN"
-systemctl reload apache2
-
-echo "Site HTTPS configurado e redirecionamento forçado para https://$DOMAIN/"
-
-# =============================================================
-
-if [ "$OK" -eq 1 ]; then
-    echo "Todos os registros configurados corretamente no Cloudflare!"
+    systemctl start apache2
+    a2ensite "ssl-$DOMAIN"
+    systemctl reload apache2
+    echo "Site HTTPS configurado e redirecionamento forçado para https://$DOMAIN/"
 else
-    echo "ERRO ao configurar os registros."
+    echo "ERRO: Certificado SSL não foi emitido corretamente, verifique o log do certbot!"
 fi
+
