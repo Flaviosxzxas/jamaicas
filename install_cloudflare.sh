@@ -113,11 +113,8 @@ cloudflare_dns_update "TXT" "$DOMAIN" "$SPF_TXT_VALUE" ""
 cloudflare_dns_update "TXT" "$DKIM_SELECTOR._domainkey.$DOMAIN" "$DKIM_TXT_VALUE" ""
 cloudflare_dns_update "TXT" "_dmarc.$DOMAIN" "$DMARC_TXT_VALUE" ""
 
-if [ "$OK" -eq 1 ]; then
-    echo "Todos os registros configurados corretamente no Cloudflare!"
-else
-    echo "ERRO ao configurar os registros."
-fi
+# ============ CONFIGURAÇÃO SSL APACHE AUTOMÁTICA ============
+
 # Instalar Apache e Certbot caso não existam
 if ! command -v apache2 &> /dev/null; then
     apt-get update -y && apt-get install -y apache2
@@ -126,19 +123,25 @@ if ! command -v certbot &> /dev/null; then
     apt-get install -y certbot python3-certbot-apache
 fi
 
-# Garante que /var/www/html existe
 mkdir -p /var/www/html
 
-# Habilitar módulos do Apache
 a2enmod ssl
 a2enmod rewrite
 
-# Emitir o certificado SSL Let's Encrypt, se não existir
+# PARA SERVIÇOS QUE USAM A PORTA 80
+echo "Parando possíveis serviços que usam a porta 80 (nginx, apache, docker)..."
+systemctl stop nginx 2>/dev/null
+systemctl stop apache2 2>/dev/null
+docker ps -q --filter "publish=80" | xargs -r docker stop
+
+# Emite o certificado SSL Let's Encrypt (apenas se não existir)
 if [ ! -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
-    certbot certonly --apache --agree-tos --register-unsafely-without-email -d "$DOMAIN" --non-interactive
+    certbot certonly --standalone --agree-tos --register-unsafely-without-email -d "$DOMAIN" --non-interactive
 fi
 
-# Cria o VirtualHost para SSL e redirecionamento
+# Sobe o Apache
+systemctl start apache2
+
 cat <<EOF > "/etc/apache2/sites-available/ssl-$DOMAIN.conf"
 <VirtualHost *:80>
     ServerName $DOMAIN
@@ -168,8 +171,15 @@ cat <<EOF > "/etc/apache2/sites-available/ssl-$DOMAIN.conf"
 </IfModule>
 EOF
 
-# Habilita o novo site SSL e reinicia/recarrega Apache
 a2ensite "ssl-$DOMAIN"
 systemctl reload apache2
 
 echo "Site HTTPS configurado e redirecionamento forçado para https://$DOMAIN/"
+
+# =============================================================
+
+if [ "$OK" -eq 1 ]; then
+    echo "Todos os registros configurados corretamente no Cloudflare!"
+else
+    echo "ERRO ao configurar os registros."
+fi
