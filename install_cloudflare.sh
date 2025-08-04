@@ -6,7 +6,7 @@ CLOUDFLARE_API_KEY="$3"
 CLOUDFLARE_EMAIL="$4"
 OK=1
 
-# Config do DKIM (ajuste para o seu ambiente RSPAMD)
+# Caminho do DKIM (RSPAMD)
 DKIM_FILE="/opt/BillionMail/rspamd-data/dkim/$DOMAIN/default.pub"
 DKIM_SELECTOR="default"
 
@@ -25,6 +25,7 @@ PUBKEY=$(grep '^p=' "$DKIM_FILE" | sed 's/^p=//;s/[ \t\r\n]*//g')
 if [ -z "$PUBKEY" ]; then
     PUBKEY=$(cat "$DKIM_FILE" | tr -d '\n' | sed -n 's/.*p=\(.*\)/\1/p' | tr -d '" ')
 fi
+
 if [ -z "$PUBKEY" ]; then
     echo "ERRO: Não foi possível extrair a chave pública do DKIM."
     exit 1
@@ -45,9 +46,7 @@ cloudflare_dns_update() {
     local type="$1"
     local name="$2"
     local content="$3"
-    local extra="$4"
-    local priority="$5"
-
+    local priority="$4"
     local zone_id=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$DOMAIN&status=active" \
         -H "X-Auth-Email: $CLOUDFLARE_EMAIL" \
         -H "X-Auth-Key: $CLOUDFLARE_API_KEY" \
@@ -106,15 +105,14 @@ cloudflare_dns_update() {
     fi
 }
 
-# Cria todos os registros necessários
 cloudflare_dns_update "A" "mail.$DOMAIN" "$SERVER_IP" ""
-cloudflare_dns_update "MX" "$DOMAIN" "mail.$DOMAIN" "" "10"
+cloudflare_dns_update "MX" "$DOMAIN" "mail.$DOMAIN" "10"
 cloudflare_dns_update "TXT" "$DOMAIN" "$SPF_TXT_VALUE" ""
-cloudflare_dns_update "TXT" "default._domainkey.$DOMAIN" "$DKIM_TXT_VALUE" ""
+cloudflare_dns_update "TXT" "$DKIM_SELECTOR._domainkey.$DOMAIN" "$DKIM_TXT_VALUE" ""
 cloudflare_dns_update "TXT" "_dmarc.$DOMAIN" "$DMARC_TXT_VALUE" ""
 
 if [ "$OK" -eq 1 ]; then
-    echo "Registros configurados corretamente no Cloudflare!"
+    echo "Todos os registros configurados corretamente no Cloudflare!"
 else
     echo "ERRO ao configurar os registros."
 fi
