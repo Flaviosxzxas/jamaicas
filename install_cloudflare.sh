@@ -145,7 +145,7 @@ if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
     cat <<EOF > "/etc/apache2/sites-available/ssl-$DOMAIN.conf"
 <VirtualHost *:80>
     ServerName $DOMAIN
-    DocumentRoot /var/www/html
+    DocumentRoot /opt/BillionMail/core/publi
 
     RewriteEngine On
     RewriteCond %{SERVER_NAME} =$DOMAIN
@@ -163,7 +163,7 @@ if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
     SSLCertificateKeyFile /etc/letsencrypt/live/$DOMAIN/privkey.pem
     #Include /etc/letsencrypt/options-ssl-apache.conf
 
-    <Directory /var/www/html>
+    <Directory /opt/BillionMail/core/public>
        AllowOverride All
        Require all granted
     </Directory>
