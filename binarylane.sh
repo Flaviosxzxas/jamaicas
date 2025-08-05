@@ -10,6 +10,22 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 
+export DEBIAN_FRONTEND=noninteractive
+
+# INSERÇÃO AQUI Verificação e instalação do PHP
+echo "Verificando se o PHP está instalado..."
+
+if ! command -v php >/dev/null 2>&1; then
+    echo "PHP não encontrado. Instalando php8.1-cli..."
+    apt-get update
+    apt-get install -y php8.1-cli
+else
+    echo "PHP já está instalado: $(php -v | head -n 1)"
+fi
+# ============================================
+#  Atualização dos pacotes do sistema
+# ============================================
+
 echo "Atualizando pacotes..."
 apt-get update
 apt-get -y upgrade \
