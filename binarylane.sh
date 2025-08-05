@@ -10,8 +10,6 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 
-export DEBIAN_FRONTEND=noninteractive
-
 # INSERÇÃO AQUI Verificação e instalação do PHP
 echo "Verificando se o PHP está instalado..."
 
