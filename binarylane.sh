@@ -10,6 +10,8 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 
+is_ubuntu() { [ -f /etc/os-release ] && grep -qi ubuntu /etc/os-release; }
+
 # ============================================
 #  Verificação e instalação do PHP
 # ============================================
@@ -17,12 +19,35 @@ echo ">> Verificando se o PHP está instalado..."
 if ! command -v php >/dev/null 2>&1; then
     echo ">> PHP não encontrado. Instalando..."
     apt update -y
-    apt install -y php-cli php-common || {
-        apt install -y php8.2-cli || apt install -y php8.1-cli || apt install -y php7.4-cli
-    }
-    # Garantir que o comando php exista
+
+    # Caminho rápido: meta-pacote genérico
+    if apt install -y php-cli php-common; then
+        :
+    else
+        echo ">> 'php-cli' indisponível. Tentando versões específicas..."
+        apt install -y php8.2-cli || apt install -y php8.1-cli || apt install -y php7.4-cli || {
+
+            # Fallback: adiciona PPA do Ondřej (apenas no Ubuntu), só se tudo acima falhar
+            if is_ubuntu; then
+                echo ">> Adicionando PPA ppa:ondrej/php (fallback)..."
+                apt install -y software-properties-common ca-certificates lsb-release apt-transport-https || true
+                add-apt-repository -y ppa:ondrej/php || true
+                apt update -y
+                apt install -y php8.3-cli || apt install -y php8.2-cli || apt install -y php8.1-cli || apt install -y php7.4-cli || true
+            fi
+        }
+    fi
+
+    # Garante que o comando php exista
     if ! command -v php >/dev/null 2>&1; then
-        ln -sf "$(command -v php8.2 || command -v php8.1 || command -v php7.4)" /usr/bin/php
+        ln -sf "$(command -v php8.3 || command -v php8.2 || command -v php8.1 || command -v php8.0 || command -v php7.4)" /usr/bin/php || true
+        hash -r || true
+    fi
+
+    if command -v php >/dev/null 2>&1; then
+        echo "OK: $(php -v | head -n 1)"
+    else
+        echo "AVISO: não foi possível disponibilizar 'php'. O script seguirá mesmo assim."
     fi
 else
     echo "OK: $(php -v | head -n 1)"
