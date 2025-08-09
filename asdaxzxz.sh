@@ -34,11 +34,12 @@ else
         fi
     fi
 
-    if command -v php >/dev/null 2>&1; then
-        echo "✅ PHP instalado com sucesso!"
-        php -v | head -n 1
-    else
-        echo "❌ Erro ao instalar o PHP!"
-        exit 1
-    fi
+if command -v php >/dev/null 2>&1; then
+    echo "✅ PHP instalado com sucesso!"
+    php -v | head -n 1
+else
+    echo "❌ Erro ao instalar o PHP!"
+    exit 1
 fi
+
+read -p "Pressione ENTER para sair..."
