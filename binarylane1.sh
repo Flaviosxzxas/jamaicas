@@ -1194,12 +1194,26 @@ LOGDIR="/var/log/bounce"
 LIST="$LOGDIR/bounces.log"
 mkdir -p "$LOGDIR"
 
-# Extrai Original-Recipient/Final-Recipient ou To:
+# Captura o Return-Path real (envelope sender) — é onde vem o VERP
+RP="$(formail -xReturn-Path: 2>/dev/null | tr -d '<>' | tr -d '\r' | tail -n1)"
+
+# Tenta achar a tag VERP no formato bounce+TAG@dominio
+# Ex.: bounce+a4fa9f32@seu-dominio.com  -> TAG=a4fa9f32
+TAG=""
+if [[ "$RP" =~ ^bounce\+([A-Za-z0-9_-]+)@ ]]; then
+  TAG="\${BASH_REMATCH[1]}"
+fi
+
+# Destinatário final (se informado no DSN)
 RECIP="$(formail -xOriginal-Recipient: 2>/dev/null | sed 's/.*rfc822;\s*//' | tr -d '\r')"
 [ -z "$RECIP" ] && RECIP="$(formail -xFinal-Recipient: 2>/dev/null | sed 's/.*rfc822;\s*//' | tr -d '\r')"
 [ -z "$RECIP" ] && RECIP="$(formail -xTo: 2>/dev/null | sed 's/.*<\([^>]*\)>.*/\1/' | tr -d '\r')"
 
-echo "$(date -u +'%F %T')  recip=$RECIP" >> "$LIST"
+# Código de status (se presente)
+STATUS="$(formail -xStatus: 2>/dev/null | tr -d '\r')"
+DSN="$(formail -xDiagnostic-Code: 2>/dev/null | tr -d '\r')"
+
+echo "$(date -u +'%F %T') | return_path=$RP | verp_tag=$TAG | recip=$RECIP | status=$STATUS | dsn=$DSN" >> "$LIST"
 exit 0
 EOF
   chmod +x "$BNC_SCRIPT"
@@ -1209,6 +1223,30 @@ add_alias "bounce" "|$BNC_SCRIPT"
 # Aplica maps e recarrega
 postmap /etc/postfix/virtual
 newaliases
+
+# ================== Logrotate para bounce e unsubscribe ==================
+cat >/etc/logrotate.d/bounce-unsub <<'EOF'
+/var/log/bounce/bounces.log /var/log/unsub/unsubscribed.txt {
+    weekly
+    rotate 12
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 root adm
+    sharedscripts
+    copytruncate
+}
+EOF
+
+# Garante diretórios e permissões básicas
+install -d -m 755 /var/log/bounce /var/log/unsub
+touch /var/log/bounce/bounces.log /var/log/unsub/unsubscribed.txt
+chown -R www-data:www-data /var/log/unsub
+chown root:adm /var/log/bounce/bounces.log || true
+chmod 640 /var/log/bounce/bounces.log /var/log/unsub/unsubscribed.txt || true
+
+
 systemctl reload postfix
 echo "Feito: abuse/postmaster -> $POSTMASTER_DEST; contacto/support -> $SUPPORT_DEST; unsubscribe capturando; noreply configurado; bounce ativo."
 
