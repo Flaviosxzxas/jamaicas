@@ -424,13 +424,18 @@ smtpd_milters = inet:127.0.0.1:54321, inet:127.0.0.1:12301
 non_smtpd_milters = inet:127.0.0.1:54321, inet:127.0.0.1:12301
 
 # Restrições de destinatários
-smtpd_recipient_restrictions = 
+smtpd_recipient_restrictions =
     permit_mynetworks,
-    check_recipient_access hash:/etc/postfix/access.recipients,
     permit_sasl_authenticated,
-    reject_unauth_destination,
+    check_recipient_access hash:/etc/postfix/access.recipients,
+    reject_non_fqdn_recipient,
     reject_unknown_recipient_domain,
+    reject_unauth_destination,
+    reject_unlisted_recipient,
     check_policy_service inet:127.0.0.1:10045
+
+# Não deixe vazio (evita aceitar locais inexistentes)
+local_recipient_maps = proxy:unix:passwd.byname $alias_maps
 
 smtpd_client_connection_rate_limit = 100
 smtpd_client_connection_count_limit = 50
@@ -442,6 +447,7 @@ maximal_queue_lifetime = 3d
 bounce_queue_lifetime = 3d
 smtp_destination_rate_delay = 1s
 
+smtpd_helo_required = yes
 smtpd_helo_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_invalid_helo_hostname, reject_non_fqdn_helo_hostname, reject_unknown_helo_hostname
 
 # TLS
