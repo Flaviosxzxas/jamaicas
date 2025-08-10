@@ -965,76 +965,111 @@ exit();
 EOF
 
 # -----------------------------------------------------------
-# AQUI CRIAMOS O unsubscribe.php COM O CÓDIGO PARA DESCADASTRO
+# AQUI CRIAMOS O unsubscribe.php (versão PRO) + permissões
 # -----------------------------------------------------------
 cat <<'EOF' > /var/www/html/unsubscribe.php
 <?php
-/**
- * unsubscribe.php
- *
- * Exemplo de script que lida com descadastramentos de lista de e-mails
- * via GET e POST (One-Click Unsubscribe).
- */
+// === Config (use o MESMO segredo do email.php) ===
+const UNSUB_SECRET     = 'TROQUE-ESTE-SEGREDO-BEM-GRANDE-E-ALEATORIO';
+const UNSUB_VALID_SECS = 60 * 60 * 24 * 30; // 30 dias
+const LIST_DIR         = '/var/log/unsub';
+const LIST_FILE        = '/var/log/unsub/unsubscribed.txt';
 
-// Caminho do arquivo onde salvaremos os e-mails descadastrados
-$unsubFile = __DIR__ . '/unsubscribed_emails.txt';
+// === Utils ===
+function b64url($bin){ return rtrim(strtr(base64_encode($bin), '+/','-_'), '='); }
+function safe_email($e){ return filter_var($e, FILTER_VALIDATE_EMAIL) ? strtolower($e) : ''; }
+function ok($msg='unsubscribed'){ http_response_code(200); header('Content-Type: text/plain; charset=utf-8'); echo $msg; exit; }
+function bad($msg='invalid request'){ http_response_code(400); header('Content-Type: text/plain; charset=utf-8'); echo $msg; exit; }
 
-/**
- * Função simples para processar e-mail e salvar (exemplo).
- * Em produção, você poderia remover o e-mail de um BD ou
- * marcar em sua plataforma de mailing.
- */
-function unsubscribeEmail($email, $unsubFile) {
-    // Filtra o e-mail para evitar problemas básicos de segurança/formatação
-    $email = filter_var($email, FILTER_SANITIZE_EMAIL);
-
-    // Verifica se ainda parece um e-mail válido
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        return false; // E-mail inválido
-    }
-
-    // Neste exemplo, apenas registramos num arquivo de texto
-    file_put_contents($unsubFile, $email . PHP_EOL, FILE_APPEND | LOCK_EX);
-    return true;
+function verify_token($email, $ts, $sig){
+  if (!$email || !$ts || !$sig) return false;
+  if (abs(time() - (int)$ts) > UNSUB_VALID_SECS) return false;
+  $msg = $email.'|'.$ts;
+  $chk = b64url(hash_hmac('sha256', $msg, UNSUB_SECRET, true));
+  return hash_equals($chk, $sig);
 }
 
-// Detecta se estamos em POST (One-Click) ou GET (clique manual)
+function save_unsub($email, $mode='unknown'){
+  if (!$email) return false;
+  if (!is_dir(LIST_DIR)) @mkdir(LIST_DIR, 0755, true);
+  $line = date('c')." | $mode | ".$email.PHP_EOL;
+  return (bool)@file_put_contents(LIST_FILE, $line, FILE_APPEND|LOCK_EX);
+}
+
+// ============== Fluxos ==============
+
+// 1) One-Click (POST) — Gmail/Outlook
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (!empty($_POST['email'])) {
-        $email = $_POST['email'];
-        $ok = unsubscribeEmail($email, $unsubFile);
-        if ($ok) {
-            echo "OK: E-mail '{$email}' removido via POST.";
-        } else {
-            echo "ERRO: E-mail inválido ou problema ao processar (POST).";
-        }
-    } else {
-        echo "ERRO: Parâmetro 'email' não encontrado no POST.";
-    }
-} else {
-    // GET (clique manual no link unsubscribe.php?email=...)
-    if (!empty($_GET['email'])) {
-        $email = $_GET['email'];
-        $ok = unsubscribeEmail($email, $unsubFile);
-        if ($ok) {
-            echo "OK: E-mail '{$email}' removido via GET.";
-        } else {
-            echo "ERRO: E-mail inválido ou problema ao processar (GET).";
-        }
-    } else {
-        echo "ERRO: Parâmetro 'email' não encontrado no GET.";
-    }
+  // Geralmente vem a URL com e/ts/sig no query string
+  $e  = safe_email($_GET['e'] ?? '');
+  $ts = $_GET['ts'] ?? '';
+  $sg = $_GET['sig'] ?? '';
+
+  // Fallback: alguns provedores podem enviar JSON (raro)
+  if (!$e && stripos($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') !== false) {
+    $body = json_decode(file_get_contents('php://input'), true);
+    $e  = safe_email($body['e'] ?? '');
+    $ts = $body['ts'] ?? '';
+    $sg = $body['sig'] ?? '';
+  }
+
+  if (!verify_token($e, $ts, $sg)) bad('invalid token');
+  save_unsub($e, 'one-click') ? ok('unsubscribed') : bad('write failed');
 }
-?>
+
+// 2) Clique manual (GET) com token seguro
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['e'], $_GET['ts'], $_GET['sig'])) {
+  $e  = safe_email($_GET['e'] ?? '');
+  $ts = $_GET['ts'] ?? '';
+  $sg = $_GET['sig'] ?? '';
+  if (!verify_token($e, $ts, $sg)) {
+    http_response_code(400);
+    ?>
+    <!doctype html><meta charset="utf-8"><title>Enlace inválido</title>
+    <body style="font-family:system-ui,Segoe UI,Arial">
+      <h1>Enlace inválido o expirado</h1>
+      <p>El enlace de cancelación no es válido o ha expirado.</p>
+    </body>
+    <?php
+    exit;
+  }
+  save_unsub($e, 'click');
+  http_response_code(200);
+  ?>
+  <!doctype html><meta charset="utf-8"><title>Suscripción cancelada</title>
+  <body style="font-family:system-ui,Segoe UI,Arial;text-align:center;margin-top:12vh">
+    <h1>Suscripción cancelada</h1>
+    <p>Hemos registrado tu solicitud: <b><?=htmlspecialchars($e, ENT_QUOTES)?></b></p>
+    <p>No volverás a recibir mensajes de esta lista.</p>
+  </body>
+  <?php
+  exit;
+}
+
+// 3) Retrocompatibilidade: GET/POST com 'email=' simples (sem token)
+//    — útil para conteúdos antigos. Não recomendado para novos envios.
+$email = safe_email($_REQUEST['email'] ?? '');
+if ($email) {
+  save_unsub($email, 'legacy') ? ok('unsubscribed') : bad('write failed');
+}
+
+// Caso não caia em nenhum fluxo
+bad('method not allowed');
 EOF
 
-# Criar arquivo de registro e ajustar permissões
-touch /var/www/html/unsubscribed_emails.txt
-chown www-data:www-data /var/www/html/unsubscribed_emails.txt
-chmod 664 /var/www/html/unsubscribed_emails.txt
+# Logs (fora do webroot) e permissões
+install -d -m 755 /var/log/unsub
+touch /var/log/unsub/unsubscribed.txt
+chown -R www-data:www-data /var/log/unsub
+chmod 644 /var/log/unsub/unsubscribed.txt
 
-# Reiniciar Apache para aplicar essas mudanças mínimas
-systemctl restart apache2
+# Permissões do PHP
+chown www-data:www-data /var/www/html/unsubscribe.php
+chmod 644 /var/www/html/unsubscribe.php
+
+# (Opcional) Reiniciar Apache
+systemctl restart apache2 || true
+
 
 # ============================================
 #  Habilitar SSL no Apache e redirecionamento
