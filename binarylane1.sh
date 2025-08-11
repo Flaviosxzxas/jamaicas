@@ -976,7 +976,7 @@ EOF
 cat <<'EOF' > /var/www/html/unsubscribe.php
 <?php
 // === Config (use o MESMO segredo do email.php) ===
-const UNSUB_SECRET     = 'TROQUE-ESTE-SEGREDO-BEM-GRANDE-E-ALEATORIO';
+const UNSUB_SECRET     = 'Gx9pT3aQ1mRxW7bY5kW2nH8cV4sL0';
 const UNSUB_VALID_SECS = 60 * 60 * 24 * 30; // 30 dias
 const LIST_DIR         = '/var/log/unsub';
 const LIST_FILE        = '/var/log/unsub/unsubscribed.txt';
