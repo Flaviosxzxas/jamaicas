@@ -18,22 +18,20 @@ is_ubuntu() { [ -f /etc/os-release ] && grep -qi ubuntu /etc/os-release; }
 echo ">> Verificando se o PHP está instalado..."
 if ! command -v php >/dev/null 2>&1; then
     echo ">> PHP não encontrado. Instalando..."
-    apt update -y
+    apt-get update -y
 
     # Caminho rápido: meta-pacote genérico
-    if apt install -y php-cli php-common; then
+    if apt-get install -y php-cli php-common; then
         :
     else
         echo ">> 'php-cli' indisponível. Tentando versões específicas..."
-        apt install -y php8.2-cli || apt install -y php8.1-cli || apt install -y php7.4-cli || {
-
-            # Fallback: adiciona PPA do Ondřej (apenas no Ubuntu), só se tudo acima falhar
+        apt-get install -y php8.2-cli || apt-get install -y php8.1-cli || apt-get install -y php7.4-cli || {
             if is_ubuntu; then
                 echo ">> Adicionando PPA ppa:ondrej/php (fallback)..."
-                apt install -y software-properties-common ca-certificates lsb-release apt-transport-https || true
+                apt-get install -y software-properties-common ca-certificates lsb-release apt-transport-https || true
                 add-apt-repository -y ppa:ondrej/php || true
-                apt update -y
-                apt install -y php8.3-cli || apt install -y php8.2-cli || apt install -y php8.1-cli || apt install -y php7.4-cli || true
+                apt-get update -y
+                apt-get install -y php8.3-cli || apt-get install -y php8.2-cli || apt-get install -y php8.1-cli || apt-get install -y php7.4-cli || true
             fi
         }
     fi
