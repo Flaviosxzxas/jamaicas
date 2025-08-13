@@ -222,24 +222,31 @@ EOF
 cat <<EOF > /etc/opendkim.conf
 AutoRestart             Yes
 AutoRestartRate         10/1h
-UMask                   002
+UMask                   007
 Syslog                  yes
 SyslogSuccess           Yes
 LogWhy                  Yes
+
 Canonicalization        relaxed/relaxed
+Mode                    sv
+UserID                  opendkim:opendkim
+PidFile                 /run/opendkim/opendkim.pid
+SignatureAlgorithm      rsa-sha256
+
+# Escopos e tabelas
 ExternalIgnoreList      refile:/etc/opendkim/TrustedHosts
 InternalHosts           refile:/etc/opendkim/TrustedHosts
 KeyTable                refile:/etc/opendkim/KeyTable
 SigningTable            refile:/etc/opendkim/SigningTable
-Mode                    sv
-PidFile                 /var/run/opendkim/opendkim.pid
-SignatureAlgorithm      rsa-sha256
-UserID                  opendkim:opendkim
-Domain                  ${ServerName}
-KeyFile                 /etc/opendkim/keys/mail.private
-Selector                mail
+
+# Socket que casa com o Postfix
 Socket                  inet:12301@127.0.0.1
-RequireSafeKeys         false
+
+# Segurança das chaves
+RequireSafeKeys         true
+
+# (opcional) evita que alterações em cabeçalhos críticos quebrem DKIM
+OversignHeaders         From, To, Subject, Date, Message-ID, List-Unsubscribe, Reply-To
 EOF
 
 # /etc/opendkim/TrustedHosts
@@ -247,6 +254,7 @@ cat <<EOF > /etc/opendkim/TrustedHosts
 127.0.0.1
 localhost
 $ServerName
+::1
 *.$Domain
 EOF
 
