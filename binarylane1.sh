@@ -949,57 +949,69 @@ create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=reject; rua=ma
 create_or_update_record "mail._domainkey.$ServerName" "TXT" "\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\"" ""
 create_or_update_record "$ServerName" "MX" "$ServerName" "10"
 
-echo "==================================================== APPLICATION ===================================================="
+# ==================================================== APPLICATION ====================================================
 export DEBIAN_FRONTEND=noninteractive
+set -euo pipefail
 
-# ---------- Instala Apache/PHP base e garante cURL (binário + extensão PHP) ----------
-echo ">> Instalando Apache/PHP base..."
+# ---------- Apache/PHP base + cURL (binário e extensão PHP) ----------
+echo ">> Instalando base do Apache/PHP e certificados…"
 apt-get update -y
-apt-get install -y apache2 php php-cli php-dev php-gd libapache2-mod-php php-mbstring curl
+apt-get install -y \
+  apache2 php php-cli php-common php-dev php-gd libapache2-mod-php php-mbstring \
+  curl ca-certificates
 
-# Função utilitária: tenta instalar um pacote se ele existir no repo
-try_install() {
-  local pkg="$1"
-  if apt-cache show "$pkg" >/dev/null 2>&1; then
-    apt-get install -y "$pkg"
-    return 0
-  fi
-  return 1
-}
+# Garante cadeia de certificados atualizada (HTTPS)
+update-ca-certificates || true
 
-echo ">> Garantindo extensão PHP cURL compatível..."
-# 1) tenta meta-pacote genérico
-if ! php -m | grep -qi '^curl$'; then
-  try_install php-curl || true
+# Descobre a versão do PHP usada pelo CLI (ex.: 8.3)
+PHPV="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
+
+echo ">> Instalando php-curl para o PHP CLI ($PHPV)…"
+if ! dpkg -s "php${PHPV}-curl" >/dev/null 2>&1; then
+  apt-get install -y "php${PHPV}-curl" || apt-get install -y php-curl
 fi
 
-# 2) se ainda não carregou, tenta com a versão exata do PHP instalado
-if ! php -m | grep -qi '^curl$'; then
-  PHPV="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
-  try_install "php${PHPV}-curl" || true
+echo ">> Habilitando módulo curl no PHP CLI…"
+if command -v phpenmod >/dev/null 2;&1; then
+  # Prioriza habilitar para a versão e SAPI corretas; cai no genérico se precisar
+  phpenmod -v "$PHPV" -s cli curl 2>/dev/null || \
+  phpenmod -v "$PHPV" curl 2>/dev/null      || \
+  phpenmod curl                             || true
 fi
 
-# 3) ativa módulo e reinicia serviços
-if command -v phpenmod >/dev/null 2>&1; then
-  phpenmod curl || true
-fi
-
-if systemctl list-unit-files | grep -q '^apache2\.service'; then
+echo ">> Reiniciando serviços do PHP/Apache (se existirem)…"
+if command -v systemctl >/dev/null 2>&1; then
   systemctl enable apache2 >/dev/null 2>&1 || true
-  systemctl restart apache2 || true
+  systemctl restart apache2 2>/dev/null    || true
+  systemctl restart "php${PHPV}-fpm" 2>/dev/null || true
 fi
 
-if systemctl list-units --type=service | grep -Eiq 'php[0-9\.]*-fpm\.service'; then
-  systemctl restart "$(systemctl list-units --type=service | awk '/php[0-9\.]*-fpm\.service/ {print $1; exit}')" || true
-fi
+# ---------- Debug útil ----------
+echo "=== PHP CLI info ==="
+which php || true
+php -v
+php -r 'echo "bin=",PHP_BINARY,"\nver=",PHP_VERSION,"\nsapi=",PHP_SAPI,"\nini=",php_ini_loaded_file(),"\nscan=",PHP_CONFIG_FILE_SCAN_DIR,"\nloaded_curl=", (extension_loaded("curl")?"yes":"no"), "\nfunc_curl_init=", (function_exists("curl_init")?"yes":"no"), "\n";'
+php -m | sort | grep -i curl || true
+ls -l /etc/php/"$PHPV"/cli/conf.d/*curl*.ini 2>/dev/null || true
 
-echo ">> Validando cURL no PHP..."
-if php -m | grep -qi '^curl$' && php -r 'exit(function_exists("curl_init")?0:1);'; then
-  echo "OK: extensão PHP cURL carregada."
+# 0 = tolerante (continua), 1 = estrito (para). Pode exportar no ambiente também.
+STRICT_CURL="${STRICT_CURL:-1}"
+
+echo ">> Validando cURL no PHP CLI…"
+if php -r 'exit(extension_loaded("curl") && function_exists("curl_init") ? 0 : 1);'; then
+  echo "OK: php-curl ativo no CLI."
 else
-  echo "❌ ERRO: a extensão PHP cURL não está carregada. Abortando para evitar falhas no shortener."
-  exit 2
+  echo "⚠️ AVISO: php-curl NÃO está carregado no CLI."
+  if [ "$STRICT_CURL" = "1" ]; then
+    echo "Abortando para evitar falhas no shortener."
+    exit 2
+  else
+    echo "Prosseguindo mesmo assim (modo tolerante)…"
+  fi
 fi
+
+echo ">> Teste rápido:"
+php -r 'echo "curl_init? ", (function_exists("curl_init")?"SIM":"NAO"), PHP_EOL;'
 
 # ---------- Webroot mínimo ----------
 # Verificar se /var/www/html existe
