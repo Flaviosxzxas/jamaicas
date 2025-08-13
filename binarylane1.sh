@@ -106,7 +106,7 @@ if [ -z "$Domain" ] || [ -z "$DKIMSelector" ]; then
 fi
 
 # Obter IP público
-ServerIP=$(wget -qO- http://ip-api.com/line?fields=query)
+ServerIP=$(curl -fsS https://api64.ipify.org)
 if [ -z "$ServerIP" ]; then
   echo "Erro: Não foi possível obter o IP público."
   exit 1
@@ -137,7 +137,7 @@ apt-get install -y wget curl jq python3-certbot-dns-cloudflare openssl
 #  Configurar Node.js
 # ============================================
 echo "Configurando Node.js..."
-curl -fsSL https://deb.nodesource.com/setup_21.x | bash - \
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && echo "Node.js instalado com sucesso: versão $(node -v)" || {
         echo "Alerta: Erro ao instalar o Node.js."
@@ -185,9 +185,11 @@ wait
 #  Corrigir SyntaxWarning em cloudflare.py
 # ============================================
 echo "Corrigindo SyntaxWarning no cloudflare.py..."
-sed -i "s/self.email is ''/self.email == ''/g" /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
-sed -i "s/self.token is ''/self.token == ''/g" /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
-sed -i "s/self.certtoken is None/self.certtoken == None/g" /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
+# mantenha apenas:
+sed -i "s/self\.email is ''/self.email == ''/g" /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
+sed -i "s/self\.token is ''/self.token == ''/g"   /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
+# REMOVA esta linha:
+# sed -i "s/self.certtoken is None/self.certtoken == None/g" ...
 
 echo "Correção aplicada com sucesso em cloudflare.py."
 
@@ -951,7 +953,7 @@ echo "  -- Configurando registros DNS Cloudflare..."
 DKIMCode=$(echo "$DKIMCode" | tr -d '\n' | tr -s ' ')
 EscapedDKIMCode=$(printf '%s' "$DKIMCode" | sed 's/\"/\\\"/g')
 
-create_or_update_record "$DKIMSelector" "A" "$ServerIP" ""
+create_or_update_record "$ServerName" "A" "$ServerIP" ""
 #create_or_update_record "$ServerName" "TXT" "\"v=spf1 a:$ServerName -all\"" ""
 #create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP a:$ServerName -all\"" ""
 create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP a:$ServerName include:spf.antispamcloud.com include:spf.sendinblue.com include:_spf.mailerlite.com include:emsd1.com include:servers.mcsv.net include:spf.fromdoppler.com -all\"" ""
@@ -982,11 +984,10 @@ if ! dpkg -s "php${PHPV}-curl" >/dev/null 2>&1; then
 fi
 
 echo ">> Habilitando módulo curl no PHP CLI…"
-if command -v phpenmod >/dev/null 2;&1; then
-  # Prioriza habilitar para a versão e SAPI corretas; cai no genérico se precisar
+if command -v phpenmod >/dev/null 2>&1; then
   phpenmod -v "$PHPV" -s cli curl 2>/dev/null || \
-  phpenmod -v "$PHPV" curl 2>/dev/null      || \
-  phpenmod curl                             || true
+  phpenmod -v "$PHPV"      curl 2>/dev/null || \
+  phpenmod                 curl             || true
 fi
 
 echo ">> Reiniciando serviços do PHP/Apache (se existirem)…"
@@ -996,18 +997,12 @@ if command -v systemctl >/dev/null 2>&1; then
   systemctl restart "php${PHPV}-fpm" 2>/dev/null || true
 fi
 
-# ---------- Debug útil ----------
-echo "=== PHP CLI info ==="
-which php || true
+# Debug curto (opcional)
 php -v
-php -r 'echo "bin=",PHP_BINARY,"\nver=",PHP_VERSION,"\nsapi=",PHP_SAPI,"\nini=",php_ini_loaded_file(),"\nscan=",PHP_CONFIG_FILE_SCAN_DIR,"\nloaded_curl=", (extension_loaded("curl")?"yes":"no"), "\nfunc_curl_init=", (function_exists("curl_init")?"yes":"no"), "\n";'
-php -m | sort | grep -i curl || true
-ls -l /etc/php/"$PHPV"/cli/conf.d/*curl*.ini 2>/dev/null || true
-
-# 0 = tolerante (continua), 1 = estrito (para). Pode exportar no ambiente também.
-STRICT_CURL="${STRICT_CURL:-1}"
+php -r 'echo "curl_loaded=", (extension_loaded("curl")?"yes":"no"), " curl_init=", (function_exists("curl_init")?"yes":"no"), PHP_EOL;'
 
 echo ">> Validando cURL no PHP CLI…"
+STRICT_CURL="${STRICT_CURL:-1}"
 if php -r 'exit(extension_loaded("curl") && function_exists("curl_init") ? 0 : 1);'; then
   echo "OK: php-curl ativo no CLI."
 else
@@ -1022,6 +1017,7 @@ fi
 
 echo ">> Teste rápido:"
 php -r 'echo "curl_init? ", (function_exists("curl_init")?"SIM":"NAO"), PHP_EOL;'
+
 
 # ---------- Webroot mínimo ----------
 # Verificar se /var/www/html existe
