@@ -428,10 +428,10 @@ alias_maps = hash:/etc/aliases
 alias_database = hash:/etc/aliases
 
 # DKIM Settings
+smtpd_milters = inet:127.0.0.1:12301, inet:127.0.0.1:54321
+non_smtpd_milters = $smtpd_milters
 milter_protocol = 6
 milter_default_action = accept
-smtpd_milters = inet:127.0.0.1:54321, inet:127.0.0.1:12301
-non_smtpd_milters = inet:127.0.0.1:54321, inet:127.0.0.1:12301
 
 # Restrições de destinatários
 smtpd_recipient_restrictions =
@@ -796,15 +796,17 @@ chmod 644 /var/lib/opendmarc/opendmarc.dat
 
 rm -f /run/opendmarc/opendmarc.pid
 
-echo "[OpenDMARC] Reiniciando OpenDKIM..."
+echo "[OpenDKIM] Reiniciando OpenDKIM..."
+systemctl enable opendkim >/dev/null 2>&1 || true
 systemctl restart opendkim
 if systemctl is-active --quiet opendkim; then
-    echo "[OpenDMARC] OpenDKIM reiniciado com sucesso."
+    echo "[OpenDKIM] OpenDKIM reiniciado com sucesso."
 else
-    echo "[OpenDMARC] Falha ao reiniciar OpenDKIM."
+    echo "[OpenDKIM] Falha ao reiniciar OpenDKIM."
 fi
 
 echo "[OpenDMARC] Reiniciando OpenDMARC..."
+systemctl enable opendmarc >/dev/null 2>&1 || true
 systemctl restart opendmarc
 if systemctl is-active --quiet opendmarc; then
     echo "[OpenDMARC] OpenDMARC reiniciado com sucesso."
@@ -812,15 +814,29 @@ else
     echo "[OpenDMARC] Falha ao reiniciar OpenDMARC."
 fi
 
-echo "[Postfix] Ajustando dependência systemd..."
-systemctl edit postfix <<EOF
+echo "[Postfix] Ajustando dependência systemd (DKIM/DMARC antes do Postfix)..."
+mkdir -p /etc/systemd/system/postfix.service.d
+cat >/etc/systemd/system/postfix.service.d/override.conf <<'EOF'
 [Unit]
-After=opendmarc.service
-Requires=opendmarc.service
+After=opendkim.service opendmarc.service
+Requires=opendkim.service opendmarc.service
 EOF
-
 systemctl daemon-reload
+
+# (garanta no seu main.cf:)
+# milter_protocol = 6
+# milter_default_action = accept
+# smtpd_milters = inet:127.0.0.1:12301, inet:127.0.0.1:54321
+# non_smtpd_milters = $smtpd_milters
+
+systemctl enable postfix >/dev/null 2>&1 || true
 systemctl restart postfix
+
+# sanity check (opcional)
+systemctl is-active --quiet postfix && echo "[Postfix] Postfix ativo."
+systemctl show postfix -p After -p Requires
+
+
 
 echo "==================================================== CLOUDFLARE ===================================================="
 
