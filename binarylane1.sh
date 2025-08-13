@@ -428,10 +428,10 @@ alias_maps = hash:/etc/aliases
 alias_database = hash:/etc/aliases
 
 # DKIM Settings
-smtpd_milters = inet:127.0.0.1:12301, inet:127.0.0.1:54321
-non_smtpd_milters = $smtpd_milters
 milter_protocol = 6
 milter_default_action = accept
+smtpd_milters = inet:127.0.0.1:12301, inet:127.0.0.1:54321
+non_smtpd_milters = \$smtpd_milters
 
 # Restrições de destinatários
 smtpd_recipient_restrictions =
