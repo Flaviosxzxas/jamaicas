@@ -1,5 +1,3 @@
-#!/bin/bash
-
 # ============================================
 #  Verificação de permissão de root
 # ============================================
@@ -13,7 +11,7 @@ export DEBIAN_FRONTEND=noninteractive
 is_ubuntu() { [ -f /etc/os-release ] && grep -qi ubuntu /etc/os-release; }
 
 # ============================================
-#  Verificação e instalação do PHP
+#  Verificação e instalação do PHP (CLI)
 # ============================================
 echo ">> Verificando se o PHP está instalado..."
 if ! command -v php >/dev/null 2>&1; then
@@ -25,20 +23,27 @@ if ! command -v php >/dev/null 2>&1; then
         :
     else
         echo ">> 'php-cli' indisponível. Tentando versões específicas..."
-        apt-get install -y php8.2-cli || apt-get install -y php8.1-cli || apt-get install -y php7.4-cli || {
-            if is_ubuntu; then
-                echo ">> Adicionando PPA ppa:ondrej/php (fallback)..."
-                apt-get install -y software-properties-common ca-certificates lsb-release apt-transport-https || true
-                add-apt-repository -y ppa:ondrej/php || true
-                apt-get update -y
-                apt-get install -y php8.3-cli || apt-get install -y php8.2-cli || apt-get install -y php8.1-cli || apt-get install -y php7.4-cli || true
-            fi
-        }
+        # tenta detectar versões disponíveis no repo e instalar a mais alta
+        CANDIDATES="$(apt-cache search -n '^php[0-9]\.[0-9]-cli$' | awk '{print $1}' | sort -Vr)"
+        OK=0
+        for pkg in $CANDIDATES php8.3-cli php8.2-cli php8.1-cli php7.4-cli; do
+            if apt-get install -y "$pkg"; then OK=1; break; fi
+        done
+        if [ "$OK" -eq 0 ] && is_ubuntu; then
+            echo ">> Adicionando PPA ppa:ondrej/php (fallback)..."
+            apt-get install -y software-properties-common ca-certificates lsb-release || true
+            add-apt-repository -y ppa:ondrej/php || true
+            apt-get update -y
+            apt-get install -y php8.3-cli || apt-get install -y php8.2-cli || apt-get install -y php8.1-cli || apt-get install -y php7.4-cli || true
+        fi
     fi
 
-    # Garante que o comando php exista
-    if ! command -v php >/dev/null 2>&1; then
-        ln -sf "$(command -v php8.3 || command -v php8.2 || command -v php8.1 || command -v php8.0 || command -v php7.4)" /usr/bin/php || true
+    # Garante que /usr/bin/php aponte para o binário instalado via update-alternatives
+    PHPPATH="$(command -v php || true)"
+    if [ -n "$PHPPATH" ] && [ "$PHPPATH" != "/usr/bin/php" ]; then
+        echo ">> Registrando ${PHPPATH} como alternativa de php..."
+        update-alternatives --install /usr/bin/php php "$PHPPATH" 80 || true
+        update-alternatives --set php "$PHPPATH" || true
         hash -r || true
     fi
 
@@ -63,6 +68,11 @@ apt-get -y upgrade \
     echo "Erro ao atualizar os pacotes."
     exit 1
   }
+
+# (Opcional) Após o upgrade, recalcule a versão do PHP do CLI se for usar em passos seguintes:
+# PHPV="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
+# echo "PHP CLI ativo: $PHPV"
+
 
 # ============================================
 #  Definir variáveis principais
