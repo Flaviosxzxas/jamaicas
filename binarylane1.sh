@@ -220,6 +220,7 @@ EOF
 
 # /etc/opendkim.conf
 cat <<EOF > /etc/opendkim.conf
+# /etc/opendkim.conf
 AutoRestart             Yes
 AutoRestartRate         10/1h
 UMask                   007
@@ -242,11 +243,11 @@ SigningTable            refile:/etc/opendkim/SigningTable
 # Socket que casa com o Postfix
 Socket                  inet:12301@127.0.0.1
 
-# Segurança das chaves
-RequireSafeKeys         true
+# Segurança das chaves (pode deixar false se as permissões ainda não estiverem fechadas)
+RequireSafeKeys         false
 
-# (opcional) evita que alterações em cabeçalhos críticos quebrem DKIM
-OversignHeaders         From, To, Subject, Date, Message-ID, List-Unsubscribe, Reply-To
+# (opcional) Se algum dia quiser testar oversign:
+# OversignHeaders       From, Date, Message-ID
 EOF
 
 # /etc/opendkim/TrustedHosts
