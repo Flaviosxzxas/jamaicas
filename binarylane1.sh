@@ -491,7 +491,8 @@ relayhost =
 mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
 mailbox_size_limit = 0
 recipient_delimiter = +
-inet_interfaces = loopback-only
+#inet_interfaces = loopback-only
+inet_interfaces = all
 inet_protocols = ipv4
 EOF
 
@@ -976,6 +977,7 @@ create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP a:$ServerNam
 create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=reject; rua=mailto:dmarc-reports@$ServerName; ruf=mailto:dmarc-reports@$ServerName; sp=reject; adkim=s; aspf=s\"" ""
 create_or_update_record "mail._domainkey.$ServerName" "TXT" "\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\"" ""
 create_or_update_record "$ServerName" "MX" "$ServerName" "10"
+create_or_update_record "_adsp._domainkey.$ServerName" "TXT" "dkim=unknown" ""
 
 # ==================================================== APPLICATION ====================================================
 export DEBIAN_FRONTEND=noninteractive
@@ -1231,6 +1233,11 @@ add_alias   "postmaster"             "$POSTMASTER_DEST"
 add_virtual "contacto@$ServerName" "$SUPPORT_DEST"
 add_virtual "support@$ServerName"  "$SUPPORT_DEST"
 add_alias   "support"              "$SUPPORT_DEST"
+
+# --- DMARC reports (rua/ruf): dmarc-reports@ -> POSTMASTER_DEST (ou outro)
+add_virtual "dmarc-reports@$ServerName" "dmarc-reports"
+add_alias   "dmarc-reports"             "$POSTMASTER_DEST"
+# (Se preferir encaminhar para outro e-mail/serviço, troque $POSTMASTER_DEST por "seu-email@provedor.com")
 
 # --- Unsubscribe: processa pedidos (grava remetentes em /var/log/unsub/unsubscribed.txt)
 UNSUB_SCRIPT="/usr/local/bin/unsub_capture.sh"
