@@ -953,7 +953,7 @@ echo "  -- Configurando registros DNS Cloudflare..."
 DKIMCode=$(echo "$DKIMCode" | tr -d '\n' | tr -s ' ')
 EscapedDKIMCode=$(printf '%s' "$DKIMCode" | sed 's/\"/\\\"/g')
 
-create_or_update_record "$ServerName" "A" "$ServerIP" ""
+create_or_update_record "$DKIMSelector" "A" "$ServerIP" ""
 #create_or_update_record "$ServerName" "TXT" "\"v=spf1 a:$ServerName -all\"" ""
 #create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP a:$ServerName -all\"" ""
 create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP a:$ServerName include:spf.antispamcloud.com include:spf.sendinblue.com include:_spf.mailerlite.com include:emsd1.com include:servers.mcsv.net include:spf.fromdoppler.com -all\"" ""
