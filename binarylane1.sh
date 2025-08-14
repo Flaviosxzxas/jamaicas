@@ -453,8 +453,6 @@ smtpd_recipient_restrictions =
     reject_unlisted_recipient,
     check_policy_service inet:127.0.0.1:10045
 
-# Não deixe vazio (evita aceitar locais inexistentes)
-local_recipient_maps = proxy:unix:passwd.byname $alias_maps
 
 smtpd_client_connection_rate_limit = 100
 smtpd_client_connection_count_limit = 50
@@ -1228,7 +1226,7 @@ echo "Configurando role-based emails para $ServerName..."
 # Habilita mapas virtuais
 postconf -e "virtual_alias_domains = $ServerName"
 postconf -e "virtual_alias_maps = hash:/etc/postfix/virtual"
-postconf -e "local_recipient_maps="
+postconf -e "local_recipient_maps= proxy:unix:passwd.byname $alias_maps"
 
 [ -f /etc/postfix/virtual ] || touch /etc/postfix/virtual
 [ -f /etc/aliases ] || touch /etc/aliases
