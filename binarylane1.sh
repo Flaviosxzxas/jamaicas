@@ -1229,112 +1229,101 @@ EOF
 a2ensite "ssl-$ServerName"
 systemctl reload apache2
 
-# ================== APPLICATION: endereços de função (melhor prática) ==================
-POSTMASTER_DEST="postmaster"     # ou "voce@seu-mail.com"
-SUPPORT_DEST="support"           # ou "atendimento@seu-mail.com"
-DESCARTAR_NOREPLY=true           # mude para 'false' se quiser receber noreply@
+# ================== APPLICATION: endereços de função (outbound-only) ==================
+# Destinos padrão (pode sobrescrever antes de chamar este bloco)
+POSTMASTER_DEST="${POSTMASTER_DEST:-root}"   # ou "voce@seu-mail.com"
+SUPPORT_DEST="${SUPPORT_DEST:-root}"        # ou "atendimento@seu-mail.com"
+DESCARTAR_NOREPLY=${DESCARTAR_NOREPLY:-true}
 
-add_virtual() { local a="$1" b="$2"; grep -qiE "^\s*${a}\s+" /etc/postfix/virtual 2>/dev/null || echo "${a}    ${b}" >> /etc/postfix/virtual; }
-add_alias()   { local a="$1" b="$2"; grep -qiE "^\s*${a}:" /etc/aliases 2>/dev/null || echo "${a}: ${b}" >> /etc/aliases; }
+add_alias() {
+  local a="$1" b="$2"
+  grep -qiE "^\s*${a}:" /etc/aliases 2>/dev/null || echo "${a}: ${b}" >> /etc/aliases
+}
 
-echo "Configurando role-based emails para $ServerName..."
+echo "Configurando aliases locais (outbound-only) para $ServerName..."
 
-# Habilita mapas virtuais
-postconf -e "virtual_alias_domains = $ServerName"
-postconf -e "virtual_alias_maps = hash:/etc/postfix/virtual"
-postconf -e "local_recipient_maps="
+# NADA de virtual_* (fora em modo só envio)
+# postconf -X virtual_alias_domains || true
+# postconf -X virtual_alias_maps || true
 
-[ -f /etc/postfix/virtual ] || touch /etc/postfix/virtual
-[ -f /etc/aliases ] || touch /etc/aliases
+# Garante arquivo de aliases
+[ -f /etc/aliases ] || : > /etc/aliases
 
-# --- Obrigatórios: postmaster@ e abuse@ -> POSTMASTER_DEST
-add_virtual "postmaster@$ServerName" "$POSTMASTER_DEST"
-add_virtual "abuse@$ServerName"      "$POSTMASTER_DEST"
-add_alias   "postmaster"             "$POSTMASTER_DEST"
+# --- Obrigatórios: postmaster/abuse (locais)
+add_alias "postmaster" "${POSTMASTER_DEST}"
+add_alias "abuse"      "${POSTMASTER_DEST}"
 
-# --- Atendimento: contacto@ e support@ -> SUPPORT_DEST
-add_virtual "contacto@$ServerName" "$SUPPORT_DEST"
-add_virtual "support@$ServerName"  "$SUPPORT_DEST"
-add_alias   "support"              "$SUPPORT_DEST"
+# --- Atendimento
+add_alias "support"    "${SUPPORT_DEST}"
+add_alias "contacto"   "${SUPPORT_DEST}"
 
-# --- DMARC reports (rua/ruf): dmarc-reports@ -> POSTMASTER_DEST (ou outro)
-add_virtual "dmarc-reports@$ServerName" "dmarc-reports"
-add_alias   "dmarc-reports"             "$POSTMASTER_DEST"
-# (Se preferir encaminhar para outro e-mail/serviço, troque $POSTMASTER_DEST por "seu-email@provedor.com")
+# --- DMARC reports (APENAS local). Para rua/ruf externos use caixa que receba!
+add_alias "dmarc-reports" "${POSTMASTER_DEST}"
 
-# --- Unsubscribe: processa pedidos (grava remetentes em /var/log/unsub/unsubscribed.txt)
+# --- Unsubscribe: grava remetentes em /var/log/unsub/unsubscribed.txt
 UNSUB_SCRIPT="/usr/local/bin/unsub_capture.sh"
 if [ ! -x "$UNSUB_SCRIPT" ]; then
   apt-get update -y >/dev/null 2>&1 || true
-  apt-get install -y procmail >/dev/null 2>&1 || true  # fornece 'formail'
-  cat > "$UNSUB_SCRIPT" <<'EOF'
+  apt-get install -y procmail >/dev/null 2>&1 || true  # fornece /usr/bin/formail
+  cat > "$UNSUB_SCRIPT" <<'EOS'
 #!/usr/bin/env bash
+set -euo pipefail
 LOGDIR="/var/log/unsub"
 LIST="$LOGDIR/unsubscribed.txt"
 mkdir -p "$LOGDIR"
-# Extrai Return-Path/From do cabeçalho
-SENDER="$(formail -xReturn-Path: 2>/dev/null | tr -d '<>' | tr -d '\r' | tail -n1)"
-[ -z "$SENDER" ] && SENDER="$(formail -xFrom: 2>/dev/null | sed 's/.*<\([^>]*\)>.*/\1/' | tr -d '\r')"
-[ -z "$SENDER" ] && SENDER="unknown"
-echo "$(date -u +'%F %T')  $SENDER" >> "$LIST"
+SENDER="$(/usr/bin/formail -xReturn-Path: 2>/dev/null | tr -d '<>\r' | tail -n1 || true)"
+[ -z "${SENDER:-}" ] && SENDER="$(/usr/bin/formail -xFrom: 2>/dev/null | sed 's/.*<\([^>]*\)>.*/\1/' | tr -d '\r' || true)"
+[ -z "${SENDER:-}" ] && SENDER="unknown"
+printf '%s  %s\n' "$(date -u +'%F %T')" "$SENDER" >> "$LIST"
 exit 0
-EOF
+EOS
   chmod +x "$UNSUB_SCRIPT"
 fi
-add_virtual "unsubscribe@$ServerName" "unsubscribe"
-add_alias   "unsubscribe"             "|$UNSUB_SCRIPT"
+add_alias "unsubscribe" "|$UNSUB_SCRIPT"
 
-# --- Noreply: descartar (ou encaminhar se preferir)
-add_virtual "noreply@$ServerName" "noreply"
-if [ "$DESCARTAR_NOREPLY" = true ]; then
+# --- Noreply: descartar ou encaminhar
+if [ "${DESCARTAR_NOREPLY}" = "true" ]; then
   add_alias "noreply" "/dev/null"
 else
-  add_alias "noreply" "$SUPPORT_DEST"   # entrega/encaminha em vez de descartar
+  add_alias "noreply" "root"
 fi
 
-# --- Bounce: recebe bounces (para usar no -f bounce@)
-add_virtual "bounce@$ServerName" "bounce"
-
-# Opção A: salvar em arquivo para processar depois
+# --- Bounce: captura local (útil só para mensagens geradas localmente)
 BNC_SCRIPT="/usr/local/bin/bounce_capture.sh"
 if [ ! -x "$BNC_SCRIPT" ]; then
   apt-get update -y >/dev/null 2>&1 || true
-  apt-get install -y procmail >/dev/null 2>&1 || true  # fornece 'formail'
-  cat > "$BNC_SCRIPT" <<'EOF'
+  apt-get install -y procmail >/dev/null 2>&1 || true
+  cat > "$BNC_SCRIPT" <<'EOS'
 #!/usr/bin/env bash
+set -euo pipefail
 LOGDIR="/var/log/bounce"
 LIST="$LOGDIR/bounces.log"
 mkdir -p "$LOGDIR"
+RP="$(/usr/bin/formail -xReturn-Path: 2>/dev/null | tr -d '<>\r' | tail -n1 || true)"
 
-# Captura o Return-Path real (envelope sender) — é onde vem o VERP
-RP="$(formail -xReturn-Path: 2>/dev/null | tr -d '<>' | tr -d '\r' | tail -n1)"
-
-# Tenta achar a tag VERP no formato bounce+TAG@dominio
-# Ex.: bounce+a4fa9f32@seu-dominio.com  -> TAG=a4fa9f32
 TAG=""
-if [[ "$RP" =~ ^bounce\+([A-Za-z0-9_-]+)@ ]]; then
-  TAG="\${BASH_REMATCH[1]}"
+if [[ "${RP:-}" =~ ^bounce\+([A-Za-z0-9._-]+)@ ]]; then
+  TAG="${BASH_REMATCH[1]}"
 fi
 
-# Destinatário final (se informado no DSN)
-RECIP="$(formail -xOriginal-Recipient: 2>/dev/null | sed 's/.*rfc822;\s*//' | tr -d '\r')"
-[ -z "$RECIP" ] && RECIP="$(formail -xFinal-Recipient: 2>/dev/null | sed 's/.*rfc822;\s*//' | tr -d '\r')"
-[ -z "$RECIP" ] && RECIP="$(formail -xTo: 2>/dev/null | sed 's/.*<\([^>]*\)>.*/\1/' | tr -d '\r')"
+RECIP="$((/usr/bin/formail -xOriginal-Recipient: 2>/dev/null || true) | sed 's/.*rfc822;\s*//' | tr -d '\r')"
+[ -z "${RECIP:-}" ] && RECIP="$((/usr/bin/formail -xFinal-Recipient: 2>/dev/null || true) | sed 's/.*rfc822;\s*//' | tr -d '\r')"
+[ -z "${RECIP:-}" ] && RECIP="$((/usr/bin/formail -xTo: 2>/dev/null || true) | sed 's/.*<\([^>]*\)>.*/\1/' | tr -d '\r')"
 
-# Código de status (se presente)
-STATUS="$(formail -xStatus: 2>/dev/null | tr -d '\r')"
-DSN="$(formail -xDiagnostic-Code: 2>/dev/null | tr -d '\r')"
+STATUS="$(/usr/bin/formail -xStatus: 2>/dev/null | tr -d '\r' || true)"
+DSN="$(/usr/bin/formail -xDiagnostic-Code: 2>/dev/null | tr -d '\r' || true)"
 
-echo "$(date -u +'%F %T') | return_path=$RP | verp_tag=$TAG | recip=$RECIP | status=$STATUS | dsn=$DSN" >> "$LIST"
+printf '%s | return_path=%s | verp_tag=%s | recip=%s | status=%s | dsn=%s\n' \
+  "$(date -u +'%F %T')" "${RP:-}" "${TAG:-}" "${RECIP:-}" "${STATUS:-}" "${DSN:-}" >> "$LIST"
 exit 0
-EOF
+EOS
   chmod +x "$BNC_SCRIPT"
 fi
 add_alias "bounce" "|$BNC_SCRIPT"
 
-# Aplica maps e recarrega
-postmap /etc/postfix/virtual
-newaliases
+# Aplica aliases
+newaliases || true
+
 
 # ================== Logrotate para bounce e unsubscribe ==================
 cat >/etc/logrotate.d/bounce-unsub <<'EOF'
