@@ -1,144 +1,147 @@
 #!/bin/bash
 set -euo pipefail
-# ============================================
-#  Verificação de permissão de root
-# ============================================
-# ============================================
-#  APPLICATION: instalar e configurar postfwd
-# ============================================
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -y
-apt-get install -y curl postfwd
 
-# Descobre binário e caminho de config
-PFWBIN="$(command -v postfwd3 || command -v postfwd2 || command -v postfwd || true)"
-if [ -z "$PFWBIN" ]; then
-  echo "ERRO: postfwd não encontrado após instalação."
+# ============================================
+# 1) Root check
+# ============================================
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Este script precisa ser executado como root."
   exit 1
 fi
+
+export DEBIAN_FRONTEND=noninteractive
+
+# ============================================
+# 2) Dependências básicas
+# ============================================
+apt-get update -y
+apt-get install -y curl ca-certificates grep sed awk iproute2 iputils-ping
+
+# ============================================
+# 3) Instalar postfwd
+# ============================================
+echo "[postfwd] Instalando…"
+apt-get install -y postfwd
+
+PFWBIN="$(command -v postfwd3 || command -v postfwd2 || command -v postfwd || true)"
+if [ -z "$PFWBIN" ]; then
+  echo "[postfwd] ERRO: binário não encontrado após instalação."
+  exit 1
+fi
+
+# ============================================
+# 4) Gravar /etc/postfwd/postfwd.cf
+#    (suas regras por MX, + regra catch-all)
+# ============================================
+mkdir -p /etc/postfwd
 PFWCFG="/etc/postfwd/postfwd.cf"
-[ -d /etc/postfwd ] || mkdir -p /etc/postfwd
 
-# Grava política (rate por MX do destinatário – exemplo)
 cat > "$PFWCFG" <<'EOF'
-# KingHost
-id=limit-kinghost
-pattern=recipient mx=.*kinghost.net
-action=rate(global/300/3600) defer_if_permit "Limite de 300 e-mails por hora atingido para KingHost."
+# ==== LIMITES POR PROVEDOR (ajuste as taxas conforme sua realidade) =====
+# Sintaxe: action=rate(<bucket>/<limite>/<janela_em_segundos>) defer_if_permit "mensagem"
 
-# UOL Host
+id=limit-kinghost
+pattern=recipient mx=.*kinghost\.net
+action=rate(global/300/3600) defer_if_permit "Limite de 300/h atingido p/ KingHost."
+
 id=limit-uolhost
 pattern=recipient mx=.*uhserver
-action=rate(global/300/3600) defer_if_permit "Limite de 300 e-mails por hora atingido para UOL Host."
+action=rate(global/300/3600) defer_if_permit "Limite de 300/h atingido p/ UOL Host."
 
-# LocaWeb
 id=limit-locaweb
-pattern=recipient mx=.*locaweb.com.br
-action=rate(global/500/3600) defer_if_permit "Limite de 500 e-mails por hora atingido para LocaWeb."
+pattern=recipient mx=.*locaweb\.com\.br
+action=rate(global/500/3600) defer_if_permit "Limite de 500/h atingido p/ LocaWeb."
 
-# Yahoo
 id=limit-yahoo
-pattern=recipient mx=.*yahoo.com
-action=rate(global/150/3600) defer_if_permit "Limite de 150 e-mails por hora atingido para Yahoo."
+pattern=recipient mx=.*yahoo\.com
+action=rate(global/150/3600) defer_if_permit "Limite de 150/h atingido p/ Yahoo."
 
-# Mandic
 id=limit-mandic
-pattern=recipient mx=.*mandic.com.br
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Mandic."
+pattern=recipient mx=.*mandic\.com\.br
+action=rate(global/200/3600) defer_if_permit "Limite de 200/h atingido p/ Mandic."
 
-# Titan
 id=limit-titan
-pattern=recipient mx=.*titan.email
-action=rate(global/500/3600) defer_if_permit "Limite de 500 e-mails por hora atingido para Titan."
+pattern=recipient mx=.*titan\.email
+action=rate(global/500/3600) defer_if_permit "Limite de 500/h atingido p/ Titan."
 
-# Google
 id=limit-google
 pattern=recipient mx=.*google
-action=rate(global/2000/3600) defer_if_permit "Limite de 2000 e-mails por hora atingido para Google."
+action=rate(global/2000/3600) defer_if_permit "Limite de 2000/h atingido p/ Google."
 
-# Hotmail
 id=limit-hotmail
-pattern=recipient mx=.*hotmail.com
-action=rate(global/1000/86400) defer_if_permit "Limite de 1000 e-mails por dia atingido para Hotmail."
+pattern=recipient mx=.*hotmail\.com
+action=rate(global/1000/86400) defer_if_permit "Limite de 1000/dia atingido p/ Hotmail."
 
-# Office 365
 id=limit-office365
-pattern=recipient mx=.*outlook.com
-action=rate(global/2000/3600) defer_if_permit "Limite de 2000 e-mails por hora atingido para Office 365."
+pattern=recipient mx=.*outlook\.com
+action=rate(global/2000/3600) defer_if_permit "Limite de 2000/h atingido p/ Office 365."
 
-# Secureserver (GoDaddy)
 id=limit-secureserver
-pattern=recipient mx=.*secureserver.net
-action=rate(global/300/3600) defer_if_permit "Limite de 300 e-mails por hora atingido para GoDaddy."
+pattern=recipient mx=.*secureserver\.net
+action=rate(global/300/3600) defer_if_permit "Limite de 300/h atingido p/ GoDaddy."
 
-# Zimbra
 id=limit-zimbra
 pattern=recipient mx=.*zimbra
-action=rate(global/400/3600) defer_if_permit "Limite de 400 e-mails por hora atingido para Zimbra."
+action=rate(global/400/3600) defer_if_permit "Limite de 400/h atingido p/ Zimbra."
 
-# Argentina: Fibertel
+# Argentina
 id=limit-fibertel
-pattern=recipient mx=.*fibertel.com.ar
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Fibertel."
+pattern=recipient mx=.*fibertel\.com\.ar
+action=rate(global/200/3600) defer_if_permit "Limite de 200/h atingido p/ Fibertel."
 
-# Speedy
 id=limit-speedy
-pattern=recipient mx=.*speedy.com.ar
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Speedy."
+pattern=recipient mx=.*speedy\.com\.ar
+action=rate(global/200/3600) defer_if_permit "Limite de 200/h atingido p/ Speedy."
 
-# Personal (Arnet)
 id=limit-personal
-pattern=recipient mx=.*personal.com.ar
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Personal Arnet."
+pattern=recipient mx=.*personal\.com\.ar
+action=rate(global/200/3600) defer_if_permit "Limite de 200/h atingido p/ Personal."
 
-# Telecom
 id=limit-telecom
-pattern=recipient mx=.*telecom.com.ar
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Telecom."
+pattern=recipient mx=.*telecom\.com\.ar
+action=rate(global/200/3600) defer_if_permit "Limite de 200/h atingido p/ Telecom."
 
-# Claro
-id=limit-claro
-pattern=recipient mx=.*claro.com.ar
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Claro."
+id=limit-claro-ar
+pattern=recipient mx=.*claro\.com\.ar
+action=rate(global/200/3600) defer_if_permit "Limite de 200/h atingido p/ Claro AR."
 
-# México: Telmex
+# México
 id=limit-telmex
-pattern=recipient mx=.*prodigy.net.mx
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Telmex."
+pattern=recipient mx=.*prodigy\.net\.mx
+action=rate(global/200/3600) defer_if_permit "Limite de 200/h atingido p/ Telmex."
 
-# Axtel
 id=limit-axtel
-pattern=recipient mx=.*axtel.net
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Axtel."
+pattern=recipient mx=.*axtel\.net
+action=rate(global/200/3600) defer_if_permit "Limite de 200/h atingido p/ Axtel."
 
-# Izzi
 id=limit-izzi
-pattern=recipient mx=.*izzi.net.mx
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Izzi."
+pattern=recipient mx=.*izzi\.net\.mx
+action=rate(global/200/3600) defer_if_permit "Limite de 200/h atingido p/ Izzi."
 
-# Megacable
 id=limit-megacable
-pattern=recipient mx=.*megacable.com.mx
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Megacable."
+pattern=recipient mx=.*megacable\.com\.mx
+action=rate(global/200/3600) defer_if_permit "Limite de 200/h atingido p/ Megacable."
 
-# TotalPlay
 id=limit-totalplay
-pattern=recipient mx=.*totalplay.net.mx
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para TotalPlay."
+pattern=recipient mx=.*totalplay\.net\.mx
+action=rate(global/200/3600) defer_if_permit "Limite de 200/h atingido p/ TotalPlay."
 
-# Telcel
 id=limit-telcel
-pattern=recipient mx=.*telcel.net
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Telcel."
+pattern=recipient mx=.*telcel\.net
+action=rate(global/200/3600) defer_if_permit "Limite de 200/h atingido p/ Telcel."
 
-# Outros (fallback sem limite)
+# ===== CATCH-ALL: o que não casou acima segue permitido =====
 id=no-limit
 pattern=recipient mx=.*
 action=permit
 EOF
-chmod 0644 "$PFWCFG"
 
-# Override systemd: força interface/porta
+chmod 0644 "$PFWCFG"
+echo "[postfwd] Regras gravadas em $PFWCFG"
+
+# ============================================
+# 5) Override do systemd (porta/IF, sem abrir rede)
+# ============================================
 mkdir -p /etc/systemd/system/postfwd.service.d
 cat > /etc/systemd/system/postfwd.service.d/override.conf <<EOF
 [Service]
@@ -149,10 +152,39 @@ EOF
 systemctl daemon-reload
 systemctl enable --now postfwd
 
-# IMPORTANTE: certifique-se de que seu main.cf tem:
-#  ... check_policy_service inet:127.0.0.1:10045
+# ============================================
+# 6) Garantir integração no Postfix
+#    (só adiciona check_policy_service se faltar)
+# ============================================
+NEEDED='check_policy_service inet:127.0.0.1:10045'
+CURRENT="$(postconf -h smtpd_recipient_restrictions || true)"
+
+if [ -z "$CURRENT" ]; then
+  # cria uma baseline conservadora + policy
+  echo "[postfix] smtpd_recipient_restrictions vazio — criando baseline + policy"
+  postconf -e "smtpd_recipient_restrictions=permit_mynetworks, permit_sasl_authenticated, reject_non_fqdn_recipient, reject_unknown_recipient_domain, reject_unauth_destination, reject_unlisted_recipient, ${NEEDED}"
+else
+  echo "[postfix] smtpd_recipient_restrictions atual: $CURRENT"
+  if ! echo "$CURRENT" | grep -qF "$NEEDED"; then
+    echo "[postfix] adicionando policy service ao final…"
+    postconf -e "smtpd_recipient_restrictions=${CURRENT}, ${NEEDED}"
+  else
+    echo "[postfix] policy service já presente."
+  fi
+fi
+
 systemctl restart postfix
 
-# Healthcheck
-systemctl --no-pager status postfwd | sed -n '1,20p'
-ss -ltnp | grep ':10045' || journalctl -u postfwd -n 80 --no-pager
+# ============================================
+# 7) Healthcheck
+# ============================================
+echo "[health] postfwd:"
+systemctl --no-pager --full status postfwd | sed -n '1,25p' || true
+
+echo "[health] porta 10045 (loopback):"
+ss -ltnp | grep -E '127\.0\.0\.1:10045|LISTEN' || true
+
+echo "[health] postfix conf (recipients):"
+postconf -n | grep -E '^smtpd_recipient_restrictions|^smtpd_milters|^non_smtpd_milters' || true
+
+echo "[ok] postfwd integrado ao Postfix. Sem alterações em SASL/recepção externa."
