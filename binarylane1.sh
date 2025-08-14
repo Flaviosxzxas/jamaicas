@@ -454,7 +454,7 @@ smtpd_recipient_restrictions =
     check_policy_service inet:127.0.0.1:10045
     
 # Não deixe vazio (evita aceitar locais inexistentes)
-local_recipient_maps = proxy:unix:passwd.byname $alias_maps
+local_recipient_maps = proxy:unix:passwd.byname \$alias_maps
 
 smtpd_client_connection_rate_limit = 100
 smtpd_client_connection_count_limit = 50
@@ -507,14 +507,11 @@ EOF
 # Salvar variáveis antes de instalar dependências
 ORIGINAL_VARS=$(declare -p ServerName CloudflareAPI CloudflareEmail Domain DKIMSelector ServerIP)
 
-# ... termina o here-doc do main.cf
-EOF
-
 # === MAIL.LOG via rsyslog ===
 apt-get update -y
 apt-get install -y rsyslog logrotate
 
-cat >/etc/rsyslog.d/50-mail.conf <<'EOF'
+cat >/etc/rsyslog.d/49-mail.conf <<'EOF'
 mail.*   -/var/log/mail.log
 & stop
 EOF
@@ -523,11 +520,7 @@ systemctl enable --now rsyslog
 systemctl restart rsyslog
 systemctl restart postfix
 
-# opcional: força a criação imediata com um evento de teste
 logger -p mail.info "postfix: teste de log (rsyslog ativo)"
-
-# (segue o seu script normalmente…)
-
 
 # ============================================
 #  Instalar e usar cpanminus para módulos Perl
