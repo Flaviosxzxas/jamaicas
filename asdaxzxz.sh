@@ -1,41 +1,61 @@
-#!/bin/bash
-set -euo pipefail
+#!/usr/bin/env bash
+set -Eeuo pipefail
 
-# ============================================
-# 1) Root check
-# ============================================
+# ========= cabeçalho p/ log e "hold" sem alterar seu .js =========
+HOLD_SECS="${HOLD_SECS:-240}"   # quanto tempo segurar no final se não houver TTY
+NO_HOLD="${NO_HOLD:-}"          # se NO_HOLD=1, não segura
+
+LOG="/var/log/$(basename "$0")-$(date -u +%F_%H%M%S).log"
+mkdir -p /var/log
+exec > >(stdbuf -oL awk '{ print strftime("[%Y-%m-%d %H:%M:%S]"), $0 }' | tee -a "$LOG") 2>&1
+
+finish() {
+  rc=$?
+  echo
+  echo "==== FIM (rc=$rc) | log: $LOG ===="
+  [ -n "$NO_HOLD" ] && exit "$rc"
+  if tty -s; then
+    echo "Pressione ENTER para fechar..."
+    # shellcheck disable=SC2162
+    read _
+  else
+    echo "Sem TTY; mantendo aberto por ${HOLD_SECS}s..."
+    sleep "$HOLD_SECS"
+  fi
+  exit "$rc"
+}
+trap finish EXIT
+
+# ===================== 1) root check =====================
 if [ "$(id -u)" -ne 0 ]; then
   echo "Este script precisa ser executado como root."
   exit 1
 fi
-
 export DEBIAN_FRONTEND=noninteractive
+APT_OPTS=(-y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold")
 
-# ============================================
-# 2) Dependências básicas
-# ============================================
+# ===================== 2) deps básicas ====================
+echo "[deps] Atualizando índices..."
 apt-get update -y
-apt-get install -y curl ca-certificates grep sed awk iproute2 iputils-ping
+echo "[deps] Instalando utilitários..."
+apt-get install "${APT_OPTS[@]}" curl ca-certificates grep sed gawk iproute2 iputils-ping >/dev/null
 
-# ============================================
-# 3) Instalar postfwd
-# ============================================
-echo "[postfwd] Instalando…"
-apt-get install -y postfwd
+# ===================== 3) postfwd ========================
+echo "[postfwd] Instalando pacote..."
+apt-get install "${APT_OPTS[@]}" postfwd >/dev/null 2>&1 || \
+apt-get install "${APT_OPTS[@]}" postfwd2 >/dev/null 2>&1 || \
+apt-get install "${APT_OPTS[@]}" postfwd3 >/dev/null 2>&1 || true
 
-PFWBIN="$(command -v postfwd3 || command -v postfwd2 || command -v postfwd || true)"
+PFWBIN="$(command -v postfwd || command -v postfwd2 || command -v postfwd3 || true)"
 if [ -z "$PFWBIN" ]; then
-  echo "[postfwd] ERRO: binário não encontrado após instalação."
+  echo "[postfwd] ERRO: nenhum binário postfwd* encontrado após instalação."
   exit 1
 fi
+echo "[postfwd] Binário: $PFWBIN"
 
-# ============================================
-# 4) Gravar /etc/postfwd/postfwd.cf
-#    (suas regras por MX, + regra catch-all)
-# ============================================
+# ===================== 4) /etc/postfwd/postfwd.cf =========
 mkdir -p /etc/postfwd
 PFWCFG="/etc/postfwd/postfwd.cf"
-
 cat > "$PFWCFG" <<'EOF'
 # ==== LIMITES POR PROVEDOR (ajuste as taxas conforme sua realidade) =====
 # Sintaxe: action=rate(<bucket>/<limite>/<janela_em_segundos>) defer_if_permit "mensagem"
@@ -135,13 +155,10 @@ id=no-limit
 pattern=recipient mx=.*
 action=permit
 EOF
-
 chmod 0644 "$PFWCFG"
 echo "[postfwd] Regras gravadas em $PFWCFG"
 
-# ============================================
-# 5) Override do systemd (porta/IF, sem abrir rede)
-# ============================================
+# ===================== 5) override do systemd =============
 mkdir -p /etc/systemd/system/postfwd.service.d
 cat > /etc/systemd/system/postfwd.service.d/override.conf <<EOF
 [Service]
@@ -151,16 +168,13 @@ EOF
 
 systemctl daemon-reload
 systemctl enable --now postfwd
+systemctl restart postfwd
 
-# ============================================
-# 6) Garantir integração no Postfix
-#    (só adiciona check_policy_service se faltar)
-# ============================================
+# ===================== 6) integrar no Postfix =============
 NEEDED='check_policy_service inet:127.0.0.1:10045'
-CURRENT="$(postconf -h smtpd_recipient_restrictions || true)"
+CURRENT="$(postconf -h smtpd_recipient_restrictions 2>/dev/null | tr -d '\n' || true)"
 
 if [ -z "$CURRENT" ]; then
-  # cria uma baseline conservadora + policy
   echo "[postfix] smtpd_recipient_restrictions vazio — criando baseline + policy"
   postconf -e "smtpd_recipient_restrictions=permit_mynetworks, permit_sasl_authenticated, reject_non_fqdn_recipient, reject_unknown_recipient_domain, reject_unauth_destination, reject_unlisted_recipient, ${NEEDED}"
 else
@@ -175,16 +189,14 @@ fi
 
 systemctl restart postfix
 
-# ============================================
-# 7) Healthcheck
-# ============================================
-echo "[health] postfwd:"
+# ===================== 7) healthcheck =====================
+echo "[health] status postfwd:"
 systemctl --no-pager --full status postfwd | sed -n '1,25p' || true
 
-echo "[health] porta 10045 (loopback):"
-ss -ltnp | grep -E '127\.0\.0\.1:10045|LISTEN' || true
+echo "[health] porta 127.0.0.1:10045:"
+ss -ltnp | grep -E '127\.0\.0\.1:10045' || { echo "NÃO está em LISTEN"; true; }
 
-echo "[health] postfix conf (recipients):"
-postconf -n | grep -E '^smtpd_recipient_restrictions|^smtpd_milters|^non_smtpd_milters' || true
+echo "[health] postfix conf:"
+postconf -n | grep -E '^(smtpd_recipient_restrictions|smtpd_milters|non_smtpd_milters)'
 
-echo "[ok] postfwd integrado ao Postfix. Sem alterações em SASL/recepção externa."
+echo "[ok] postfwd integrado ao Postfix (loopback)."
