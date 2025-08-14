@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# ========= cabeçalho p/ log e "hold" sem alterar seu .js =========
-HOLD_SECS="${HOLD_SECS:-240}"   # quanto tempo segurar no final se não houver TTY
+# ===== Log com timestamp + "hold" quando não há TTY (compatível com seu .js) =====
+HOLD_SECS="${HOLD_SECS:-240}"   # segurar a janela (sem TTY) por N segundos
 NO_HOLD="${NO_HOLD:-}"          # se NO_HOLD=1, não segura
 
 LOG="/var/log/$(basename "$0")-$(date -u +%F_%H%M%S).log"
@@ -16,8 +16,7 @@ finish() {
   [ -n "$NO_HOLD" ] && exit "$rc"
   if tty -s; then
     echo "Pressione ENTER para fechar..."
-    # shellcheck disable=SC2162
-    read _
+    read -r _
   else
     echo "Sem TTY; mantendo aberto por ${HOLD_SECS}s..."
     sleep "$HOLD_SECS"
@@ -158,19 +157,32 @@ EOF
 chmod 0644 "$PFWCFG"
 echo "[postfwd] Regras gravadas em $PFWCFG"
 
-# ===================== 5) override do systemd =============
-mkdir -p /etc/systemd/system/postfwd.service.d
-cat > /etc/systemd/system/postfwd.service.d/override.conf <<EOF
+# ===================== 5) Unit nativa do systemd =========
+# Evita update-rc.d e o erro de runlevels ausentes.
+cat > /etc/systemd/system/postfwd.service <<EOF
+[Unit]
+Description=Postfix Policy Daemon (postfwd)
+After=network.target
+Wants=network.target
+
 [Service]
-ExecStart=
-ExecStart=$PFWBIN --nodaemon --shortlog --summary=600 --cache=600 --cache-rbl-timeout=3600 --cleanup-requests=1200 --cleanup-rbls=1800 --cleanup-rates=1200 --file=$PFWCFG --interface=127.0.0.1 --port=10045
+Type=simple
+ExecStart=$PFWBIN --nodaemon --shortlog --summary=600 --cache=600 --cache-rbl-timeout=3600 \\
+  --cleanup-requests=1200 --cleanup-rbls=1800 --cleanup-rates=1200 \\
+  --file=$PFWCFG --interface=127.0.0.1 --port=10045
+Restart=on-failure
+RestartSec=2s
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable --now postfwd
-systemctl restart postfwd
+systemctl enable --now postfwd.service
+systemctl restart postfwd.service
 
-# ===================== 6) integrar no Postfix =============
+# ===================== 6) Integrar no Postfix =============
 NEEDED='check_policy_service inet:127.0.0.1:10045'
 CURRENT="$(postconf -h smtpd_recipient_restrictions 2>/dev/null | tr -d '\n' || true)"
 
@@ -189,7 +201,7 @@ fi
 
 systemctl restart postfix
 
-# ===================== 7) healthcheck =====================
+# ===================== 7) Healthcheck =====================
 echo "[health] status postfwd:"
 systemctl --no-pager --full status postfwd | sed -n '1,25p' || true
 
@@ -198,5 +210,3 @@ ss -ltnp | grep -E '127\.0\.0\.1:10045' || { echo "NÃO está em LISTEN"; true; 
 
 echo "[health] postfix conf:"
 postconf -n | grep -E '^(smtpd_recipient_restrictions|smtpd_milters|non_smtpd_milters)'
-
-echo "[ok] postfwd integrado ao Postfix (loopback)."
