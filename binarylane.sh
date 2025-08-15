@@ -13,34 +13,39 @@ export DEBIAN_FRONTEND=noninteractive
 is_ubuntu() { [ -f /etc/os-release ] && grep -qi ubuntu /etc/os-release; }
 
 # ============================================
-#  Verificação e instalação do PHP
+#  Verificação e instalação do PHP (CLI)
 # ============================================
 echo ">> Verificando se o PHP está instalado..."
 if ! command -v php >/dev/null 2>&1; then
     echo ">> PHP não encontrado. Instalando..."
-    apt update -y
+    apt-get update -y
 
     # Caminho rápido: meta-pacote genérico
-    if apt install -y php-cli php-common; then
+    if apt-get install -y php-cli php-common; then
         :
     else
         echo ">> 'php-cli' indisponível. Tentando versões específicas..."
-        apt install -y php8.2-cli || apt install -y php8.1-cli || apt install -y php7.4-cli || {
-
-            # Fallback: adiciona PPA do Ondřej (apenas no Ubuntu), só se tudo acima falhar
-            if is_ubuntu; then
-                echo ">> Adicionando PPA ppa:ondrej/php (fallback)..."
-                apt install -y software-properties-common ca-certificates lsb-release apt-transport-https || true
-                add-apt-repository -y ppa:ondrej/php || true
-                apt update -y
-                apt install -y php8.3-cli || apt install -y php8.2-cli || apt install -y php8.1-cli || apt install -y php7.4-cli || true
-            fi
-        }
+        # tenta detectar versões disponíveis no repo e instalar a mais alta
+        CANDIDATES="$(apt-cache search -n '^php[0-9]\.[0-9]-cli$' | awk '{print $1}' | sort -Vr)"
+        OK=0
+        for pkg in $CANDIDATES php8.3-cli php8.2-cli php8.1-cli php7.4-cli; do
+            if apt-get install -y "$pkg"; then OK=1; break; fi
+        done
+        if [ "$OK" -eq 0 ] && is_ubuntu; then
+            echo ">> Adicionando PPA ppa:ondrej/php (fallback)..."
+            apt-get install -y software-properties-common ca-certificates lsb-release || true
+            add-apt-repository -y ppa:ondrej/php || true
+            apt-get update -y
+            apt-get install -y php8.3-cli || apt-get install -y php8.2-cli || apt-get install -y php8.1-cli || apt-get install -y php7.4-cli || true
+        fi
     fi
 
-    # Garante que o comando php exista
-    if ! command -v php >/dev/null 2>&1; then
-        ln -sf "$(command -v php8.3 || command -v php8.2 || command -v php8.1 || command -v php8.0 || command -v php7.4)" /usr/bin/php || true
+    # Garante que /usr/bin/php aponte para o binário instalado via update-alternatives
+    PHPPATH="$(command -v php || true)"
+    if [ -n "$PHPPATH" ] && [ "$PHPPATH" != "/usr/bin/php" ]; then
+        echo ">> Registrando ${PHPPATH} como alternativa de php..."
+        update-alternatives --install /usr/bin/php php "$PHPPATH" 80 || true
+        update-alternatives --set php "$PHPPATH" || true
         hash -r || true
     fi
 
@@ -65,6 +70,10 @@ apt-get -y upgrade \
     echo "Erro ao atualizar os pacotes."
     exit 1
   }
+
+# (Opcional) Após o upgrade, recalcule a versão do PHP do CLI se for usar em passos seguintes:
+# PHPV="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
+# echo "PHP CLI ativo: $PHPV"
 
 # ============================================
 #  Definir variáveis principais
@@ -355,7 +364,7 @@ postmap /etc/postfix/access.recipients
 #  Criar e configurar header_checks
 # ============================================
 create_header_checks() {
-    echo '/^[Rr]eceived: by .+? \(Postfix, from userid 0\)/ IGNORE' > /etc/postfix/header_checks
+    echo '/^[Rr]eceived: by .+ \(Postfix, from userid [0-9]+\)/ IGNORE' > /etc/postfix/header_checks
 
     # Converter para formato Unix usando dos2unix
     echo "Convertendo /etc/postfix/header_checks para formato Unix..."
@@ -482,243 +491,6 @@ EOF
 # Salvar variáveis antes de instalar dependências
 ORIGINAL_VARS=$(declare -p ServerName CloudflareAPI CloudflareEmail Domain DKIMSelector ServerIP)
 
-# ============================================
-#  Instalar e usar cpanminus para módulos Perl
-# ============================================
-# Dependências de compilação e Perl extras
-apt-get install -y build-essential make gcc libssl-dev libperl-dev \
-    libnet-dns-perl libio-multiplex-perl libnet-server-perl wget unzip libidn2-0-dev cpanminus
-
-export PERL_MM_USE_DEFAULT=1
-export PERL_AUTOINSTALL=--defaultdeps
-
-# Verificar e instalar módulos Perl via cpanminus
-check_and_install_perl_module() {
-    local module_name=$1
-    if perl -M"$module_name" -e '1' 2>/dev/null; then
-        echo "Módulo Perl $module_name já instalado."
-    else
-        echo "Módulo Perl $module_name não encontrado. Instalando..."
-        cpanm --notest "$module_name" || { echo "Erro ao instalar $module_name via cpanminus."; exit 1; }
-    fi
-}
-
-perl_modules=("Net::Server::Daemonize" "Net::Server::Multiplex" "Net::Server::PreFork" "Net::DNS" "IO::Multiplex")
-for module in "${perl_modules[@]}"; do
-    check_and_install_perl_module "$module"
-done
-
-# ============================================
-#  Instalar Postfwd
-# ============================================
-if [ ! -d "/opt/postfwd" ]; then
-    echo "Baixando e instalando o Postfwd..."
-    cd /tmp || { echo "Erro ao acessar /tmp."; exit 1; }
-    wget https://github.com/postfwd/postfwd/archive/master.zip || { echo "Erro ao baixar o Postfwd."; exit 1; }
-    unzip master.zip || { echo "Erro ao descompactar o Postfwd."; exit 1; }
-    mv postfwd-master /opt/postfwd || { echo "Erro ao mover o Postfwd."; exit 1; }
-    echo "Postfwd instalado com sucesso."
-else
-    echo "Pasta /opt/postfwd já existe, assumindo Postfwd instalado."
-fi
-
-eval "$ORIGINAL_VARS"
-
-# ============================================
-#  Criar conf do Postfwd
-# ============================================
-mkdir -p /opt/postfwd/etc
-if [ ! -f "/opt/postfwd/etc/postfwd.cf" ]; then
-    cat <<EOF > /opt/postfwd/etc/postfwd.cf
-#######################################################
-# Regras de Controle de Limites por Servidor
-#######################################################
-# KingHost
-id=limit-kinghost
-pattern=recipient mx=.*kinghost.net
-action=rate(global/300/3600) defer_if_permit "Limite de 300 e-mails por hora atingido para KingHost."
-
-# UOL Host
-id=limit-uolhost
-pattern=recipient mx=.*uhserver
-action=rate(global/300/3600) defer_if_permit "Limite de 300 e-mails por hora atingido para UOL Host."
-
-# LocaWeb
-id=limit-locaweb
-pattern=recipient mx=.*locaweb.com.br
-action=rate(global/500/3600) defer_if_permit "Limite de 500 e-mails por hora atingido para LocaWeb."
-
-# Yahoo
-id=limit-yahoo
-pattern=recipient mx=.*yahoo.com
-action=rate(global/150/3600) defer_if_permit "Limite de 150 e-mails por hora atingido para Yahoo."
-
-# Mandic
-id=limit-mandic
-pattern=recipient mx=.*mandic.com.br
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Mandic."
-
-# Titan
-id=limit-titan
-pattern=recipient mx=.*titan.email
-action=rate(global/500/3600) defer_if_permit "Limite de 500 e-mails por hora atingido para Titan."
-
-# Google
-id=limit-google
-pattern=recipient mx=.*google
-action=rate(global/2000/3600) defer_if_permit "Limite de 2000 e-mails por hora atingido para Google."
-
-# Hotmail
-id=limit-hotmail
-pattern=recipient mx=.*hotmail.com
-action=rate(global/1000/86400) defer_if_permit "Limite de 1000 e-mails por dia atingido para Hotmail."
-
-# Office 365
-id=limit-office365
-pattern=recipient mx=.*outlook.com
-action=rate(global/2000/3600) defer_if_permit "Limite de 2000 e-mails por hora atingido para Office 365."
-
-# Secureserver (GoDaddy)
-id=limit-secureserver
-pattern=recipient mx=.*secureserver.net
-action=rate(global/300/3600) defer_if_permit "Limite de 300 e-mails por hora atingido para GoDaddy."
-
-# Zimbra
-id=limit-zimbra
-pattern=recipient mx=.*zimbra
-action=rate(global/400/3600) defer_if_permit "Limite de 400 e-mails por hora atingido para Zimbra."
-
-# Argentina: Fibertel
-id=limit-fibertel
-pattern=recipient mx=.*fibertel.com.ar
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Fibertel."
-
-# Speedy
-id=limit-speedy
-pattern=recipient mx=.*speedy.com.ar
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Speedy."
-
-# Personal (Arnet)
-id=limit-personal
-pattern=recipient mx=.*personal.com.ar
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Personal Arnet."
-
-# Telecom
-id=limit-telecom
-pattern=recipient mx=.*telecom.com.ar
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Telecom."
-
-# Claro
-id=limit-claro
-pattern=recipient mx=.*claro.com.ar
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Claro."
-
-# México: Telmex
-id=limit-telmex
-pattern=recipient mx=.*prodigy.net.mx
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Telmex."
-
-# Axtel
-id=limit-axtel
-pattern=recipient mx=.*axtel.net
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Axtel."
-
-# Izzi
-id=limit-izzi
-pattern=recipient mx=.*izzi.net.mx
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Izzi Telecom."
-
-# Megacable
-id=limit-megacable
-pattern=recipient mx=.*megacable.com.mx
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Megacable."
-
-# TotalPlay
-id=limit-totalplay
-pattern=recipient mx=.*totalplay.net.mx
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para TotalPlay."
-
-# Telcel
-id=limit-telcel
-pattern=recipient mx=.*telcel.net
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Telcel."
-
-# Outros (sem limite)
-id=no-limit
-pattern=recipient mx=.*
-action=permit
-EOF
-else
-    echo "Arquivo /opt/postfwd/etc/postfwd.cf já existe, pulando."
-fi
-
-# ============================================
-#  Script de inicialização do Postfwd
-# ============================================
-mkdir -p /opt/postfwd/bin
-cat <<'EOF' > /opt/postfwd/bin/postfwd-script.sh
-#!/bin/sh
-#
-# Startscript for the postfwd daemon
-
-PATH=/bin:/usr/bin:/usr/local/bin
-
-PFWCMD=/opt/postfwd/sbin/postfwd3
-PFWCFG=/opt/postfwd/etc/postfwd.cf
-PFWPID=/var/tmp/postfwd3-master.pid
-
-PFWUSER=postfix
-PFWGROUP=postfix
-PFWINET=127.0.0.1
-PFWPORT=10045
-
-PFWARG="--shortlog --summary=600 --cache=600 --cache-rbl-timeout=3600 --cleanup-requests=1200 --cleanup-rbls=1800 --cleanup-rates=1200"
-
-P1="`basename ${PFWCMD}`"
-case "$1" in
- start*)
-   [ /var/tmp/postfwd3-master.pid ] && rm -Rf /var/tmp/postfwd3-master.pid
-   echo "Starting ${P1}..."
-   ${PFWCMD} ${PFWARG} --daemon --file=${PFWCFG} --interface=${PFWINET} --port=${PFWPORT} --user=${PFWUSER} --group=${PFWGROUP} --pidfile=${PFWPID}
-   ;;
-
- debug*)
-   echo "Starting ${P1} in debug mode..."
-   ${PFWCMD} ${PFWARG} -vv --daemon --file=${PFWCFG} --interface=${PFWINET} --port=${PFWPORT} --user=${PFWUSER} --group=${PFWGROUP} --pidfile=${PFWPID}
-   ;;
-
- stop*)
-   ${PFWCMD} --interface=${PFWINET} --port=${PFWPORT} --pidfile=${PFWPID} --kill
-   ;;
-
- reload*)
-   ${PFWCMD} --interface=${PFWINET} --port=${PFWPORT} --pidfile=${PFWPID} -- reload
-   ;;
-
- restart*)
-   $0 stop
-   sleep 4
-   $0 start
-   ;;
-
- *)
-   echo "Unknown argument \"$1\"" >&2
-   echo "Usage: `basename $0` {start|stop|debug|reload|restart}"
-   exit 1
-   ;;
-esac
-exit $?
-EOF
-
-chmod +x /opt/postfwd/bin/postfwd-script.sh
-ln -sf /opt/postfwd/bin/postfwd-script.sh /etc/init.d/postfwd
-
-# Reiniciar serviços
-echo "Iniciando o Postfwd..."
-/etc/init.d/postfwd start || { echo "Erro ao iniciar o Postfwd."; exit 1; }
-echo "Reiniciando o Postfix..."
-systemctl restart postfix || { echo "Erro ao reiniciar Postfix."; exit 1; }
-
 echo "==================================================== OpenDMARC ===================================================="
 
 # ============================================
@@ -780,12 +552,12 @@ chmod 644 /var/lib/opendmarc/opendmarc.dat
 
 rm -f /run/opendmarc/opendmarc.pid
 
-echo "[OpenDMARC] Reiniciando OpenDKIM..."
+echo "[OpenDKIM] Reiniciando OpenDKIM..."
 systemctl restart opendkim
 if systemctl is-active --quiet opendkim; then
-    echo "[OpenDMARC] OpenDKIM reiniciado com sucesso."
+    echo "[OpenDKIM] OpenDKIM reiniciado com sucesso."
 else
-    echo "[OpenDMARC] Falha ao reiniciar OpenDKIM."
+    echo "[OpenDKIM] Falha ao reiniciar OpenDKIM."
 fi
 
 echo "[OpenDMARC] Reiniciando OpenDMARC..."
