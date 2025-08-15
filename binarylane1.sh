@@ -1230,6 +1230,40 @@ EOF
 a2ensite "ssl-$ServerName"
 systemctl reload apache2
 
+# === TLS: usar Let’s Encrypt se existir; senão snakeoil (fallback) ===
+LE_CERT="/etc/letsencrypt/live/$ServerName/fullchain.pem"
+LE_KEY="/etc/letsencrypt/live/$ServerName/privkey.pem"
+
+TLS_CERT="$LE_CERT"
+TLS_KEY="$LE_KEY"
+
+if [ ! -s "$LE_CERT" ] || [ ! -s "$LE_KEY" ]; then
+  echo "[TLS] Let's Encrypt não encontrado; aplicando snakeoil temporário."
+  apt-get install -y ssl-cert >/dev/null 2>&1 || true
+  adduser postfix ssl-cert >/dev/null 2>&1 || true
+  TLS_CERT="/etc/ssl/certs/ssl-cert-snakeoil.pem"
+  TLS_KEY="/etc/ssl/private/ssl-cert-snakeoil.key"
+fi
+
+# Postfix: aplica os caminhos efetivos
+postconf -e "smtpd_tls_cert_file=$TLS_CERT"
+postconf -e "smtpd_tls_key_file=$TLS_KEY"
+
+# Apache: ajusta o vhost para o mesmo par de arquivos e recarrega
+if [ -f "/etc/apache2/sites-available/ssl-$ServerName.conf" ]; then
+  sed -i "s#^\s*SSLCertificateFile .*#    SSLCertificateFile $TLS_CERT#" "/etc/apache2/sites-available/ssl-$ServerName.conf"
+  sed -i "s#^\s*SSLCertificateKeyFile .*#    SSLCertificateKeyFile $TLS_KEY#" "/etc/apache2/sites-available/ssl-$ServerName.conf"
+  systemctl reload apache2 || true
+fi
+
+# Recarrega Postfix (sem travar o script se demorar)
+systemctl reload postfix || systemctl restart postfix || true
+
+# Log curto de verificação
+echo "[health] TLS em uso no Postfix:"
+postconf -n | grep -E '^smtpd_tls_(cert|key)_file' || true
+
+
 # ================== APPLICATION: endereços de função (outbound-only) ==================
 # Destinos padrão (pode sobrescrever antes de chamar este bloco)
 POSTMASTER_DEST="${POSTMASTER_DEST:-root}"   # ou "voce@seu-mail.com"
