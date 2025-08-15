@@ -136,20 +136,41 @@ calc_domain() {
 # -------- Cloudflare API helpers --------
 _cf_api() {
   local method="$1" path="$2" data="${3:-}"
-  [ -z "$CF_API_TOKEN" ] && { echo '{"success":false,"err":"no_token"}'; return 0; }
   local url="https://api.cloudflare.com/client/v4${path}"
-  if [ -n "$data" ]; then
-    curl -sS -X "$method" "$url" -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" --data "$data"
+  local auth=()
+  if [ -n "$CF_API_TOKEN" ]; then
+    auth=(-H "Authorization: Bearer $CF_API_TOKEN")
+  elif [ -n "$CF_API_KEY" ] && [ -n "$CF_API_EMAIL" ]; then
+    auth=(-H "X-Auth-Email: $CF_API_EMAIL" -H "X-Auth-Key: $CF_API_KEY")
   else
-    curl -sS -X "$method" "$url" -H "Authorization: Bearer $CF_API_TOKEN"
+    echo '{"success":false,"err":"no_token"}'
+    return 0
+  fi
+  if [ -n "$data" ]; then
+    curl -sS -X "$method" "$url" "${auth[@]}" -H "Content-Type: application/json" --data "$data"
+  else
+    curl -sS -X "$method" "$url" "${auth[@]}"
   fi
 }
-cf_get_zone_id() { _cf_api GET "/zones?name=${1}" | jq -r '.result[0].id // empty'; }
+
+cf_get_zone_id() {
+  # se já veio por parâmetro/ambiente, usa direto
+  if [ -n "$CF_ZONE_ID" ]; then
+    echo "$CF_ZONE_ID"
+    return 0
+  fi
+  _cf_api GET "/zones?name=${1}" | jq -r '.result[0].id // empty'
+}
+
 cf_get_record_id() { _cf_api GET "/zones/${1}/dns_records?type=${2}&name=${3}" | jq -r '.result[0].id // empty'; }
+
 create_or_update_record() {
   local name="$1" type="$2" content="$3" ttl="${4:-300}"
   local zone_id; zone_id="$(cf_get_zone_id "$Domain")"
-  if [ -z "$zone_id" ]; then echo "CF: zone_id não encontrado para $Domain"; return 1; fi
+  if [ -z "$zone_id" ]; then
+    echo "CF: zone_id não encontrado para $Domain"
+    return 1
+  fi
   local rec_id; rec_id="$(cf_get_record_id "$zone_id" "$type" "$name")"
   local payload; payload="$(jq -cn --arg type "$type" --arg name "$name" --arg content "$content" --argjson ttl "$ttl" \
       '{type:$type,name:$name,content:$content,ttl:$ttl,proxied:false}')"
