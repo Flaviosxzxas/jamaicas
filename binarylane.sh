@@ -181,15 +181,12 @@ certbot certonly --non-interactive --agree-tos --register-unsafely-without-email
   --dns-cloudflare-propagation-seconds 60 --rsa-key-size 4096 -d "$ServerName"
 
 wait
-
 # ============================================
 #  Corrigir SyntaxWarning em cloudflare.py
 # ============================================
 echo "Corrigindo SyntaxWarning no cloudflare.py..."
-sed -i "s/self.email is ''/self.email == ''/g" /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
-sed -i "s/self.token is ''/self.token == ''/g" /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
-sed -i "s/self.certtoken is None/self.certtoken == None/g" /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
-
+sed -i "s/self\.email is ''/self.email == ''/g" /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
+sed -i "s/self\.token is ''/self.token == ''/g"   /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
 echo "Correção aplicada com sucesso em cloudflare.py."
 
 echo "==================================================================== DKIM ==============================================================================="
