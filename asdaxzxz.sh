@@ -192,6 +192,24 @@ sed -i "s/self\.token is ''/self.token == ''/g"   /usr/lib/python3/dist-packages
 
 echo "Correção aplicada com sucesso em cloudflare.py."
 
+# === TLS: escolher LE se existir; senão snakeoil (fallback) ===
+LE_CERT="/etc/letsencrypt/live/$ServerName/fullchain.pem"
+LE_KEY="/etc/letsencrypt/live/$ServerName/privkey.pem"
+TLS_CERT="$LE_CERT"; TLS_KEY="$LE_KEY"
+
+if [ ! -s "$LE_CERT" ] || [ ! -s "$LE_KEY" ]; then
+  echo "[TLS] Let's Encrypt ausente; aplicando snakeoil temporário."
+  apt-get install -y ssl-cert >/dev/null 2>&1 || true
+  adduser postfix ssl-cert >/dev/null 2>&1 || true
+  TLS_CERT="/etc/ssl/certs/ssl-cert-snakeoil.pem"
+  TLS_KEY="/etc/ssl/private/ssl-cert-snakeoil.key"
+fi
+
+# Aplica no Postfix (independente do que está no main.cf que você escreve depois)
+postconf -e "smtpd_tls_cert_file=$TLS_CERT"
+postconf -e "smtpd_tls_key_file=$TLS_KEY"
+
+
 echo "==================================================================== DKIM ==============================================================================="
 
 
@@ -618,7 +636,7 @@ cat >/etc/systemd/system/postfwd-local.service <<'EOF'
 Description=postfwd policy daemon (local-only)
 After=network-online.target postfix.service
 Wants=network-online.target
-#Requires=postfix.service
+Requires=postfix.service
 
 [Service]
 Type=forking
@@ -698,6 +716,9 @@ postconf -n | grep -E '^smtpd_recipient_restrictions|^smtpd_milters|^non_smtpd_m
 ###############################################################################
 # FIM DO BLOCO POSTFWD
 ###############################################################################
+
+
+
 
 echo "==================================================== OpenDMARC ===================================================="
 
@@ -1190,9 +1211,27 @@ cat <<EOF > "/etc/apache2/sites-available/ssl-$ServerName.conf"
 </IfModule>
 EOF
 
-# Habilita o novo VirtualHost e recarrega
-a2ensite "ssl-$ServerName"
-systemctl reload apache2
+# ============================================
+# [ÂNCORA 2] — imediatamente DEPOIS de criar/alterar o vhost SSL do Apache
+# ============================================
+if [ -f "/etc/apache2/sites-available/ssl-$ServerName.conf" ]; then
+  sed -i "s#^\s*SSLCertificateFile .*#    SSLCertificateFile $TLS_CERT#" "/etc/apache2/sites-available/ssl-$ServerName.conf"
+  sed -i "s#^\s*SSLCertificateKeyFile .*#    SSLCertificateKeyFile $TLS_KEY#" "/etc/apache2/sites-available/ssl-$ServerName.conf"
+  systemctl reload apache2 || true
+fi
+
+# Recarrega Postfix (não trava seu script se demorar)
+systemctl reload postfix || systemctl restart postfix || true
+
+# Log curto
+echo "[health] TLS em uso no Postfix:"
+postconf -n | grep -E '^smtpd_tls_(cert|key)_file' || true
+
+# Habilita módulos/sites e recarrega
+a2enmod ssl headers rewrite >/dev/null 2>&1 || true
+a2ensite "ssl-$ServerName" >/dev/null 2>&1 || a2ensite "ssl-$ServerName.conf" >/dev/null 2>&1 || true
+systemctl reload apache2 || systemctl restart apache2 || true
+
 
 # ================== APPLICATION: endereços de função (outbound-only) ==================
 # Destinos padrão (pode sobrescrever antes de chamar este bloco)
