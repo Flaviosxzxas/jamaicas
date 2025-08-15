@@ -801,28 +801,41 @@ fi
 
 # --- Postfix depende (soft) de DKIM/DMARC (sem travar se um deles cair)
 echo "[Postfix] Ajustando dependência systemd (DKIM/DMARC antes do Postfix)..."
-install -d /etc/systemd/system/postfix.service.d
+mkdir -p /etc/systemd/system/postfix.service.d
 cat >/etc/systemd/system/postfix.service.d/10-milters.conf <<'EOF'
 [Unit]
-# Sobe Postfix depois dos milters; não é 'Requires' para não bloquear o SMTP
 Wants=opendkim.service opendmarc.service postfwd-local.service
 After=network-online.target opendkim.service opendmarc.service postfwd-local.service
 EOF
 
+# revalida units e tenta (sem bloquear) preparar os serviços auxiliares
 systemctl daemon-reload
+systemctl try-restart opendkim opendmarc postfwd-local || true
 
-# (Se quiser garantir os milters via postconf, descomente as 4 linhas abaixo)
-# postconf -e "milter_protocol = 6"
-# postconf -e "milter_default_action = accept"
-# postconf -e "smtpd_milters = inet:127.0.0.1:12301, inet:127.0.0.1:54321"
-# postconf -e "non_smtpd_milters = \$smtpd_milters"
+# nunca travar aqui: dá 20s pro restart, depois faz fallback para reload
+if ! timeout 20s systemctl restart postfix; then
+  echo "[Postfix] restart demorou; tentando reload..."
+  systemctl reload postfix || true
+fi
 
-systemctl enable postfix >/dev/null 2>&1 || true
-systemctl restart postfix || true
+# espera o Postfix subir por até 10s, senão mostra logs e segue
+for i in $(seq 1 10); do
+  if systemctl is-active --quiet postfix; then break; fi
+  sleep 1
+done
 
-# --- Sanidade rápida (sem pager e sem travar)
-systemctl --no-pager --full status postfix | sed -n '1,15p' || true
-echo "[OK] Dependências aplicadas."
+if ! systemctl is-active --quiet postfix; then
+  echo "[Postfix] ainda não ativo — últimos logs:"
+  journalctl -u postfix -n 80 --no-pager || true
+fi
+
+echo "[health] sockets locais:"
+ss -ltnp | grep -E '127\.0\.0\.1:(12301|54321|10045)|:25\b' || true
+
+echo "[health] postfix conf (policy e milters):"
+postconf -n | grep -E '^smtpd_recipient_restrictions|check_policy_service|^smtpd_milters|^non_smtpd_milters' || true
+
+echo "[OK] Fim do setup."
 
 echo "==================================================== CLOUDFLARE ===================================================="
 
