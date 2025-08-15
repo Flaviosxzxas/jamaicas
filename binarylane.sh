@@ -246,6 +246,7 @@ cat <<EOF > /etc/opendkim/TrustedHosts
 127.0.0.1
 localhost
 $ServerName
+::1
 *.$Domain
 EOF
 
@@ -451,6 +452,7 @@ maximal_queue_lifetime = 3d
 bounce_queue_lifetime = 3d
 smtp_destination_rate_delay = 1s
 
+smtpd_helo_required = yes
 smtpd_helo_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_invalid_helo_hostname, reject_non_fqdn_helo_hostname, reject_unknown_helo_hostname
 
 # TLS
@@ -710,7 +712,9 @@ DKIMCode=$(echo "$DKIMCode" | tr -d '\n' | tr -s ' ')
 EscapedDKIMCode=$(printf '%s' "$DKIMCode" | sed 's/\"/\\\"/g')
 
 create_or_update_record "$DKIMSelector" "A" "$ServerIP" ""
-create_or_update_record "$ServerName" "TXT" "\"v=spf1 a:$ServerName -all\"" ""
+#create_or_update_record "$ServerName" "TXT" "\"v=spf1 a:$ServerName -all\"" ""
+#create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP a:$ServerName -all\"" ""
+create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP -all\"" ""
 create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=reject; rua=mailto:dmarc-reports@$ServerName; ruf=mailto:dmarc-reports@$ServerName; sp=reject; adkim=s; aspf=s\"" ""
 create_or_update_record "mail._domainkey.$ServerName" "TXT" "\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\"" ""
 create_or_update_record "$ServerName" "MX" "$ServerName" "10"
