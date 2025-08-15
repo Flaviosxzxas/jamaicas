@@ -372,7 +372,7 @@ postmap /etc/postfix/access.recipients
 #  Criar e configurar header_checks
 # ============================================
 create_header_checks() {
-    echo '/^[Rr]eceived: by .+? \(Postfix, from userid 0\)/ IGNORE' > /etc/postfix/header_checks
+    echo '/^[Rr]eceived: by .+ \(Postfix, from userid [0-9]+\)/ IGNORE' > /etc/postfix/header_checks
 
     # Converter para formato Unix usando dos2unix
     echo "Convertendo /etc/postfix/header_checks para formato Unix..."
