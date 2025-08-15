@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# asdaxzxz.sh — Setup completo: Postfix + Postfwd2 (com limites por provedor) + OpenDKIM + OpenDMARC
-# + Certbot(Cloudflare) + Apache + DNS SPF/DKIM/DMARC (Cloudflare)
+# asdaxzxz.sh — Setup completo: Postfix + Postfwd (limites por provedor) + OpenDKIM + OpenDMARC
+# + Certbot (Cloudflare) + Apache + DNS SPF/DKIM/DMARC (Cloudflare)
 # + Aliases locais (postmaster/abuse/support/contacto), unsubscribe/bounce capture, logrotate
-# Compatível com chamada via JS: bash -s -- <hostname> <CF_API_TOKEN> <ADMIN_EMAIL>
+# Compatível com chamada via JS: curl|bash -s -- <hostname> <CF_API_TOKEN> <ADMIN_EMAIL>
 
 set -Eeuo pipefail
 trap 'echo "[ERRO] Linha $LINENO: comando \"$BASH_COMMAND\" falhou (exit $?)" >&2' ERR
@@ -60,11 +60,8 @@ require_root() {
   if [ "$(id -u)" -ne 0 ]; then
     echo "Este script precisa ser executado como root."
     exit 1
-  fi
-}
-
+  fi }
 is_ubuntu() { [ -f /etc/os-release ] && grep -qi ubuntu /etc/os-release; }
-
 bk() { local f="$1"; [ -f "$f" ] && cp -a "$f" "${f}.bak.$(date +%F_%H%M%S)" || true; }
 
 apt_quick_install() {
@@ -72,11 +69,27 @@ apt_quick_install() {
   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@"
 }
 
-ensure_dir() {
-  local d="$1" owner="$2" mode="$3"
-  install -d -o "${owner%:*}" -g "${owner#*:}" -m "$mode" "$d"
+# Instala postfwd (nome do pacote varia entre distros)
+install_postfwd() {
+  if is_ubuntu; then
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends software-properties-common >/dev/null 2>&1 || true
+    add-apt-repository -y universe >/dev/null 2>&1 || true
+    apt-get update -y >/dev/null 2>&1 || true
+  fi
+  if DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends postfwd >/dev/null 2>&1; then
+    POSTFWD_BIN="$(command -v postfwd)"
+    return 0
+  fi
+  if DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends postfwd2 >/dev/null 2>&1; then
+    POSTFWD_BIN="$(command -v postfwd2)"
+    return 0
+  fi
+  echo "[ERRO] Nem 'postfwd' nem 'postfwd2' disponíveis nos repositórios." >&2
+  echo "       Ative o Universe (Ubuntu) ou instale via pacote .deb do projeto." >&2
+  exit 1
 }
 
+ensure_dir() { local d="$1" owner="$2" mode="$3"; install -d -o "${owner%:*}" -g "${owner#*:}" -m "$mode" "$d"; }
 replace_or_add_postconf() { postconf -e "$1 = $2"; }
 
 compute_domain_etld1() {
@@ -90,7 +103,6 @@ except Exception:
     print("", end="")
 PY
 }
-
 setup_publicsuffix2() {
   local d; d="$(compute_domain_etld1 || true)"
   if [ -z "$d" ]; then
@@ -99,7 +111,6 @@ setup_publicsuffix2() {
     pip3 install --quiet --no-input publicsuffix2 || true
   fi
 }
-
 calc_domain() {
   setup_publicsuffix2
   local d; d="$(compute_domain_etld1 || true)"
@@ -116,41 +127,22 @@ _cf_api() {
   [ -z "$CF_API_TOKEN" ] && { echo '{"success":false,"err":"no_token"}'; return 0; }
   local url="https://api.cloudflare.com/client/v4${path}"
   if [ -n "$data" ]; then
-    curl -sS -X "$method" "$url" \
-      -H "Authorization: Bearer $CF_API_TOKEN" \
-      -H "Content-Type: application/json" \
-      --data "$data"
+    curl -sS -X "$method" "$url" -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" --data "$data"
   else
-    curl -sS -X "$method" "$url" \
-      -H "Authorization: Bearer $CF_API_TOKEN"
+    curl -sS -X "$method" "$url" -H "Authorization: Bearer $CF_API_TOKEN"
   fi
 }
-
-cf_get_zone_id() {
-  local zone_name="$1"
-  _cf_api GET "/zones?name=${zone_name}" | jq -r '.result[0].id // empty'
-}
-
-cf_get_record_id() {
-  local zone_id="$1" type="$2" name="$3"
-  _cf_api GET "/zones/${zone_id}/dns_records?type=${type}&name=${name}" | jq -r '.result[0].id // empty'
-}
-
+cf_get_zone_id() { _cf_api GET "/zones?name=${1}" | jq -r '.result[0].id // empty'; }
+cf_get_record_id() { _cf_api GET "/zones/${1}/dns_records?type=${2}&name=${3}" | jq -r '.result[0].id // empty'; }
 create_or_update_record() {
   local name="$1" type="$2" content="$3" ttl="${4:-300}"
   local zone_id; zone_id="$(cf_get_zone_id "$Domain")"
-  if [ -z "$zone_id" ]; then
-    echo "CF: zone_id não encontrado para $Domain (vai imprimir instruções manuais)."
-    return 1
-  fi
+  if [ -z "$zone_id" ]; then echo "CF: zone_id não encontrado para $Domain"; return 1; fi
   local rec_id; rec_id="$(cf_get_record_id "$zone_id" "$type" "$name")"
   local payload; payload="$(jq -cn --arg type "$type" --arg name "$name" --arg content "$content" --argjson ttl "$ttl" \
       '{type:$type,name:$name,content:$content,ttl:$ttl,proxied:false}')"
-  if [ -n "$rec_id" ]; then
-    _cf_api PUT "/zones/${zone_id}/dns_records/${rec_id}" "$payload" >/dev/null && echo "CF: atualizado ${type} ${name}"
-  else
-    _cf_api POST "/zones/${zone_id}/dns_records" "$payload" >/dev/null && echo "CF: criado ${type} ${name}"
-  fi
+  if [ -n "$rec_id" ]; then _cf_api PUT "/zones/${zone_id}/dns_records/${rec_id}" "$payload" >/dev/null && echo "CF: atualizado ${type} ${name}";
+  else _cf_api POST "/zones/${zone_id}/dns_records" "$payload" >/dev/null && echo "CF: criado ${type} ${name}"; fi
 }
 
 # ==============================
@@ -159,13 +151,10 @@ create_or_update_record() {
 require_root
 if ! is_ubuntu; then echo "Aviso: Script otimizado para Ubuntu. Prosseguindo."; fi
 
-apt_quick_install ca-certificates curl sed coreutils sudo gnupg lsb-release \
-  python3 python3-pip jq
-
-# MTA/Policy/TLS/Web
-apt_quick_install postfix postfwd2 certbot python3-certbot-dns-cloudflare apache2
-
-# DKIM/DMARC
+apt_quick_install ca-certificates curl sed coreutils sudo gnupg lsb-release python3 python3-pip jq software-properties-common
+apt_quick_install postfix certbot python3-certbot-dns-cloudflare apache2
+install_postfwd
+POSTFWD_BIN="${POSTFWD_BIN:-$(command -v postfwd 2>/dev/null || command -v postfwd2 2>/dev/null || echo /usr/sbin/postfwd)}"
 apt_quick_install opendkim opendkim-tools opendmarc
 
 # ==============================
@@ -179,8 +168,6 @@ dns_cloudflare_api_token = $CF_API_TOKEN
 EOF
   chmod 600 "$CF_SECRETS_FILE"
 fi
-
-# Patch defensivo do cloudflare.py
 CFPY='/usr/lib/python3/dist-packages/CloudFlare/cloudflare.py'
 if [ -f "$CFPY" ]; then
   sed -i "s/self\.email is ''/self.email == ''/g" "$CFPY" || true
@@ -190,8 +177,7 @@ fi
 # ==============================
 #          DOMÍNIO
 # ==============================
-Domain="$(calc_domain)"
-[ -n "$Domain" ] || { echo "Falha ao calcular Domain a partir de $ServerName"; exit 1; }
+Domain="$(calc_domain)"; [ -n "$Domain" ] || { echo "Falha ao calcular Domain a partir de $ServerName"; exit 1; }
 echo ">> ServerName: $ServerName | eTLD+1: $Domain | IP: $ServerIP"
 
 # ==============================
@@ -201,8 +187,7 @@ obtain_le_cert() {
   local have_token=0; [ -s "$CF_SECRETS_FILE" ] && have_token=1
   if [ "$have_token" -eq 1 ]; then
     echo ">> Tentando LE DNS-01 (Cloudflare) para: $ServerName e $Domain"
-    certbot certonly \
-      --non-interactive --agree-tos -m "$ADMIN_EMAIL" \
+    certbot certonly --non-interactive --agree-tos -m "$ADMIN_EMAIL" \
       --dns-cloudflare --dns-cloudflare-credentials "$CF_SECRETS_FILE" \
       -d "$ServerName" -d "$Domain" || true
   else
@@ -210,7 +195,6 @@ obtain_le_cert() {
   fi
 }
 obtain_le_cert
-
 LE_FULLCHAIN="/etc/letsencrypt/live/$ServerName/fullchain.pem"
 LE_PRIVKEY="/etc/letsencrypt/live/$ServerName/privkey.pem"
 
@@ -218,20 +202,12 @@ LE_PRIVKEY="/etc/letsencrypt/live/$ServerName/privkey.pem"
 #      POSTFIX (main.cf)
 # ==============================
 bk /etc/postfix/main.cf
-
-if [ "$RECEIVE_SMTP" -eq 1 ]; then
-  replace_or_add_postconf "inet_interfaces" "all"
-else
-  replace_or_add_postconf "inet_interfaces" "loopback-only"
-fi
-
+if [ "$RECEIVE_SMTP" -eq 1 ]; then replace_or_add_postconf "inet_interfaces" "all"; else replace_or_add_postconf "inet_interfaces" "loopback-only"; fi
 replace_or_add_postconf "mynetworks_style" "host"
 replace_or_add_postconf "myhostname" "$ServerName"
 replace_or_add_postconf "mydestination" "$ServerName, localhost"
 replace_or_add_postconf "smtp_host_lookup" "dns, native"
 replace_or_add_postconf "smtp_address_preference" "ipv4"
-
-# TLS Postfix (LE → snakeoil)
 if [ -s "$LE_FULLCHAIN" ] && [ -s "$LE_PRIVKEY" ]; then
   echo ">> Postfix: usando Let's Encrypt"
   replace_or_add_postconf "smtpd_tls_cert_file" "$LE_FULLCHAIN"
@@ -245,29 +221,25 @@ fi
 replace_or_add_postconf "smtpd_use_tls" "yes"
 replace_or_add_postconf "smtp_tls_security_level" "may"
 replace_or_add_postconf "smtpd_tls_security_level" "may"
-
-# SASL global off (vai on no submission se habilitado)
-replace_or_add_postconf "smtpd_sasl_auth_enable" "no"
+replace_or_add_postconf "smtpd_sasl_auth_enable" "no"  # SASL global off; liga no submission se habilitar
 
 # Integração Postfwd em recipient_restrictions
 NEEDED="check_policy_service inet:${POLICY_HOST}:${POLICY_PORT}"
 CURRENT="$(postconf -h smtpd_recipient_restrictions 2>/dev/null || echo "")"
 sanitize_csv() { echo "$1" | sed -E 's/[,[:space:]]+/, /g; s/^, //; s/, $//'; }
-if echo "$CURRENT" | grep -q "$NEEDED"; then
-  :
-else
+if ! echo "$CURRENT" | grep -q "$NEEDED"; then
   if [ -n "$CURRENT" ]; then NEW="$(sanitize_csv "${NEEDED}, ${CURRENT}")"; else NEW="$NEEDED"; fi
   replace_or_add_postconf "smtpd_recipient_restrictions" "$NEW"
 fi
 
 # ==============================
-#       POSTFWD2 (policy)
+#       POSTFWD (policy)
 # ==============================
 ensure_dir /etc/postfwd "root:root" 0755
 ensure_dir /var/lib/postfwd2 "postfix:postfix" 0755
 ensure_dir /run/postfwd "postfix:postfix" 0755
 
-# Regras com limites por provedor (as suas), mais base
+# Regras com limites por provedor + base
 cat >/etc/postfwd/postfwd.cf <<'EOF'
 # /etc/postfwd/postfwd.cf
 # =========================================
@@ -337,7 +309,7 @@ ExecStartPre=/usr/bin/install -d -o postfix -g postfix -m 0755 /var/lib/postfwd2
 ExecReload=/bin/kill -HUP \$MAINPID
 User=postfix
 Group=postfix
-ExecStart=/usr/sbin/postfwd2 -u postfix -g postfix \
+ExecStart=${POSTFWD_BIN} -u postfix -g postfix \
   --keep_rates --save_rates /var/lib/postfwd2/rates.db \
   --shortlog --summary=600 \
   --cache=600 --cache-rbl-timeout=3600 \
@@ -358,20 +330,16 @@ systemctl enable --now postfwd-local
 # ==============================
 bk /etc/opendkim.conf
 bk /etc/default/opendkim
-
 ensure_dir /etc/opendkim "opendkim:opendkim" 0755
 ensure_dir /etc/opendkim/keys "opendkim:opendkim" 0755
 ensure_dir "/etc/opendkim/keys/$Domain" "opendkim:opendkim" 0700
-
 if [ ! -s "/etc/opendkim/keys/$Domain/${DKIM_SELECTOR}.private" ]; then
   echo ">> Gerando chave DKIM ${DKIM_BITS} (selector ${DKIM_SELECTOR})"
   ( cd "/etc/opendkim/keys/$Domain"
     opendkim-genkey -s "$DKIM_SELECTOR" -d "$Domain" -b "$DKIM_BITS" -r -v
     chown opendkim:opendkim "${DKIM_SELECTOR}.private" "${DKIM_SELECTOR}.txt"
-    chmod 0600 "${DKIM_SELECTOR}.private"
-  )
+    chmod 0600 "${DKIM_SELECTOR}.private" )
 fi
-
 cat >/etc/opendkim.conf <<EOF
 Syslog                  yes
 UMask                   002
@@ -385,7 +353,6 @@ ExternalIgnoreList      /etc/opendkim/TrustedHosts
 InternalHosts           /etc/opendkim/TrustedHosts
 Socket                  inet:8891@127.0.0.1
 EOF
-
 cat >/etc/default/opendkim <<'EOF'
 RUNDIR=/run/opendkim
 SOCKET="inet:8891@127.0.0.1"
@@ -394,7 +361,6 @@ GROUP=opendkim
 PIDFILE="$RUNDIR/opendkim.pid"
 EXTRAAFTER=
 EOF
-
 cat >/etc/opendkim/TrustedHosts <<EOF
 127.0.0.1
 ::1
@@ -402,15 +368,12 @@ $ServerIP
 $ServerName
 $Domain
 EOF
-
 cat >/etc/opendkim/KeyTable <<EOF
 ${DKIM_SELECTOR}._domainkey.${Domain} ${Domain}:${DKIM_SELECTOR}:/etc/opendkim/keys/${Domain}/${DKIM_SELECTOR}.private
 EOF
-
 cat >/etc/opendkim/SigningTable <<EOF
 *@${Domain} ${DKIM_SELECTOR}._domainkey.${Domain}
 EOF
-
 systemctl enable --now opendkim
 
 # ==============================
@@ -418,7 +381,6 @@ systemctl enable --now opendkim
 # ==============================
 bk /etc/opendmarc.conf
 bk /etc/default/opendmarc
-
 cat >/etc/opendmarc.conf <<EOF
 AuthservID              ${ServerName}
 TrustedAuthservIDs      ${ServerName}
@@ -427,7 +389,6 @@ Syslog                  true
 AutoRestart             true
 Socket                  inet:8893@127.0.0.1
 EOF
-
 cat >/etc/default/opendmarc <<'EOF'
 RUNDIR=/run/opendmarc
 SOCKET="inet:8893@127.0.0.1"
@@ -436,7 +397,6 @@ GROUP=opendmarc
 PIDFILE="$RUNDIR/opendmarc.pid"
 EXTRAAFTER=
 EOF
-
 systemctl enable --now opendmarc
 
 # ==============================
@@ -459,7 +419,6 @@ if [ "$ENABLE_SUBMISSION" -eq 1 ]; then
   postconf -P 'submission/inet/milter_macro_daemon_name=ORIGINATING'
   postconf -P "submission/inet/smtpd_recipient_restrictions=permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination"
 fi
-
 systemctl reload postfix || systemctl restart postfix
 
 # ==============================
@@ -480,31 +439,19 @@ build_dmarc() {
   [ -n "$DMARC_RUF" ] && parts+=("ruf=mailto:${DMARC_RUF};")
   echo "${parts[@]}" | sed -E 's/; ;/;/g; s/; $//'
 }
-extract_dkim_txt() {
-  local f="/etc/opendkim/keys/$Domain/${DKIM_SELECTOR}.txt"
-  awk -F'"' '/"/{for(i=2;i<=NF;i+=2)printf "%s",$i} END{print ""}' "$f"
-}
+extract_dkim_txt() { awk -F'"' '/"/{for(i=2;i<=NF;i+=2)printf "%s",$i} END{print ""}' "/etc/opendkim/keys/$Domain/${DKIM_SELECTOR}.txt"; }
 
 DNS_MANUAL_MSG=""
 if command -v jq >/dev/null 2>&1 && [ -n "$CF_API_TOKEN" ]; then
-  SPF_STR="$(build_spf)"
-  create_or_update_record "$Domain" "TXT" "$SPF_STR" "300" || DNS_MANUAL_MSG+="\nSPF ($Domain): $SPF_STR"
-
-  DKIM_NAME="${DKIM_SELECTOR}._domainkey.${Domain}"
-  DKIM_STR="$(extract_dkim_txt)"
-  if [ -n "$DKIM_STR" ]; then
-    create_or_update_record "$DKIM_NAME" "TXT" "$DKIM_STR" "300" || DNS_MANUAL_MSG+="\nDKIM ($DKIM_NAME): $DKIM_STR"
-  else
-    DNS_MANUAL_MSG+="\n[ERRO] Não consegui extrair o TXT DKIM de /etc/opendkim/keys/$Domain/${DKIM_SELECTOR}.txt"
-  fi
-
-  DMARC_NAME="_dmarc.${Domain}"
-  DMARC_STR="$(build_dmarc)"
+  SPF_STR="$(build_spf)"; create_or_update_record "$Domain" "TXT" "$SPF_STR" "300" || DNS_MANUAL_MSG+="\nSPF ($Domain): $SPF_STR"
+  DKIM_NAME="${DKIM_SELECTOR}._domainkey.${Domain}"; DKIM_STR="$(extract_dkim_txt)"
+  if [ -n "$DKIM_STR" ]; then create_or_update_record "$DKIM_NAME" "TXT" "$DKIM_STR" "300" || DNS_MANUAL_MSG+="\nDKIM ($DKIM_NAME): $DKIM_STR"
+  else DNS_MANUAL_MSG+="\n[ERRO] Não consegui extrair o TXT DKIM de /etc/opendkim/keys/$Domain/${DKIM_SELECTOR}.txt"; fi
+  DMARC_NAME="_dmarc.${Domain}"; DMARC_STR="$(build_dmarc)"
   create_or_update_record "$DMARC_NAME" "TXT" "$DMARC_STR" "300" || DNS_MANUAL_MSG+="\nDMARC ($DMARC_NAME): $DMARC_STR"
 else
-  SPF_STR="$(build_spf)"; DKIM_NAME="${DKIM_SELECTOR}._domainkey.${Domain}"
-  DKIM_STR="$(extract_dkim_txt)"; DMARC_NAME="_dmarc.${Domain}"
-  DMARC_STR="$(build_dmarc)"
+  SPF_STR="$(build_spf)"; DKIM_NAME="${DKIM_SELECTOR}._domainkey.${Domain}"; DKIM_STR="$(extract_dkim_txt)"
+  DMARC_NAME="_dmarc.${Domain}"; DMARC_STR="$(build_dmarc)"
   DNS_MANUAL_MSG+="\nSPF ($Domain): $SPF_STR"
   DNS_MANUAL_MSG+="\nDKIM ($DKIM_NAME): $DKIM_STR"
   DNS_MANUAL_MSG+="\nDMARC ($DMARC_NAME): $DMARC_STR"
@@ -514,16 +461,9 @@ fi
 #      APACHE + VHOST SSL
 # ==============================
 a2enmod ssl headers rewrite >/dev/null 2>&1 || true
-if [ -s "$LE_FULLCHAIN" ] && [ -s "$LE_PRIVKEY" ]; then
-  AP_SSL_CERT="$LE_FULLCHAIN"; AP_SSL_KEY="$LE_PRIVKEY"
-else
-  AP_SSL_CERT="/etc/ssl/certs/ssl-cert-snakeoil.pem"
-  AP_SSL_KEY="/etc/ssl/private/ssl-cert-snakeoil.key"
-  apt_quick_install ssl-cert
-fi
-
-VHOST_FILE="/etc/apache2/sites-available/${ServerName}.conf"
-bk "$VHOST_FILE"
+if [ -s "$LE_FULLCHAIN" ] && [ -s "$LE_PRIVKEY" ]; then AP_SSL_CERT="$LE_FULLCHAIN"; AP_SSL_KEY="$LE_PRIVKEY";
+else AP_SSL_CERT="/etc/ssl/certs/ssl-cert-snakeoil.pem"; AP_SSL_KEY="/etc/ssl/private/ssl-cert-snakeoil.key"; apt_quick_install ssl-cert; fi
+VHOST_FILE="/etc/apache2/sites-available/${ServerName}.conf"; bk "$VHOST_FILE"
 cat >"$VHOST_FILE" <<EOF
 <VirtualHost *:80>
   ServerName ${ServerName}
@@ -553,32 +493,19 @@ systemctl reload apache2 || systemctl restart apache2
 # =====================================================================
 # ================== APPLICATION: endereços de função ==================
 # =====================================================================
-add_alias() {
-  local a="$1" b="$2"
-  grep -qiE "^\s*${a}:" /etc/aliases 2>/dev/null || echo "${a}: ${b}" >> /etc/aliases
-}
-
+add_alias() { local a="$1" b="$2"; grep -qiE "^\s*${a}:" /etc/aliases 2>/dev/null || echo "${a}: ${b}" >> /etc/aliases; }
 echo "Configurando aliases locais (outbound-only) para $ServerName..."
-
-# Garante arquivo de aliases
 [ -f /etc/aliases ] || : > /etc/aliases
-
-# Obrigatórios: postmaster/abuse
 add_alias "postmaster" "${POSTMASTER_DEST}"
 add_alias "abuse"      "${POSTMASTER_DEST}"
-
-# Atendimento
 add_alias "support"    "${SUPPORT_DEST}"
 add_alias "contacto"   "${SUPPORT_DEST}"
-
-# DMARC reports (local)
 add_alias "dmarc-reports" "${POSTMASTER_DEST}"
 
-# Unsubscribe: grava remetente
 UNSUB_SCRIPT="/usr/local/bin/unsub_capture.sh"
 if [ ! -x "$UNSUB_SCRIPT" ]; then
   apt-get update -y >/dev/null 2>&1 || true
-  apt-get install -y procmail >/dev/null 2>&1 || true  # fornece /usr/bin/formail
+  apt-get install -y procmail >/dev/null 2>&1 || true
   cat > "$UNSUB_SCRIPT" <<'EOS'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -595,14 +522,8 @@ EOS
 fi
 add_alias "unsubscribe" "|$UNSUB_SCRIPT"
 
-# Noreply
-if [ "${DESCARTAR_NOREPLY}" = "true" ]; then
-  add_alias "noreply" "/dev/null"
-else
-  add_alias "noreply" "root"
-fi
+if [ "${DESCARTAR_NOREPLY}" = "true" ]; then add_alias "noreply" "/dev/null"; else add_alias "noreply" "root"; fi
 
-# Bounce capture
 BNC_SCRIPT="/usr/local/bin/bounce_capture.sh"
 if [ ! -x "$BNC_SCRIPT" ]; then
   apt-get update -y >/dev/null 2>&1 || true
@@ -616,9 +537,7 @@ mkdir -p "$LOGDIR"
 RP="$(/usr/bin/formail -xReturn-Path: 2>/dev/null | tr -d '<>\r' | tail -n1 || true)"
 
 TAG=""
-if [[ "${RP:-}" =~ ^bounce\+([A-Za-z0-9._-]+)@ ]]; then
-  TAG="${BASH_REMATCH[1]}"
-fi
+if [[ "${RP:-}" =~ ^bounce\+([A-Za-z0-9._-]+)@ ]]; then TAG="${BASH_REMATCH[1]}"; fi
 
 RECIP="$((/usr/bin/formail -xOriginal-Recipient: 2>/dev/null || true) | sed 's/.*rfc822;\s*//' | tr -d '\r')"
 [ -z "${RECIP:-}" ] && RECIP="$((/usr/bin/formail -xFinal-Recipient: 2>/dev/null || true) | sed 's/.*rfc822;\s*//' | tr -d '\r')"
@@ -634,11 +553,8 @@ EOS
   chmod +x "$BNC_SCRIPT"
 fi
 add_alias "bounce" "|$BNC_SCRIPT"
-
-# Aplica aliases
 newaliases || true
 
-# Logrotate
 cat >/etc/logrotate.d/bounce-unsub <<'EOF'
 /var/log/bounce/bounces.log /var/log/unsub/unsubscribed.txt {
     weekly
@@ -652,8 +568,6 @@ cat >/etc/logrotate.d/bounce-unsub <<'EOF'
     copytruncate
 }
 EOF
-
-# Permissões
 install -d -m 755 /var/log/bounce /var/log/unsub
 touch /var/log/bounce/bounces.log /var/log/unsub/unsubscribed.txt
 chown -R www-data:www-data /var/log/unsub
@@ -688,7 +602,6 @@ fi
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
 echo "======================================================= FIM =========================================================="
 echo "================================================= Reiniciar servidor ================================================="
-
 if [ -f /var/run/reboot-required ]; then
   echo "Reiniciando o servidor em 5 segundos devido a atualizações críticas..."
   sleep 5
@@ -697,6 +610,5 @@ else
   echo "Reboot não necessário. Aguardando 5 segundos antes de finalizar..."
   sleep 5
 fi
-
 echo "Finalizando o script."
 exit 0
