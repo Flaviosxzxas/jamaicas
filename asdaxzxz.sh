@@ -461,15 +461,14 @@ non_smtpd_milters = \$smtpd_milters
 
 # Restrições de destinatários
 smtpd_recipient_restrictions =
+    permit_mynetworks,
+    permit_sasl_authenticated,
+    check_recipient_access hash:/etc/postfix/access.recipients,
     reject_non_fqdn_recipient,
     reject_unknown_recipient_domain,
     reject_unauth_destination,
-    check_policy_service inet:127.0.0.1:10045,
-    permit_sasl_authenticated,
-    permit_mynetworks,
     reject_unlisted_recipient,
-    check_recipient_access hash:/etc/postfix/access.recipients
-
+    check_policy_service inet:127.0.0.1:10045
     
 # Não deixe vazio (evita aceitar locais inexistentes)
 local_recipient_maps = proxy:unix:passwd.byname \$alias_maps
@@ -488,7 +487,8 @@ smtpd_helo_required = yes
 smtpd_helo_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_invalid_helo_hostname, reject_non_fqdn_helo_hostname, reject_unknown_helo_hostname
 
 # TLS
-
+smtpd_tls_cert_file = $TLS_CERT
+smtpd_tls_key_file  = $TLS_KEY
 smtpd_tls_security_level = may
 smtpd_tls_loglevel = 2
 smtpd_tls_received_header = yes
@@ -650,7 +650,7 @@ User=postfix
 Group=postfix
 
 # Executa postfwd2 em modo daemon (sem --nodaemon para rate() funcionar)
-ExecStart=/usr/sbin/postfwd2 -u postfix -g postfix \
+ExecStart=/usr/sbin/postfwd2 -u postfix -g postfix \ --keep_rates --save_rates /var/lib/postfwd2/rates.db
   --shortlog --summary=600 \
   --cache=600 --cache-rbl-timeout=3600 \
   --cleanup-requests=1200 --cleanup-rbls=1800 --cleanup-rates=1200 \
@@ -676,41 +676,31 @@ else
   PFW_OK=0
 fi
 
-# Integração no Postfix (adiciona ou remove a policy conforme status)
+# Integração no Postfix (aplica OU remove policy com ordem correta)
 NEEDED='check_policy_service inet:127.0.0.1:10045'
 CURRENT="$(postconf -h smtpd_recipient_restrictions 2>/dev/null || echo '')"
+
+# Cadeias canônicas (rejeições -> policy -> permits -> extras)
+POLICY_CHAIN='reject_non_fqdn_recipient, reject_unknown_recipient_domain, reject_unauth_destination, '"$NEEDED"', permit_sasl_authenticated, permit_mynetworks, reject_unlisted_recipient, check_recipient_access hash:/etc/postfix/access.recipients'
+FALLBACK_CHAIN='reject_non_fqdn_recipient, reject_unknown_recipient_domain, reject_unauth_destination, permit_sasl_authenticated, permit_mynetworks, reject_unlisted_recipient, check_recipient_access hash:/etc/postfix/access.recipients'
 
 sanitize_csv() { echo "$1" | sed -E 's/[,[:space:]]+/, /g; s/^, //; s/, $//'; }
 
 if [ "$PFW_OK" -eq 1 ]; then
-  # Adiciona se não existir
-  if ! echo "$CURRENT" | grep -qF "$NEEDED"; then
-    if [ -z "$CURRENT" ]; then
-      # baseline conservadora + policy
-      NEWVAL="permit_mynetworks, permit_sasl_authenticated, reject_non_fqdn_recipient, reject_unknown_recipient_domain, reject_unauth_destination, reject_unlisted_recipient, $NEEDED"
-    else
-      # remove ocorrências antigas do mesmo check antes de anexar
-      CLEANED="$(echo "$CURRENT" | sed -E 's/,\s*check_policy_service inet:127\.0\.0\.1:10045//g')"
-      NEWVAL="$(sanitize_csv "$CLEANED"), $NEEDED"
-    fi
-    postconf -e "smtpd_recipient_restrictions=$NEWVAL"
-    systemctl reload postfix
-    echo "[postfwd] policy adicionada em smtpd_recipient_restrictions."
-  else
-    echo "[postfwd] policy já presente no Postfix."
-  fi
+  postconf -e "smtpd_recipient_restrictions=$POLICY_CHAIN"
+  postconf -P "submission/inet/smtpd_recipient_restrictions=$POLICY_CHAIN"
+  echo "[postfwd] policy aplicada."
 else
-  # Serviço não está OK: remove a policy, se existir
-  if echo "$CURRENT" | grep -qF "$NEEDED"; then
-    CLEANED="$(echo "$CURRENT" | sed -E 's/,\s*check_policy_service inet:127\.0\.0\.1:10045//g; s/check_policy_service inet:127\.0\.0\.1:10045,?\s*//g')"
-    CLEANED="$(sanitize_csv "$CLEANED")"
-    postconf -e "smtpd_recipient_restrictions=$CLEANED"
-    systemctl reload postfix
-    echo "[postfwd] policy removida (fallback para não impactar envios)."
-  fi
+  postconf -e "smtpd_recipient_restrictions=$FALLBACK_CHAIN"
+  postconf -P "submission/inet/smtpd_recipient_restrictions=$FALLBACK_CHAIN"
+  echo "[postfwd] serviço indisponível — fallback sem policy aplicado."
 fi
 
-# Mostra status resumido
+# Gera .db do access.recipients (se existir) e aplica sem derrubar
+[ -f /etc/postfix/access.recipients ] && postmap /etc/postfix/access.recipients || true
+systemctl reload postfix || true
+
+# Mostra status resumido# Mostra status resumido
 systemctl --no-pager --full status postfwd-local | sed -n '1,20p' || true
 postconf -n | grep -E '^smtpd_recipient_restrictions|^smtpd_milters|^non_smtpd_milters' || true
 ###############################################################################
