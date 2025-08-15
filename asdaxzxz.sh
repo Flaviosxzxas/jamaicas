@@ -505,20 +505,46 @@ EOF
 # Salvar variáveis antes de instalar dependências
 ORIGINAL_VARS=$(declare -p ServerName CloudflareAPI CloudflareEmail Domain DKIMSelector ServerIP)
 
-# === MAIL.LOG via rsyslog ===
+# === MAIL.LOG via rsyslog (com criação e rotação) ===
 apt-get update -y
 apt-get install -y rsyslog logrotate
 
+# rsyslog: direcione apenas mensagens da facility "mail" para /var/log/mail.log
 cat >/etc/rsyslog.d/49-mail.conf <<'EOF'
 mail.*   -/var/log/mail.log
 & stop
 EOF
 
+# garanta o arquivo e as permissões (Ubuntu: syslog:adm)
+touch /var/log/mail.log
+chown syslog:adm /var/log/mail.log
+chmod 0640 /var/log/mail.log
+
+# logrotate para /var/log/mail.log
+cat >/etc/logrotate.d/mail-log <<'EOF'
+/var/log/mail.log {
+    daily
+    missingok
+    rotate 14
+    compress
+    delaycompress
+    notifempty
+    create 0640 syslog adm
+    sharedscripts
+    postrotate
+        invoke-rc.d rsyslog rotate >/dev/null 2>&1 || true
+    endscript
+}
+EOF
+
+# (re)ativar e reiniciar rsyslog
 systemctl enable --now rsyslog
 systemctl restart rsyslog
-systemctl restart postfix
 
-logger -p mail.info "postfix: teste de log (rsyslog ativo)"
+# teste rápido
+logger -p mail.info "rsyslog: teste de escrita $(date)"
+tail -n 5 /var/log/mail.log || true
+
 
 ###############################################################################
 # POSTFWD (policy de rate limit por MX) rodando como postfix:postfix
@@ -800,12 +826,20 @@ else
 fi
 
 # --- Postfix depende (soft) de DKIM/DMARC (sem travar se um deles cair)
-echo "[Postfix] Ajustando dependência systemd (DKIM/DMARC antes do Postfix)..."
 mkdir -p /etc/systemd/system/postfix.service.d
-cat >/etc/systemd/system/postfix.service.d/10-milters.conf <<'EOF'
+
+# remova algum drop-in antigo que possa criar ciclo de dependência
+rm -f /etc/systemd/system/postfix.service.d/override.conf
+
+tee /etc/systemd/system/postfix.service.d/10-milters.conf >/dev/null <<'EOF'
 [Unit]
-Wants=opendkim.service opendmarc.service postfwd-local.service
-After=network-online.target opendkim.service opendmarc.service postfwd-local.service
+# Garanta que DKIM/DMARC sobem antes do Postfix
+After=opendkim.service opendmarc.service
+# Escolha UMA das linhas abaixo:
+# - Use Requires= se NÃO quiser enviar sem DKIM/DMARC:
+Requires=opendkim.service opendmarc.service
+# - OU troque por Wants= se quiser que o Postfix suba mesmo se um deles falhar:
+#Wants=opendkim.service opendmarc.service
 EOF
 
 systemctl daemon-reload
@@ -837,7 +871,13 @@ if ! systemctl is-active --quiet postfix; then
   timeout 8s systemctl reload postfix || true
 fi
 
-# Relatórios rápidos (não bloqueiam) para você saber como ficou
+echo "[health] serviços:"
+systemctl is-active --quiet rsyslog       && echo "rsyslog OK"        || echo "rsyslog FAIL"
+systemctl is-active --quiet opendkim      && echo "opendkim OK"       || echo "opendkim FAIL"
+systemctl is-active --quiet opendmarc     && echo "opendmarc OK"      || echo "opendmarc FAIL"
+systemctl is-active --quiet postfwd-local && echo "postfwd-local OK"  || echo "postfwd-local FAIL"
+systemctl is-active --quiet postfix       && echo "postfix OK"        || echo "postfix FAIL"
+
 echo "[health] sockets locais:"
 ss -ltnp | grep -E '127\.0\.0\.1:(12301|54321|10045)|:25\b' || true
 
@@ -845,6 +885,7 @@ echo "[health] postfix conf (policy e milters):"
 postconf -n | grep -E '^smtpd_recipient_restrictions|check_policy_service|^smtpd_milters|^non_smtpd_milters' || true
 
 echo "[OK] Fim do setup."
+
 
 
 echo "==================================================== CLOUDFLARE ===================================================="
