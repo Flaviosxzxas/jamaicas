@@ -1,45 +1,41 @@
 #!/bin/bash
-set -Eeuo pipefail
+set -euo pipefail
 
-# =============================================================================
-# postfwd + Postfix integration (systemd native) — idempotente
-# =============================================================================
-
-# 0) Root check
+# ============================================
+# 1) Root check
+# ============================================
 if [ "$(id -u)" -ne 0 ]; then
   echo "Este script precisa ser executado como root."
   exit 1
 fi
 
 export DEBIAN_FRONTEND=noninteractive
-HOLD_SECS="${HOLD_SECS:-120}"   # quanto tempo segurar aberto sem TTY, p/ ver logs
 
-# 1) Dependências básicas
-echo "[deps] Atualizando índice e instalando requisitos…"
+# ============================================
+# 2) Dependências básicas (sem 'awk')
+# ============================================
 apt-get update -y
-apt-get install -y curl ca-certificates grep sed awk iproute2 iputils-ping >/dev/null
+apt-get install -y curl ca-certificates grep sed iproute2 iputils-ping
 
-# 2) Instalar postfwd
-echo "[postfwd] Instalando pacote…"
-apt-get install -y postfwd >/dev/null || {
-  echo "[postfwd] ERRO: não consegui instalar o pacote 'postfwd'."
-  exit 1
-}
+# ============================================
+# 3) Instalar postfwd
+# ============================================
+echo "[postfwd] Instalando…"
+apt-get install -y postfwd
 
-# 3) Descobrir binário (postfwd, postfwd2, postfwd3)
-PFWBIN="$(command -v postfwd3 || true)"
-[ -x "$PFWBIN" ] || PFWBIN="$(command -v postfwd2 || true)"
-[ -x "$PFWBIN" ] || PFWBIN="$(command -v postfwd  || true)"
-if [ -z "${PFWBIN:-}" ] || [ ! -x "$PFWBIN" ]; then
+PFWBIN="$(command -v postfwd3 || command -v postfwd2 || command -v postfwd || true)"
+if [ -z "$PFWBIN" ]; then
   echo "[postfwd] ERRO: binário não encontrado após instalação."
   exit 1
 fi
-echo "[postfwd] Binário: $PFWBIN"
 
-# 4) Gravar regras em /etc/postfwd/postfwd.cf (idempotente)
-install -d -m 0755 /etc/postfwd
+# ============================================
+# 4) Gravar /etc/postfwd/postfwd.cf
+# ============================================
+mkdir -p /etc/postfwd
 PFWCFG="/etc/postfwd/postfwd.cf"
-cat >"$PFWCFG" <<'EOF'
+
+cat > "$PFWCFG" <<'EOF'
 # ==== LIMITES POR PROVEDOR (ajuste as taxas conforme sua realidade) =====
 # Sintaxe: action=rate(<bucket>/<limite>/<janela_em_segundos>) defer_if_permit "mensagem"
 
@@ -135,95 +131,67 @@ action=rate(global/200/3600) defer_if_permit "Limite de 200/h atingido p/ Telcel
 
 # ===== CATCH-ALL: o que não casou acima segue permitido =====
 id=no-limit
-pattern=recipient mx=.**
+pattern=recipient mx=.*
 action=permit
 EOF
+
 chmod 0644 "$PFWCFG"
 echo "[postfwd] Regras gravadas em $PFWCFG"
 
-# 5) Criar unit nativa systemd: /etc/systemd/system/postfwd.service
-UNIT="/etc/systemd/system/postfwd.service"
-cat >"$UNIT" <<EOF
+# ============================================
+# 5) Unit file systemd nativo (evita update-rc.d)
+# ============================================
+cat > /etc/systemd/system/postfwd.service <<EOF
 [Unit]
-Description=Postfix Policy Daemon (postfwd)
-After=network.target
-Wants=network.target
+Description=postfwd policy daemon (local-only)
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=$PFWBIN --nodaemon --shortlog --summary=600 --cache=600 --cache-rbl-timeout=3600 \
-  --cleanup-requests=1200 --cleanup-rbls=1800 --cleanup-rates=1200 \
-  --file=$PFWCFG --interface=127.0.0.1 --port=10045
+ExecStart=$PFWBIN --nodaemon --shortlog --summary=600 --cache=600 --cache-rbl-timeout=3600 --cleanup-requests=1200 --cleanup-rbls=1800 --cleanup-rates=1200 --file=$PFWCFG --interface=127.0.0.1 --port=10045
 Restart=on-failure
-RestartSec=2s
-NoNewPrivileges=yes
+User=postfix
+Group=postfix
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-chmod 0644 "$UNIT"
 systemctl daemon-reload
+systemctl enable --now postfwd
 
-# 5.1) (Opcional) Silenciar compatibilidade SysV, se existir /etc/init.d/postfwd sem LSB
-if [ -x /etc/init.d/postfwd ]; then
-  if ! awk '/^### BEGIN INIT INFO/,/^### END INIT INFO/' /etc/init.d/postfwd | grep -q 'Default-Start:'; then
-    echo "[compat] Injetando cabeçalho LSB no /etc/init.d/postfwd (para evitar update-rc.d erro)…"
-    tmp="$(mktemp)"
-    awk 'NR==1 {
-            print $0
-            print "### BEGIN INIT INFO"
-            print "# Provides:          postfwd"
-            print "# Required-Start:    $remote_fs $network"
-            print "# Required-Stop:     $remote_fs $network"
-            print "# Default-Start:     2 3 4 5"
-            print "# Default-Stop:      0 1 6"
-            print "# Short-Description: Postfix policy daemon"
-            print "### END INIT INFO"
-            next
-         } {print}' /etc/init.d/postfwd >"$tmp" && cat "$tmp" > /etc/init.d/postfwd && rm -f "$tmp"
-    chmod +x /etc/init.d/postfwd
-    update-rc.d postfwd defaults || true
-  fi
-fi
-
-# 6) Habilitar e iniciar a unit nativa
-echo "[systemd] Habilitando e iniciando postfwd.service…"
-systemctl enable --now postfwd.service
-
-# 7) Integrar no Postfix (só adiciona policy se faltar)
+# ============================================
+# 6) Integrar no Postfix (se ainda não tiver)
+# ============================================
 NEEDED='check_policy_service inet:127.0.0.1:10045'
 CURRENT="$(postconf -h smtpd_recipient_restrictions || true)"
+
 if [ -z "$CURRENT" ]; then
   echo "[postfix] smtpd_recipient_restrictions vazio — criando baseline + policy"
   postconf -e "smtpd_recipient_restrictions=permit_mynetworks, permit_sasl_authenticated, reject_non_fqdn_recipient, reject_unknown_recipient_domain, reject_unauth_destination, reject_unlisted_recipient, ${NEEDED}"
-elif ! echo "$CURRENT" | grep -qF "$NEEDED"; then
-  echo "[postfix] adicionando policy service ao final de smtpd_recipient_restrictions…"
-  postconf -e "smtpd_recipient_restrictions=${CURRENT}, ${NEEDED}"
 else
-  echo "[postfix] policy service já presente em smtpd_recipient_restrictions."
+  echo "[postfix] smtpd_recipient_restrictions atual: $CURRENT"
+  if ! echo "$CURRENT" | grep -qF "$NEEDED"; then
+    echo "[postfix] adicionando policy service ao final…"
+    postconf -e "smtpd_recipient_restrictions=${CURRENT}, ${NEEDED}"
+  else
+    echo "[postfix] policy service já presente."
+  fi
 fi
 
 systemctl restart postfix
 
-# 8) Healthcheck rápido
-echo
-echo "==================== HEALTHCHECK ===================="
-echo "[status] postfwd.service:"
-systemctl --no-pager --full status postfwd.service | sed -n '1,20p' || true
-echo
-echo "[listen] porta 10045 em loopback:"
-ss -ltnp | grep -E '127\.0\.0\.1:10045' || echo "(!) nada ouvindo em 127.0.0.1:10045"
-echo
-echo "[postfix] conf relevante:"
-postconf -n | grep -E '^smtpd_recipient_restrictions|^smtpd_milters|^non_smtpd_milters' || true
-echo "====================================================="
-echo
+# ============================================
+# 7) Healthcheck
+# ============================================
+echo "[health] postfwd:"
+systemctl --no-pager --full status postfwd | sed -n '1,25p' || true
 
-# 9) Segura aberto se não houver TTY (útil quando rodado via ssh sem interação)
-if [ -t 0 ]; then
-  read -rp "Pressione ENTER para sair… " _ || true
-else
-  echo "Sem TTY; mantendo aberto por ${HOLD_SECS}s para você ver os logs…"
-  sleep "$HOLD_SECS" || true
-fi
+echo "[health] porta 10045 (loopback):"
+ss -ltnp | grep -E '127\.0\.0\.1:10045' || true
+
+echo "[health] postfix conf (recipients):"
+postconf -n | grep -E '^smtpd_recipient_restrictions|^smtpd_milters|^non_smtpd_milters' || true
+
+echo "[ok] postfwd integrado ao Postfix (loopback only). Sem abrir recepção externa."
