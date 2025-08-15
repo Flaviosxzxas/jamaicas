@@ -275,18 +275,65 @@ ensure_dir /var/lib/postfwd2 "postfix:postfix" 0755
 ensure_dir /run/postfwd "postfix:postfix" 0755
 
 cat >/etc/postfwd/postfwd.cf <<'EOF'
-# Regras básicas + rate por IP/RCPT (exemplo)
+# /etc/postfwd/postfwd.cf
+# =========================================
+# BASE: proteções gerais
+# =========================================
+
+# Rate por IP (exemplo educativo; ajuste à sua realidade)
 id=RATELIMIT_BY_IP
   request=smtpd_access_policy
   protocol_state=RCPT
   protocol_name=SMTP
   client_address==~/.*/
-  action=rate(client_address/60/60/100 "550 5.7.1 Too many recipients from your IP; try later")
+  action=rate(client_address/60/60/100 "450 4.7.1 Too many rcpt per IP; try later")
 
+# Rede local/liberada
 id=LOCAL_NETS
   request=smtpd_access_policy
   client_address=127.0.0.1
   action=DUNNO
+
+# =========================================
+# LIMITES POR PROVEDOR (seus limites)
+# =========================================
+
+# Grandes provedores globais
+id=limit-gmail;     recipient=~/.+@gmail\.com$/;                                      action=rate(recipient_domain/2000/3600/450 "4.7.1 Limite 2000/h atingido p/ Gmail")
+id=limit-msn;       recipient=~/.+@(outlook\.com|hotmail\.com|live\.com|msn\.com)$/;  action=rate(recipient_domain/1000/86400/450 "4.7.1 Limite 1000/dia atingido p/ Microsoft")
+id=limit-yahoo;     recipient=~/.+@yahoo\.(com|com\.br|com\.ar|com\.mx)$/;            action=rate(recipient_domain/150/3600/450 "4.7.1 Limite 150/h atingido p/ Yahoo")
+
+# Provedores/hostings “de marca”
+id=limit-kinghost;  recipient=~/.+@kinghost\.net$/;                                   action=rate(recipient_domain/300/3600/450 "4.7.1 Limite 300/h atingido p/ KingHost")
+id=limit-uol;       recipient=~/.+@uol\.com\.br$/;                                    action=rate(recipient_domain/300/3600/450 "4.7.1 Limite 300/h atingido p/ UOL")
+id=limit-locaweb;   recipient=~/.+@locaweb\.com\.br$/;                                action=rate(recipient_domain/500/3600/450 "4.7.1 Limite 500/h atingido p/ Locaweb")
+id=limit-mandic;    recipient=~/.+@mandic\.com\.br$/;                                 action=rate(recipient_domain/200/3600/450 "4.7.1 Limite 200/h atingido p/ Mandic")
+id=limit-titan;     recipient=~/.+@titan\.email$/;                                    action=rate(recipient_domain/500/3600/450 "4.7.1 Limite 500/h atingido p/ Titan")
+id=limit-godaddy;   recipient=~/.+@secureserver\.net$/;                               action=rate(recipient_domain/300/3600/450 "4.7.1 Limite 300/h atingido p/ GoDaddy")
+id=limit-zimbra;    recipient=~/.+@zimbra\..+$/;                                      action=rate(recipient_domain/400/3600/450 "4.7.1 Limite 400/h atingido p/ Zimbra")
+
+# Microsoft 365 “de marca” – geralmente não há @office365.com; manter comentado se não usar
+# id=limit-office365; recipient=~/.+@office365\.com$/; action=rate(recipient_domain/2000/3600/450 "4.7.1 Limite 2000/h atingido p/ Office365")
+
+# Argentina — ISPs/domínios comuns
+id=limit-fibertel;  recipient=~/.+@fibertel\.com\.ar$/;                               action=rate(recipient_domain/200/3600/450 "4.7.1 Limite 200/h atingido p/ Fibertel")
+id=limit-speedy;    recipient=~/.+@speedy\.com\.ar$/;                                 action=rate(recipient_domain/200/3600/450 "4.7.1 Limite 200/h atingido p/ Speedy")
+id=limit-personal;  recipient=~/.+@personal\.com\.ar$/;                               action=rate(recipient_domain/200/3600/450 "4.7.1 Limite 200/h atingido p/ Personal")
+id=limit-telecom;   recipient=~/.+@telecom\.com\.ar$/;                                action=rate(recipient_domain/200/3600/450 "4.7.1 Limite 200/h atingido p/ Telecom")
+id=limit-claro-ar;  recipient=~/.+@claro\.com\.ar$/;                                  action=rate(recipient_domain/200/3600/450 "4.7.1 Limite 200/h atingido p/ Claro AR")
+
+# México — ISPs/domínios comuns
+id=limit-telmex;    recipient=~/.+@prodigy\.net\.mx$/;                                action=rate(recipient_domain/200/3600/450 "4.7.1 Limite 200/h atingido p/ Telmex")
+id=limit-axtel;     recipient=~/.+@axtel\.net$/;                                      action=rate(recipient_domain/200/3600/450 "4.7.1 Limite 200/h atingido p/ Axtel")
+id=limit-izzi;      recipient=~/.+@izzi\.net\.mx$/;                                   action=rate(recipient_domain/200/3600/450 "4.7.1 Limite 200/h atingido p/ Izzi")
+id=limit-megacable; recipient=~/.+@megacable\.com\.mx$/;                              action=rate(recipient_domain/200/3600/450 "4.7.1 Limite 200/h atingido p/ Megacable")
+id=limit-totalplay; recipient=~/.+@totalplay\.net\.mx$/;                              action=rate(recipient_domain/200/3600/450 "4.7.1 Limite 200/h atingido p/ TotalPlay")
+id=limit-telcel;    recipient=~/.+@telcel\.net$/;                                     action=rate(recipient_domain/200/3600/450 "4.7.1 Limite 200/h atingido p/ Telcel")
+
+# =========================================
+# FINAL: não decide nada (deixa Postfix seguir)
+# =========================================
+id=default;         recipient=~/.+/;                                                  action=DUNNO
 EOF
 
 cat >/etc/systemd/system/postfwd-local.service <<EOF
