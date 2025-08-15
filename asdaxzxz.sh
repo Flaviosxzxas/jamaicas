@@ -618,7 +618,7 @@ cat >/etc/systemd/system/postfwd-local.service <<'EOF'
 Description=postfwd policy daemon (local-only)
 After=network-online.target postfix.service
 Wants=network-online.target
-Requires=postfix.service
+#Requires=postfix.service
 
 [Service]
 Type=forking
@@ -698,9 +698,6 @@ postconf -n | grep -E '^smtpd_recipient_restrictions|^smtpd_milters|^non_smtpd_m
 ###############################################################################
 # FIM DO BLOCO POSTFWD
 ###############################################################################
-
-
-
 
 echo "==================================================== OpenDMARC ===================================================="
 
