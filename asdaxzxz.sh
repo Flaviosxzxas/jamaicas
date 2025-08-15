@@ -1,12 +1,8 @@
 #!/usr/bin/env bash
-# asdaxzxz.sh — Setup completo: Postfix + Postfwd2 + OpenDKIM + OpenDMARC + Certbot(Cloudflare) + Apache + DNS SPF/DKIM/DMARC (Cloudflare)
-# - Robusto: set -Eeuo pipefail + trap
-# - eTLD+1 correto via publicsuffix2
-# - Postfwd2: service fix (ExecStart) + diretório de rates
-# - TLS: Let's Encrypt (DNS-01) via Cloudflare se token houver; senão snakeoil
-# - SUBMISSION/587 opcional + SASL (desligado por padrão)
-# - OpenDKIM (sign+verify) e OpenDMARC (verify) via milters TCP
-# - Publica/atualiza DNS (SPF, DKIM, DMARC) na Cloudflare com API Token
+# asdaxzxz.sh — Setup completo: Postfix + Postfwd2 (com limites por provedor) + OpenDKIM + OpenDMARC
+# + Certbot(Cloudflare) + Apache + DNS SPF/DKIM/DMARC (Cloudflare)
+# + Aliases locais (postmaster/abuse/support/contacto), unsubscribe/bounce capture, logrotate
+# Compatível com chamada via JS: bash -s -- <hostname> <CF_API_TOKEN> <ADMIN_EMAIL>
 
 set -Eeuo pipefail
 trap 'echo "[ERRO] Linha $LINENO: comando \"$BASH_COMMAND\" falhou (exit $?)" >&2' ERR
@@ -15,10 +11,10 @@ trap 'echo "[ERRO] Linha $LINENO: comando \"$BASH_COMMAND\" falhou (exit $?)" >&
 #        CONFIGURAÇÕES
 # ==============================
 ENABLE_SUBMISSION="${ENABLE_SUBMISSION:-0}"     # 0=off, 1=on (porta 587 c/ SASL)
-RECEIVE_SMTP="${RECEIVE_SMTP:-0}"               # 0=loopback-only (não recebe 25 externo), 1=all
+RECEIVE_SMTP="${RECEIVE_SMTP:-0}"               # 0=loopback-only, 1=all
 
-ADMIN_EMAIL="${ADMIN_EMAIL:-admin@localhost}"   # email p/ Certbot
-CF_API_TOKEN="${CF_API_TOKEN:-}"                # API Token Cloudflare (Zone.DNS edit)
+ADMIN_EMAIL="${ADMIN_EMAIL:-admin@localhost}"
+CF_API_TOKEN="${CF_API_TOKEN:-}"
 CF_SECRETS_FILE="/root/.secrets/certbot/cloudflare.ini"
 
 # Host/domínio/IP
@@ -26,28 +22,33 @@ ServerName="${ServerName:-$(hostname -f 2>/dev/null || hostname || echo 'localho
 ServerIP="${ServerIP:-$(hostname -I 2>/dev/null | awk '{print $1}' || echo '127.0.0.1')}"
 
 # DKIM / DMARC / SPF
-DKIM_SELECTOR="${DKIM_SELECTOR:-s1}"            # ex.: s1, default, etc
+DKIM_SELECTOR="${DKIM_SELECTOR:-s1}"
 DKIM_BITS="${DKIM_BITS:-2048}"
 
 DMARC_POLICY="${DMARC_POLICY:-none}"            # none|quarantine|reject
-DMARC_SUBPOLICY="${DMARC_SUBPOLICY:-none}"      # sp= para subdomínios
+DMARC_SUBPOLICY="${DMARC_SUBPOLICY:-none}"      # sp=
 DMARC_ADKIM="${DMARC_ADKIM:-r}"                 # r|s
 DMARC_ASPF="${DMARC_ASPF:-r}"                   # r|s
-DMARC_PCT="${DMARC_PCT:-100}"                   # pct=
+DMARC_PCT="${DMARC_PCT:-100}"
 DMARC_RUA="${DMARC_RUA:-}"                      # ex.: dmarc@seu.dominio
-DMARC_RUF="${DMARC_RUF:-}"                      # opcional
+DMARC_RUF="${DMARC_RUF:-}"
 
-# SPF: por padrão ip4 + a:ServerName; pode adicionar includes separados por espaço
+# SPF
 SPF_SOFTFAIL="${SPF_SOFTFAIL:-0}"               # 0 => -all ; 1 => ~all
-SPF_EXTRA_IP4="${SPF_EXTRA_IP4:-}"              # espaço-sep.: "1.2.3.4 5.6.7.8"
-SPF_INCLUDES="${SPF_INCLUDES:-}"                # espaço-sep.: "spf.antispamcloud.com _spf.mailerlite.com"
-SPF_A_RECORDS="${SPF_A_RECORDS:-$ServerName}"   # espaço-sep.: "mail.exemplo outro.host"
+SPF_EXTRA_IP4="${SPF_EXTRA_IP4:-}"              # "1.2.3.4 5.6.7.8"
+SPF_INCLUDES="${SPF_INCLUDES:-}"                # "spf.antispamcloud.com _spf.mailerlite.com"
+SPF_A_RECORDS="${SPF_A_RECORDS:-$ServerName}"   # "mail.exemplo outro.host"
 
 # Postfwd
 POLICY_HOST="127.0.0.1"
 POLICY_PORT="10045"
 
-# --- overrides vindos por argumento (compatível com seu .js) ---
+# APPLICATION: endereços de função (outbound-only)
+POSTMASTER_DEST="${POSTMASTER_DEST:-root}"
+SUPPORT_DEST="${SUPPORT_DEST:-root}"
+DESCARTAR_NOREPLY=${DESCARTAR_NOREPLY:-true}
+
+# --- overrides posicionais (compatível com seu .js) ---
 [ -n "${1:-}" ] && ServerName="$1"
 [ -n "${2:-}" ] && CF_API_TOKEN="$2"
 [ -n "${3:-}" ] && ADMIN_EMAIL="$3"
@@ -74,11 +75,6 @@ apt_quick_install() {
 ensure_dir() {
   local d="$1" owner="$2" mode="$3"
   install -d -o "${owner%:*}" -g "${owner#*:}" -m "$mode" "$d"
-}
-
-ensure_line_in_file() {
-  local file="$1" line="$2"
-  grep -Fqx -- "$line" "$file" 2>/dev/null || echo "$line" >> "$file"
 }
 
 replace_or_add_postconf() { postconf -e "$1 = $2"; }
@@ -114,7 +110,7 @@ calc_domain() {
   fi
 }
 
-# ----------------- Cloudflare API helpers -----------------
+# -------- Cloudflare API helpers --------
 _cf_api() {
   local method="$1" path="$2" data="${3:-}"
   [ -z "$CF_API_TOKEN" ] && { echo '{"success":false,"err":"no_token"}'; return 0; }
@@ -141,7 +137,6 @@ cf_get_record_id() {
 }
 
 create_or_update_record() {
-  # Uso: create_or_update_record "name.fqdn" "TXT" "conteudo" "300"
   local name="$1" type="$2" content="$3" ttl="${4:-300}"
   local zone_id; zone_id="$(cf_get_zone_id "$Domain")"
   if [ -z "$zone_id" ]; then
@@ -152,11 +147,9 @@ create_or_update_record() {
   local payload; payload="$(jq -cn --arg type "$type" --arg name "$name" --arg content "$content" --argjson ttl "$ttl" \
       '{type:$type,name:$name,content:$content,ttl:$ttl,proxied:false}')"
   if [ -n "$rec_id" ]; then
-    _cf_api PUT "/zones/${zone_id}/dns_records/${rec_id}" "$payload" >/dev/null && \
-      echo "CF: atualizado ${type} ${name}"
+    _cf_api PUT "/zones/${zone_id}/dns_records/${rec_id}" "$payload" >/dev/null && echo "CF: atualizado ${type} ${name}"
   else
-    _cf_api POST "/zones/${zone_id}/dns_records" "$payload" >/dev/null && \
-      echo "CF: criado ${type} ${name}"
+    _cf_api POST "/zones/${zone_id}/dns_records" "$payload" >/dev/null && echo "CF: criado ${type} ${name}"
   fi
 }
 
@@ -253,7 +246,7 @@ replace_or_add_postconf "smtpd_use_tls" "yes"
 replace_or_add_postconf "smtp_tls_security_level" "may"
 replace_or_add_postconf "smtpd_tls_security_level" "may"
 
-# SASL global mantido off (vai on no submission se habilitado)
+# SASL global off (vai on no submission se habilitado)
 replace_or_add_postconf "smtpd_sasl_auth_enable" "no"
 
 # Integração Postfwd em recipient_restrictions
@@ -274,13 +267,12 @@ ensure_dir /etc/postfwd "root:root" 0755
 ensure_dir /var/lib/postfwd2 "postfix:postfix" 0755
 ensure_dir /run/postfwd "postfix:postfix" 0755
 
+# Regras com limites por provedor (as suas), mais base
 cat >/etc/postfwd/postfwd.cf <<'EOF'
 # /etc/postfwd/postfwd.cf
 # =========================================
-# BASE: proteções gerais
+# BASE
 # =========================================
-
-# Rate por IP (exemplo educativo; ajuste à sua realidade)
 id=RATELIMIT_BY_IP
   request=smtpd_access_policy
   protocol_state=RCPT
@@ -288,22 +280,20 @@ id=RATELIMIT_BY_IP
   client_address==~/.*/
   action=rate(client_address/60/60/100 "450 4.7.1 Too many rcpt per IP; try later")
 
-# Rede local/liberada
 id=LOCAL_NETS
   request=smtpd_access_policy
   client_address=127.0.0.1
   action=DUNNO
 
 # =========================================
-# LIMITES POR PROVEDOR (seus limites)
+# LIMITES POR PROVEDOR
 # =========================================
-
 # Grandes provedores globais
 id=limit-gmail;     recipient=~/.+@gmail\.com$/;                                      action=rate(recipient_domain/2000/3600/450 "4.7.1 Limite 2000/h atingido p/ Gmail")
 id=limit-msn;       recipient=~/.+@(outlook\.com|hotmail\.com|live\.com|msn\.com)$/;  action=rate(recipient_domain/1000/86400/450 "4.7.1 Limite 1000/dia atingido p/ Microsoft")
 id=limit-yahoo;     recipient=~/.+@yahoo\.(com|com\.br|com\.ar|com\.mx)$/;            action=rate(recipient_domain/150/3600/450 "4.7.1 Limite 150/h atingido p/ Yahoo")
 
-# Provedores/hostings “de marca”
+# Provedores/hostings
 id=limit-kinghost;  recipient=~/.+@kinghost\.net$/;                                   action=rate(recipient_domain/300/3600/450 "4.7.1 Limite 300/h atingido p/ KingHost")
 id=limit-uol;       recipient=~/.+@uol\.com\.br$/;                                    action=rate(recipient_domain/300/3600/450 "4.7.1 Limite 300/h atingido p/ UOL")
 id=limit-locaweb;   recipient=~/.+@locaweb\.com\.br$/;                                action=rate(recipient_domain/500/3600/450 "4.7.1 Limite 500/h atingido p/ Locaweb")
@@ -311,18 +301,16 @@ id=limit-mandic;    recipient=~/.+@mandic\.com\.br$/;                           
 id=limit-titan;     recipient=~/.+@titan\.email$/;                                    action=rate(recipient_domain/500/3600/450 "4.7.1 Limite 500/h atingido p/ Titan")
 id=limit-godaddy;   recipient=~/.+@secureserver\.net$/;                               action=rate(recipient_domain/300/3600/450 "4.7.1 Limite 300/h atingido p/ GoDaddy")
 id=limit-zimbra;    recipient=~/.+@zimbra\..+$/;                                      action=rate(recipient_domain/400/3600/450 "4.7.1 Limite 400/h atingido p/ Zimbra")
-
-# Microsoft 365 “de marca” – geralmente não há @office365.com; manter comentado se não usar
 # id=limit-office365; recipient=~/.+@office365\.com$/; action=rate(recipient_domain/2000/3600/450 "4.7.1 Limite 2000/h atingido p/ Office365")
 
-# Argentina — ISPs/domínios comuns
+# Argentina
 id=limit-fibertel;  recipient=~/.+@fibertel\.com\.ar$/;                               action=rate(recipient_domain/200/3600/450 "4.7.1 Limite 200/h atingido p/ Fibertel")
 id=limit-speedy;    recipient=~/.+@speedy\.com\.ar$/;                                 action=rate(recipient_domain/200/3600/450 "4.7.1 Limite 200/h atingido p/ Speedy")
 id=limit-personal;  recipient=~/.+@personal\.com\.ar$/;                               action=rate(recipient_domain/200/3600/450 "4.7.1 Limite 200/h atingido p/ Personal")
 id=limit-telecom;   recipient=~/.+@telecom\.com\.ar$/;                                action=rate(recipient_domain/200/3600/450 "4.7.1 Limite 200/h atingido p/ Telecom")
 id=limit-claro-ar;  recipient=~/.+@claro\.com\.ar$/;                                  action=rate(recipient_domain/200/3600/450 "4.7.1 Limite 200/h atingido p/ Claro AR")
 
-# México — ISPs/domínios comuns
+# México
 id=limit-telmex;    recipient=~/.+@prodigy\.net\.mx$/;                                action=rate(recipient_domain/200/3600/450 "4.7.1 Limite 200/h atingido p/ Telmex")
 id=limit-axtel;     recipient=~/.+@axtel\.net$/;                                      action=rate(recipient_domain/200/3600/450 "4.7.1 Limite 200/h atingido p/ Axtel")
 id=limit-izzi;      recipient=~/.+@izzi\.net\.mx$/;                                   action=rate(recipient_domain/200/3600/450 "4.7.1 Limite 200/h atingido p/ Izzi")
@@ -330,9 +318,7 @@ id=limit-megacable; recipient=~/.+@megacable\.com\.mx$/;                        
 id=limit-totalplay; recipient=~/.+@totalplay\.net\.mx$/;                              action=rate(recipient_domain/200/3600/450 "4.7.1 Limite 200/h atingido p/ TotalPlay")
 id=limit-telcel;    recipient=~/.+@telcel\.net$/;                                     action=rate(recipient_domain/200/3600/450 "4.7.1 Limite 200/h atingido p/ Telcel")
 
-# =========================================
-# FINAL: não decide nada (deixa Postfix seguir)
-# =========================================
+# Final (não decide)
 id=default;         recipient=~/.+/;                                                  action=DUNNO
 EOF
 
@@ -368,7 +354,7 @@ systemctl daemon-reload
 systemctl enable --now postfwd-local
 
 # ==============================
-#      OPEN-DKIM (sign/verify)
+#      OPEN-DKIM
 # ==============================
 bk /etc/opendkim.conf
 bk /etc/default/opendkim
@@ -377,9 +363,8 @@ ensure_dir /etc/opendkim "opendkim:opendkim" 0755
 ensure_dir /etc/opendkim/keys "opendkim:opendkim" 0755
 ensure_dir "/etc/opendkim/keys/$Domain" "opendkim:opendkim" 0700
 
-# Gera chave se não existir
 if [ ! -s "/etc/opendkim/keys/$Domain/${DKIM_SELECTOR}.private" ]; then
-  echo ">> Gerando chave DKIM ${DKIM_BITS} para ${Domain} (selector ${DKIM_SELECTOR})"
+  echo ">> Gerando chave DKIM ${DKIM_BITS} (selector ${DKIM_SELECTOR})"
   ( cd "/etc/opendkim/keys/$Domain"
     opendkim-genkey -s "$DKIM_SELECTOR" -d "$Domain" -b "$DKIM_BITS" -r -v
     chown opendkim:opendkim "${DKIM_SELECTOR}.private" "${DKIM_SELECTOR}.txt"
@@ -394,14 +379,10 @@ Mode                    sv
 Canonicalization        relaxed/simple
 OversignHeaders         From
 AutoRestart             yes
-
-# Tabelas
 KeyTable                /etc/opendkim/KeyTable
 SigningTable            /etc/opendkim/SigningTable
 ExternalIgnoreList      /etc/opendkim/TrustedHosts
 InternalHosts           /etc/opendkim/TrustedHosts
-
-# Socket TCP para evitar problemas de chroot
 Socket                  inet:8891@127.0.0.1
 EOF
 
@@ -433,7 +414,7 @@ EOF
 systemctl enable --now opendkim
 
 # ==============================
-#      OPEN-DMARC (verify)
+#      OPEN-DMARC
 # ==============================
 bk /etc/opendmarc.conf
 bk /etc/default/opendmarc
@@ -444,8 +425,6 @@ TrustedAuthservIDs      ${ServerName}
 IgnoreAuthenticatedClients true
 Syslog                  true
 AutoRestart             true
-
-# Socket TCP
 Socket                  inet:8893@127.0.0.1
 EOF
 
@@ -472,7 +451,7 @@ replace_or_add_postconf "non_smtpd_milters" "inet:127.0.0.1:8891, inet:127.0.0.1
 #      SUBMISSION/587 (opcional)
 # ==============================
 if [ "$ENABLE_SUBMISSION" -eq 1 ]; then
-  echo ">> Habilitando SUBMISSION/587 com STARTTLS + SASL"
+  echo ">> Habilitando SUBMISSION/587"
   postconf -M submission/inet='submission inet n       -       y       -       -       smtpd'
   postconf -P 'submission/inet/syslog_name=submission'
   postconf -P 'submission/inet/smtpd_tls_security_level=encrypt'
@@ -495,14 +474,12 @@ build_spf() {
   if [ "$SPF_SOFTFAIL" = "1" ]; then parts+=("~all"); else parts+=("-all"); fi
   printf "%s " "${parts[@]}"
 }
-
 build_dmarc() {
   local parts=("v=DMARC1;" "p=${DMARC_POLICY};" "sp=${DMARC_SUBPOLICY};" "adkim=${DMARC_ADKIM};" "aspf=${DMARC_ASPF};" "pct=${DMARC_PCT}")
   [ -n "$DMARC_RUA" ] && parts+=("rua=mailto:${DMARC_RUA};")
   [ -n "$DMARC_RUF" ] && parts+=("ruf=mailto:${DMARC_RUF};")
   echo "${parts[@]}" | sed -E 's/; ;/;/g; s/; $//'
 }
-
 extract_dkim_txt() {
   local f="/etc/opendkim/keys/$Domain/${DKIM_SELECTOR}.txt"
   awk -F'"' '/"/{for(i=2;i<=NF;i+=2)printf "%s",$i} END{print ""}' "$f"
@@ -525,10 +502,8 @@ if command -v jq >/dev/null 2>&1 && [ -n "$CF_API_TOKEN" ]; then
   DMARC_STR="$(build_dmarc)"
   create_or_update_record "$DMARC_NAME" "TXT" "$DMARC_STR" "300" || DNS_MANUAL_MSG+="\nDMARC ($DMARC_NAME): $DMARC_STR"
 else
-  SPF_STR="$(build_spf)"
-  DKIM_NAME="${DKIM_SELECTOR}._domainkey.${Domain}"
-  DKIM_STR="$(extract_dkim_txt)"
-  DMARC_NAME="_dmarc.${Domain}"
+  SPF_STR="$(build_spf)"; DKIM_NAME="${DKIM_SELECTOR}._domainkey.${Domain}"
+  DKIM_STR="$(extract_dkim_txt)"; DMARC_NAME="_dmarc.${Domain}"
   DMARC_STR="$(build_dmarc)"
   DNS_MANUAL_MSG+="\nSPF ($Domain): $SPF_STR"
   DNS_MANUAL_MSG+="\nDKIM ($DKIM_NAME): $DKIM_STR"
@@ -539,11 +514,8 @@ fi
 #      APACHE + VHOST SSL
 # ==============================
 a2enmod ssl headers rewrite >/dev/null 2>&1 || true
-
-# === TLS: escolher LE se existir; senão snakeoil (fallback) ===  (ÂNCORA 2)
 if [ -s "$LE_FULLCHAIN" ] && [ -s "$LE_PRIVKEY" ]; then
-  AP_SSL_CERT="$LE_FULLCHAIN"
-  AP_SSL_KEY="$LE_PRIVKEY"
+  AP_SSL_CERT="$LE_FULLCHAIN"; AP_SSL_KEY="$LE_PRIVKEY"
 else
   AP_SSL_CERT="/etc/ssl/certs/ssl-cert-snakeoil.pem"
   AP_SSL_KEY="/etc/ssl/private/ssl-cert-snakeoil.key"
@@ -560,31 +532,135 @@ cat >"$VHOST_FILE" <<EOF
 
 <VirtualHost *:443>
   ServerName ${ServerName}
-
   SSLEngine on
   SSLCertificateFile      ${AP_SSL_CERT}
   SSLCertificateKeyFile   ${AP_SSL_KEY}
-
   Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
   Header always set X-Content-Type-Options "nosniff"
   Header always set X-Frame-Options "SAMEORIGIN"
-
   DocumentRoot /var/www/html
-
-  # === ÂNCORA 2: configs extras de vhost SSL podem ir aqui ===
-
   <Directory /var/www/html>
     AllowOverride All
     Require all granted
   </Directory>
-
   ErrorLog \${APACHE_LOG_DIR}/${ServerName}_error.log
   CustomLog \${APACHE_LOG_DIR}/${ServerName}_access.log combined
 </VirtualHost>
 EOF
-
 a2ensite "${ServerName}.conf" >/dev/null 2>&1 || true
 systemctl reload apache2 || systemctl restart apache2
+
+# =====================================================================
+# ================== APPLICATION: endereços de função ==================
+# =====================================================================
+add_alias() {
+  local a="$1" b="$2"
+  grep -qiE "^\s*${a}:" /etc/aliases 2>/dev/null || echo "${a}: ${b}" >> /etc/aliases
+}
+
+echo "Configurando aliases locais (outbound-only) para $ServerName..."
+
+# Garante arquivo de aliases
+[ -f /etc/aliases ] || : > /etc/aliases
+
+# Obrigatórios: postmaster/abuse
+add_alias "postmaster" "${POSTMASTER_DEST}"
+add_alias "abuse"      "${POSTMASTER_DEST}"
+
+# Atendimento
+add_alias "support"    "${SUPPORT_DEST}"
+add_alias "contacto"   "${SUPPORT_DEST}"
+
+# DMARC reports (local)
+add_alias "dmarc-reports" "${POSTMASTER_DEST}"
+
+# Unsubscribe: grava remetente
+UNSUB_SCRIPT="/usr/local/bin/unsub_capture.sh"
+if [ ! -x "$UNSUB_SCRIPT" ]; then
+  apt-get update -y >/dev/null 2>&1 || true
+  apt-get install -y procmail >/dev/null 2>&1 || true  # fornece /usr/bin/formail
+  cat > "$UNSUB_SCRIPT" <<'EOS'
+#!/usr/bin/env bash
+set -euo pipefail
+LOGDIR="/var/log/unsub"
+LIST="$LOGDIR/unsubscribed.txt"
+mkdir -p "$LOGDIR"
+SENDER="$(/usr/bin/formail -xReturn-Path: 2>/dev/null | tr -d '<>\r' | tail -n1 || true)"
+[ -z "${SENDER:-}" ] && SENDER="$(/usr/bin/formail -xFrom: 2>/dev/null | sed 's/.*<\([^>]*\)>.*/\1/' | tr -d '\r' || true)"
+[ -z "${SENDER:-}" ] && SENDER="unknown"
+printf '%s  %s\n' "$(date -u +'%F %T')" "$SENDER" >> "$LIST"
+exit 0
+EOS
+  chmod +x "$UNSUB_SCRIPT"
+fi
+add_alias "unsubscribe" "|$UNSUB_SCRIPT"
+
+# Noreply
+if [ "${DESCARTAR_NOREPLY}" = "true" ]; then
+  add_alias "noreply" "/dev/null"
+else
+  add_alias "noreply" "root"
+fi
+
+# Bounce capture
+BNC_SCRIPT="/usr/local/bin/bounce_capture.sh"
+if [ ! -x "$BNC_SCRIPT" ]; then
+  apt-get update -y >/dev/null 2>&1 || true
+  apt-get install -y procmail >/dev/null 2>&1 || true
+  cat > "$BNC_SCRIPT" <<'EOS'
+#!/usr/bin/env bash
+set -euo pipefail
+LOGDIR="/var/log/bounce"
+LIST="$LOGDIR/bounces.log"
+mkdir -p "$LOGDIR"
+RP="$(/usr/bin/formail -xReturn-Path: 2>/dev/null | tr -d '<>\r' | tail -n1 || true)"
+
+TAG=""
+if [[ "${RP:-}" =~ ^bounce\+([A-Za-z0-9._-]+)@ ]]; then
+  TAG="${BASH_REMATCH[1]}"
+fi
+
+RECIP="$((/usr/bin/formail -xOriginal-Recipient: 2>/dev/null || true) | sed 's/.*rfc822;\s*//' | tr -d '\r')"
+[ -z "${RECIP:-}" ] && RECIP="$((/usr/bin/formail -xFinal-Recipient: 2>/dev/null || true) | sed 's/.*rfc822;\s*//' | tr -d '\r')"
+[ -z "${RECIP:-}" ] && RECIP="$((/usr/bin/formail -xTo: 2>/dev/null || true) | sed 's/.*<\([^>]*\)>.*/\1/' | tr -d '\r')"
+
+STATUS="$(/usr/bin/formail -xStatus: 2>/dev/null | tr -d '\r' || true)"
+DSN="$(/usr/bin/formail -xDiagnostic-Code: 2>/dev/null | tr -d '\r' || true)"
+
+printf '%s | return_path=%s | verp_tag=%s | recip=%s | status=%s | dsn=%s\n' \
+  "$(date -u +'%F %T')" "${RP:-}" "${TAG:-}" "${RECIP:-}" "${STATUS:-}" "${DSN:-}" >> "$LIST"
+exit 0
+EOS
+  chmod +x "$BNC_SCRIPT"
+fi
+add_alias "bounce" "|$BNC_SCRIPT"
+
+# Aplica aliases
+newaliases || true
+
+# Logrotate
+cat >/etc/logrotate.d/bounce-unsub <<'EOF'
+/var/log/bounce/bounces.log /var/log/unsub/unsubscribed.txt {
+    weekly
+    rotate 12
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 root adm
+    sharedscripts
+    copytruncate
+}
+EOF
+
+# Permissões
+install -d -m 755 /var/log/bounce /var/log/unsub
+touch /var/log/bounce/bounces.log /var/log/unsub/unsubscribed.txt
+chown -R www-data:www-data /var/log/unsub
+chown root:adm /var/log/bounce/bounces.log || true
+chmod 640 /var/log/bounce/bounces.log /var/log/unsub/unsubscribed.txt || true
+
+systemctl reload postfix || true
 
 # ==============================
 #        STATUS RESUMO
@@ -603,10 +679,24 @@ echo " DKIM selector     : $DKIM_SELECTOR"
 echo " DKIM key (priv)   : /etc/opendkim/keys/$Domain/${DKIM_SELECTOR}.private"
 echo "-------------------------------------------"
 if [ -n "$DNS_MANUAL_MSG" ]; then
-  echo ">> Publicação DNS via Cloudflare não foi feita em todos os registros."
-  echo ">> Publique manualmente os seguintes TXT na zona do $Domain:"
+  echo ">> Publique manualmente os TXT na zona do $Domain:"
   echo -e "$DNS_MANUAL_MSG"
 else
-  echo ">> DNS SPF/DKIM/DMARC publicados/atualizados via Cloudflare (quando token presente)."
+  echo ">> DNS SPF/DKIM/DMARC publicados/atualizados via Cloudflare (se token presente)."
 fi
-echo ">> Concluído."
+
+echo "================================= Todos os comandos foram executados com sucesso! ==================================="
+echo "======================================================= FIM =========================================================="
+echo "================================================= Reiniciar servidor ================================================="
+
+if [ -f /var/run/reboot-required ]; then
+  echo "Reiniciando o servidor em 5 segundos devido a atualizações críticas..."
+  sleep 5
+  reboot
+else
+  echo "Reboot não necessário. Aguardando 5 segundos antes de finalizar..."
+  sleep 5
+fi
+
+echo "Finalizando o script."
+exit 0
