@@ -2,7 +2,7 @@
 # asdaxzxz.sh — Setup completo: Postfix + Postfwd (limites por provedor) + OpenDKIM + OpenDMARC
 # + Certbot (Cloudflare) + Apache + DNS SPF/DKIM/DMARC (Cloudflare)
 # + Aliases locais (postmaster/abuse/support/contacto), unsubscribe/bounce capture, logrotate
-# Compatível com chamada via JS: curl|bash -s -- <hostname> <CF_API_TOKEN> <ADMIN_EMAIL>
+# Compatível com chamada via JS: curl|wget | bash -s -- <hostname> <CF_API_TOKEN> <ADMIN_EMAIL>
 
 set -Eeuo pipefail
 trap 'echo "[ERRO] Linha $LINENO: comando \"$BASH_COMMAND\" falhou (exit $?)" >&2' ERR
@@ -60,22 +60,53 @@ require_root() {
   if [ "$(id -u)" -ne 0 ]; then
     echo "Este script precisa ser executado como root."
     exit 1
-  fi }
+  fi
+}
 is_ubuntu() { [ -f /etc/os-release ] && grep -qi ubuntu /etc/os-release; }
 bk() { local f="$1"; [ -f "$f" ] && cp -a "$f" "${f}.bak.$(date +%F_%H%M%S)" || true; }
 
+# Espera o lock do apt/dpkg (ex.: unattended-upgrades) liberar
+apt_lock_active() {
+  pgrep -x apt >/dev/null 2>&1 || pgrep -x apt-get >/dev/null 2>&1 || pgrep -x dpkg >/dev/null 2>&1 || pgrep -f unattended-upgrade >/dev/null 2>&1
+}
+apt_wait() {
+  local timeout="${1:-900}" waited=0
+  if systemctl list-unit-files | grep -q '^unattended-upgrades\.service'; then
+    systemctl stop unattended-upgrades >/dev/null 2>&1 || true
+  fi
+  while apt_lock_active; do
+    if [ "$waited" -eq 0 ]; then echo ">> Aguardando liberação do apt/dpkg (unattended-upgrades)…"; fi
+    sleep 3; waited=$((waited+3))
+    if [ "$waited" -ge "$timeout" ]; then
+      echo ">> Ainda bloqueado após ${timeout}s; prosseguindo com cuidado."
+      break
+    fi
+  done
+  dpkg --configure -a >/dev/null 2>&1 || true
+}
+
+# Habilita 'universe' de forma idempotente (evita entradas duplicadas)
+ensure_universe() {
+  if ! is_ubuntu; then return 0; fi
+  . /etc/os-release
+  local codename="${UBUNTU_CODENAME:-$(lsb_release -sc 2>/dev/null || echo '')}"
+  if ! grep -R "^[[:space:]]*deb .*ubuntu .* ${codename} .*universe" /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null | grep -q .; then
+    DEBIAN_FRONTEND=noninteractive add-apt-repository -y universe >/dev/null 2>&1 || true
+  fi
+}
+
 apt_quick_install() {
-  DEBIAN_FRONTEND=noninteractive apt-get update -y
-  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@"
+  ensure_universe
+  apt_wait 900
+  DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 update -y
+  apt_wait 900
+  DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confnew" -o Acquire::Retries=3 install -y --no-install-recommends "$@"
 }
 
 # Instala postfwd (nome do pacote varia entre distros)
 install_postfwd() {
-  if is_ubuntu; then
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends software-properties-common >/dev/null 2>&1 || true
-    add-apt-repository -y universe >/dev/null 2>&1 || true
-    apt-get update -y >/dev/null 2>&1 || true
-  fi
+  ensure_universe
+  apt_wait 900
   if DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends postfwd >/dev/null 2>&1; then
     POSTFWD_BIN="$(command -v postfwd)"
     return 0
@@ -85,7 +116,7 @@ install_postfwd() {
     return 0
   fi
   echo "[ERRO] Nem 'postfwd' nem 'postfwd2' disponíveis nos repositórios." >&2
-  echo "       Ative o Universe (Ubuntu) ou instale via pacote .deb do projeto." >&2
+  echo "       Ative o Universe (Ubuntu) ou instale via .deb do projeto." >&2
   exit 1
 }
 
@@ -114,11 +145,8 @@ setup_publicsuffix2() {
 calc_domain() {
   setup_publicsuffix2
   local d; d="$(compute_domain_etld1 || true)"
-  if [ -z "$d" ]; then
-    echo "$ServerName" | awk -F. '{print $(NF-1)"."$NF}'
-  else
-    echo "$d"
-  fi
+  if [ -z "$d" ]; then echo "$ServerName" | awk -F. '{print $(NF-1)"."$NF) }'
+  else echo "$d"; fi
 }
 
 # -------- Cloudflare API helpers --------
@@ -142,7 +170,7 @@ create_or_update_record() {
   local payload; payload="$(jq -cn --arg type "$type" --arg name "$name" --arg content "$content" --argjson ttl "$ttl" \
       '{type:$type,name:$name,content:$content,ttl:$ttl,proxied:false}')"
   if [ -n "$rec_id" ]; then _cf_api PUT "/zones/${zone_id}/dns_records/${rec_id}" "$payload" >/dev/null && echo "CF: atualizado ${type} ${name}";
-  else _cf_api POST "/zones/${zone_id}/dns_records" "$payload" >/dev/null && echo "CF: criado ${type} ${name}"; fi
+  else _cf_api POST "/zones/${zone_id}/dns_records" "$payload" >/devnull 2>&1 || true && echo "CF: criado ${type} ${name}"; fi
 }
 
 # ==============================
@@ -504,7 +532,7 @@ add_alias "dmarc-reports" "${POSTMASTER_DEST}"
 
 UNSUB_SCRIPT="/usr/local/bin/unsub_capture.sh"
 if [ ! -x "$UNSUB_SCRIPT" ]; then
-  apt-get update -y >/dev/null 2>&1 || true
+  apt_wait 900
   apt-get install -y procmail >/dev/null 2>&1 || true
   cat > "$UNSUB_SCRIPT" <<'EOS'
 #!/usr/bin/env bash
@@ -526,7 +554,7 @@ if [ "${DESCARTAR_NOREPLY}" = "true" ]; then add_alias "noreply" "/dev/null"; el
 
 BNC_SCRIPT="/usr/local/bin/bounce_capture.sh"
 if [ ! -x "$BNC_SCRIPT" ]; then
-  apt-get update -y >/dev/null 2>&1 || true
+  apt_wait 900
   apt-get install -y procmail >/dev/null 2>&1 || true
   cat > "$BNC_SCRIPT" <<'EOS'
 #!/usr/bin/env bash
