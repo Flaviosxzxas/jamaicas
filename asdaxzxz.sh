@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# asdaxzxz.sh — Setup completo: Postfix + Postfwd (limites por provedor) + OpenDKIM + OpenDMARC
-# + Certbot (Cloudflare) + Apache + DNS SPF/DKIM/DMARC (Cloudflare)
-# + Aliases locais (postmaster/abuse/support/contacto), unsubscribe/bounce capture, logrotate
-# Compatível com chamada via JS: curl|wget | bash -s -- <hostname> <CF_API_TOKEN> <ADMIN_EMAIL>
+# asdaxzxz.sh — Setup: Postfix + Postfwd (limites) + OpenDKIM + OpenDMARC
+# + Certbot(Cloudflare) + Apache + DNS SPF/DKIM/DMARC + aliases/unsubscribe/bounce/logrotate
+# Compatível com: bash -s -- <hostname> <CF_API_TOKEN> <ADMIN_EMAIL>
 
 set -Eeuo pipefail
 trap 'echo "[ERRO] Linha $LINENO: comando \"$BASH_COMMAND\" falhou (exit $?)" >&2' ERR
@@ -30,7 +29,7 @@ DMARC_SUBPOLICY="${DMARC_SUBPOLICY:-none}"      # sp=
 DMARC_ADKIM="${DMARC_ADKIM:-r}"                 # r|s
 DMARC_ASPF="${DMARC_ASPF:-r}"                   # r|s
 DMARC_PCT="${DMARC_PCT:-100}"
-DMARC_RUA="${DMARC_RUA:-}"                      # ex.: dmarc@seu.dominio
+DMARC_RUA="${DMARC_RUA:-}"                      # dmarc@seu.dominio
 DMARC_RUF="${DMARC_RUF:-}"
 
 # SPF
@@ -48,7 +47,7 @@ POSTMASTER_DEST="${POSTMASTER_DEST:-root}"
 SUPPORT_DEST="${SUPPORT_DEST:-root}"
 DESCARTAR_NOREPLY=${DESCARTAR_NOREPLY:-true}
 
-# --- overrides posicionais (compatível com seu .js) ---
+# Overrides posicionais (compatível com seu .js)
 [ -n "${1:-}" ] && ServerName="$1"
 [ -n "${2:-}" ] && CF_API_TOKEN="$2"
 [ -n "${3:-}" ] && ADMIN_EMAIL="$3"
@@ -56,41 +55,28 @@ DESCARTAR_NOREPLY=${DESCARTAR_NOREPLY:-true}
 # ==============================
 #      FUNÇÕES AUXILIARES
 # ==============================
-require_root() {
-  if [ "$(id -u)" -ne 0 ]; then
-    echo "Este script precisa ser executado como root."
-    exit 1
-  fi
-}
+require_root() { if [ "$(id -u)" -ne 0 ]; then echo "Este script precisa ser root."; exit 1; fi; }
 is_ubuntu() { [ -f /etc/os-release ] && grep -qi ubuntu /etc/os-release; }
 bk() { local f="$1"; [ -f "$f" ] && cp -a "$f" "${f}.bak.$(date +%F_%H%M%S)" || true; }
 
-# Espera o lock do apt/dpkg (ex.: unattended-upgrades) liberar
-apt_lock_active() {
-  pgrep -x apt >/dev/null 2>&1 || pgrep -x apt-get >/dev/null 2>&1 || pgrep -x dpkg >/dev/null 2>&1 || pgrep -f unattended-upgrade >/dev/null 2>&1
-}
+# Espera lock do apt/dpkg (ex.: unattended-upgrades)
+apt_lock_active() { pgrep -x apt >/dev/null 2>&1 || pgrep -x apt-get >/dev/null 2>&1 || pgrep -x dpkg >/dev/null 2>&1 || pgrep -f unattended-upgrade >/dev/null 2>&1; }
 apt_wait() {
   local timeout="${1:-900}" waited=0
-  if systemctl list-unit-files | grep -q '^unattended-upgrades\.service'; then
-    systemctl stop unattended-upgrades >/dev/null 2>&1 || true
-  fi
+  if systemctl list-unit-files | grep -q '^unattended-upgrades\.service'; then systemctl stop unattended-upgrades >/dev/null 2>&1 || true; fi
   while apt_lock_active; do
-    if [ "$waited" -eq 0 ]; then echo ">> Aguardando liberação do apt/dpkg (unattended-upgrades)…"; fi
-    sleep 3; waited=$((waited+3))
-    if [ "$waited" -ge "$timeout" ]; then
-      echo ">> Ainda bloqueado após ${timeout}s; prosseguindo com cuidado."
-      break
-    fi
+    [ "$waited" -eq 0 ] && echo ">> Aguardando liberação do apt/dpkg…"
+    sleep 3; waited=$((waited+3)); [ "$waited" -ge "$timeout" ] && echo ">> Prosseguindo mesmo com lock após ${timeout}s" && break
   done
   dpkg --configure -a >/dev/null 2>&1 || true
 }
 
-# Habilita 'universe' de forma idempotente (evita entradas duplicadas)
+# Habilita 'universe' sem duplicar entradas
 ensure_universe() {
   if ! is_ubuntu; then return 0; fi
   . /etc/os-release
   local codename="${UBUNTU_CODENAME:-$(lsb_release -sc 2>/dev/null || echo '')}"
-  if ! grep -R "^[[:space:]]*deb .*ubuntu .* ${codename} .*universe" /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null | grep -q .; then
+  if ! grep -R "^[[:space:]]*deb .* ${codename} .*universe" /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null | grep -q .; then
     DEBIAN_FRONTEND=noninteractive add-apt-repository -y universe >/dev/null 2>&1 || true
   fi
 }
@@ -103,26 +89,28 @@ apt_quick_install() {
   DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confnew" -o Acquire::Retries=3 install -y --no-install-recommends "$@"
 }
 
-# Instala postfwd (nome do pacote varia entre distros)
+# Instala postfwd (nome do pacote varia)
 install_postfwd() {
   ensure_universe
   apt_wait 900
   if DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends postfwd >/dev/null 2>&1; then
-    POSTFWD_BIN="$(command -v postfwd)"
-    return 0
+    POSTFWD_BIN="$(command -v postfwd)"; return 0
   fi
   if DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends postfwd2 >/dev/null 2>&1; then
-    POSTFWD_BIN="$(command -v postfwd2)"
-    return 0
+    POSTFWD_BIN="$(command -v postfwd2)"; return 0
   fi
-  echo "[ERRO] Nem 'postfwd' nem 'postfwd2' disponíveis nos repositórios." >&2
-  echo "       Ative o Universe (Ubuntu) ou instale via .deb do projeto." >&2
-  exit 1
+  echo "[ERRO] Nem 'postfwd' nem 'postfwd2' disponíveis."; exit 1
 }
 
 ensure_dir() { local d="$1" owner="$2" mode="$3"; install -d -o "${owner%:*}" -g "${owner#*:}" -m "$mode" "$d"; }
 replace_or_add_postconf() { postconf -e "$1 = $2"; }
 
+# Evita PEP 668: instala lib via APT (sem pip)
+setup_publicsuffix2() {
+  if ! python3 -c "import publicsuffix2" >/dev/null 2>&1; then
+    apt_quick_install python3-publicsuffix2 || true
+  fi
+}
 compute_domain_etld1() {
   python3 - "$ServerName" <<'PY'
 import sys
@@ -134,19 +122,15 @@ except Exception:
     print("", end="")
 PY
 }
-setup_publicsuffix2() {
-  local d; d="$(compute_domain_etld1 || true)"
-  if [ -z "$d" ]; then
-    python3 -c "import sys" >/dev/null 2>&1 || apt_quick_install python3
-    apt_quick_install python3-pip || true
-    pip3 install --quiet --no-input publicsuffix2 || true
-  fi
-}
 calc_domain() {
   setup_publicsuffix2
   local d; d="$(compute_domain_etld1 || true)"
-  if [ -z "$d" ]; then echo "$ServerName" | awk -F. '{print $(NF-1)"."$NF) }'
-  else echo "$d"; fi
+  if [ -n "$d" ]; then
+    echo "$d"
+  else
+    # Fallback simples: últimos 2 labels (remove ponto final se houver)
+    echo "$ServerName" | sed 's/\.$//' | awk -F. 'NF>=2{print $(NF-1)"."$NF; next} {print $0}'
+  fi
 }
 
 # -------- Cloudflare API helpers --------
@@ -169,8 +153,11 @@ create_or_update_record() {
   local rec_id; rec_id="$(cf_get_record_id "$zone_id" "$type" "$name")"
   local payload; payload="$(jq -cn --arg type "$type" --arg name "$name" --arg content "$content" --argjson ttl "$ttl" \
       '{type:$type,name:$name,content:$content,ttl:$ttl,proxied:false}')"
-  if [ -n "$rec_id" ]; then _cf_api PUT "/zones/${zone_id}/dns_records/${rec_id}" "$payload" >/dev/null && echo "CF: atualizado ${type} ${name}";
-  else _cf_api POST "/zones/${zone_id}/dns_records" "$payload" >/devnull 2>&1 || true && echo "CF: criado ${type} ${name}"; fi
+  if [ -n "$rec_id" ]; then
+    _cf_api PUT "/zones/${zone_id}/dns_records/${rec_id}" "$payload" >/dev/null && echo "CF: atualizado ${type} ${name}"
+  else
+    _cf_api POST "/zones/${zone_id}/dns_records" "$payload" >/dev/null && echo "CF: criado ${type} ${name}"
+  fi
 }
 
 # ==============================
@@ -179,11 +166,11 @@ create_or_update_record() {
 require_root
 if ! is_ubuntu; then echo "Aviso: Script otimizado para Ubuntu. Prosseguindo."; fi
 
-apt_quick_install ca-certificates curl sed coreutils sudo gnupg lsb-release python3 python3-pip jq software-properties-common
+apt_quick_install ca-certificates curl sed coreutils sudo gnupg lsb-release python3 jq software-properties-common
 apt_quick_install postfix certbot python3-certbot-dns-cloudflare apache2
 install_postfwd
 POSTFWD_BIN="${POSTFWD_BIN:-$(command -v postfwd 2>/dev/null || command -v postfwd2 2>/dev/null || echo /usr/sbin/postfwd)}"
-apt_quick_install opendkim opendkim-tools opendmarc
+apt_quick_install opendkim opendkim-tools opendmarc python3-publicsuffix2
 
 # ==============================
 #   CERTBOT + CLOUDFLARE TOKEN
@@ -251,7 +238,7 @@ replace_or_add_postconf "smtp_tls_security_level" "may"
 replace_or_add_postconf "smtpd_tls_security_level" "may"
 replace_or_add_postconf "smtpd_sasl_auth_enable" "no"  # SASL global off; liga no submission se habilitar
 
-# Integração Postfwd em recipient_restrictions
+# Integra Postfwd
 NEEDED="check_policy_service inet:${POLICY_HOST}:${POLICY_PORT}"
 CURRENT="$(postconf -h smtpd_recipient_restrictions 2>/dev/null || echo "")"
 sanitize_csv() { echo "$1" | sed -E 's/[,[:space:]]+/, /g; s/^, //; s/, $//'; }
@@ -267,7 +254,6 @@ ensure_dir /etc/postfwd "root:root" 0755
 ensure_dir /var/lib/postfwd2 "postfix:postfix" 0755
 ensure_dir /run/postfwd "postfix:postfix" 0755
 
-# Regras com limites por provedor + base
 cat >/etc/postfwd/postfwd.cf <<'EOF'
 # /etc/postfwd/postfwd.cf
 # =========================================
@@ -318,7 +304,7 @@ id=limit-megacable; recipient=~/.+@megacable\.com\.mx$/;                        
 id=limit-totalplay; recipient=~/.+@totalplay\.net\.mx$/;                              action=rate(recipient_domain/200/3600/450 "4.7.1 Limite 200/h atingido p/ TotalPlay")
 id=limit-telcel;    recipient=~/.+@telcel\.net$/;                                     action=rate(recipient_domain/200/3600/450 "4.7.1 Limite 200/h atingido p/ Telcel")
 
-# Final (não decide)
+# Final
 id=default;         recipient=~/.+/;                                                  action=DUNNO
 EOF
 
@@ -473,10 +459,8 @@ DNS_MANUAL_MSG=""
 if command -v jq >/dev/null 2>&1 && [ -n "$CF_API_TOKEN" ]; then
   SPF_STR="$(build_spf)"; create_or_update_record "$Domain" "TXT" "$SPF_STR" "300" || DNS_MANUAL_MSG+="\nSPF ($Domain): $SPF_STR"
   DKIM_NAME="${DKIM_SELECTOR}._domainkey.${Domain}"; DKIM_STR="$(extract_dkim_txt)"
-  if [ -n "$DKIM_STR" ]; then create_or_update_record "$DKIM_NAME" "TXT" "$DKIM_STR" "300" || DNS_MANUAL_MSG+="\nDKIM ($DKIM_NAME): $DKIM_STR"
-  else DNS_MANUAL_MSG+="\n[ERRO] Não consegui extrair o TXT DKIM de /etc/opendkim/keys/$Domain/${DKIM_SELECTOR}.txt"; fi
-  DMARC_NAME="_dmarc.${Domain}"; DMARC_STR="$(build_dmarc)"
-  create_or_update_record "$DMARC_NAME" "TXT" "$DMARC_STR" "300" || DNS_MANUAL_MSG+="\nDMARC ($DMARC_NAME): $DMARC_STR"
+  if [ -n "$DKIM_STR" ]; then create_or_update_record "$DKIM_NAME" "TXT" "$DKIM_STR" "300" || DNS_MANUAL_MSG+="\nDKIM ($DKIM_NAME): $DKIM_STR"; else DNS_MANUAL_MSG+="\n[ERRO] Não consegui extrair o TXT DKIM"; fi
+  DMARC_NAME="_dmarc.${Domain}"; DMARC_STR="$(build_dmarc)"; create_or_update_record "$DMARC_NAME" "TXT" "$DMARC_STR" "300" || DNS_MANUAL_MSG+="\nDMARC ($DMARC_NAME): $DMARC_STR"
 else
   SPF_STR="$(build_spf)"; DKIM_NAME="${DKIM_SELECTOR}._domainkey.${Domain}"; DKIM_STR="$(extract_dkim_txt)"
   DMARC_NAME="_dmarc.${Domain}"; DMARC_STR="$(build_dmarc)"
@@ -532,8 +516,7 @@ add_alias "dmarc-reports" "${POSTMASTER_DEST}"
 
 UNSUB_SCRIPT="/usr/local/bin/unsub_capture.sh"
 if [ ! -x "$UNSUB_SCRIPT" ]; then
-  apt_wait 900
-  apt-get install -y procmail >/dev/null 2>&1 || true
+  apt_wait 900; apt-get install -y procmail >/dev/null 2>&1 || true
   cat > "$UNSUB_SCRIPT" <<'EOS'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -554,8 +537,7 @@ if [ "${DESCARTAR_NOREPLY}" = "true" ]; then add_alias "noreply" "/dev/null"; el
 
 BNC_SCRIPT="/usr/local/bin/bounce_capture.sh"
 if [ ! -x "$BNC_SCRIPT" ]; then
-  apt_wait 900
-  apt-get install -y procmail >/dev/null 2>&1 || true
+  apt_wait 900; apt-get install -y procmail >/dev/null 2>&1 || true
   cat > "$BNC_SCRIPT" <<'EOS'
 #!/usr/bin/env bash
 set -euo pipefail
