@@ -567,103 +567,42 @@ fi
 # Regras (idempotente)
 mkdir -p /etc/postfwd
 cat >/etc/postfwd/postfwd.cf <<'EOF'
-# ==== LIMITES POR PROVEDOR (ajuste as taxas conforme sua realidade) =====
-# Sintaxe: action=rate(<bucket>/<limite>/<janela_em_segundos>) defer_if_permit "mensagem"
+# ===== Regras postfwd2 (uma por linha; tokens separados por ";") =====
+# Grandes provedores globais
+id=limit-gmail;      recipient=~/.+@gmail\.com$/;                                 action=rate(global/2000/3600) defer_if_permit "Limite 2000/h atingido p/ Gmail."
+id=limit-msn;        recipient=~/.+@(outlook\.com|hotmail\.com|live\.com|msn\.com)$/; action=rate(global/1000/86400) defer_if_permit "Limite 1000/dia atingido p/ Microsoft."
+id=limit-yahoo;      recipient=~/.+@yahoo\.(com|com\.br|com\.ar|com\.mx)$/;       action=rate(global/150/3600)  defer_if_permit "Limite 150/h atingido p/ Yahoo."
+# Nota: Google Workspace com domínio próprio NÃO entra aqui (domínio não é gmail.com)
 
-id=limit-kinghost
-pattern=recipient mx=.*kinghost\.net
-action=rate(global/300/3600) defer_if_permit "Limite de 300/h para KingHost."
+# Provedores/hostings "de marca" (funciona só quando o destinatário usa o domínio do provedor)
+id=limit-kinghost;   recipient=~/.+@kinghost\.net$/;                               action=rate(global/300/3600)  defer_if_permit "Limite 300/h atingido p/ KingHost."
+id=limit-uol;        recipient=~/.+@uol\.com\.br$/;                                action=rate(global/300/3600)  defer_if_permit "Limite 300/h atingido p/ UOL."
+id=limit-locaweb;    recipient=~/.+@locaweb\.com\.br$/;                            action=rate(global/500/3600)  defer_if_permit "Limite 500/h atingido p/ Locaweb."
+id=limit-mandic;     recipient=~/.+@mandic\.com\.br$/;                             action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Mandic."
+id=limit-titan;      recipient=~/.+@titan\.email$/;                                action=rate(global/500/3600)  defer_if_permit "Limite 500/h atingido p/ Titan."
+id=limit-godaddy;    recipient=~/.+@secureserver\.net$/;                           action=rate(global/300/3600)  defer_if_permit "Limite 300/h atingido p/ GoDaddy (secureserver)."
+id=limit-zimbra;     recipient=~/.+@zimbra\..+$/;                                  action=rate(global/400/3600)  defer_if_permit "Limite 400/h atingido p/ Zimbra."
 
-id=limit-uolhost
-pattern=recipient mx=.*uhserver
-action=rate(global/300/3600) defer_if_permit "Limite de 300/h para UOL Host."
+# Microsoft 365 "de marca" (outlook.com já está acima)
+id=limit-office365;  recipient=~/.+@office365\.com$/;                              action=rate(global/2000/3600) defer_if_permit "Limite 2000/h atingido p/ Office 365."
 
-id=limit-locaweb
-pattern=recipient mx=.*locaweb\.com\.br
-action=rate(global/500/3600) defer_if_permit "Limite de 500/h para LocaWeb."
+# Argentina — ISPs/domínios comuns
+id=limit-fibertel;   recipient=~/.+@fibertel\.com\.ar$/;                           action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Fibertel."
+id=limit-speedy;     recipient=~/.+@speedy\.com\.ar$/;                             action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Speedy."
+id=limit-personal;   recipient=~/.+@personal\.com\.ar$/;                           action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Personal (Arnet)."
+id=limit-telecom;    recipient=~/.+@telecom\.com\.ar$/;                            action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Telecom."
+id=limit-claro-ar;   recipient=~/.+@claro\.com\.ar$/;                              action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Claro AR."
 
-id=limit-yahoo
-pattern=recipient mx=.*yahoo\.com
-action=rate(global/150/3600) defer_if_permit "Limite de 150/h para Yahoo."
+# México — ISPs/domínios comuns
+id=limit-telmex;     recipient=~/.+@prodigy\.net\.mx$/;                            action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Telmex."
+id=limit-axtel;      recipient=~/.+@axtel\.net$/;                                  action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Axtel."
+id=limit-izzi;       recipient=~/.+@izzi\.net\.mx$/;                               action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Izzi."
+id=limit-megacable;  recipient=~/.+@megacable\.com\.mx$/;                          action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Megacable."
+id=limit-totalplay;  recipient=~/.+@totalplay\.net\.mx$/;                          action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ TotalPlay."
+id=limit-telcel;     recipient=~/.+@telcel\.net$/;                                 action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Telcel."
 
-id=limit-mandic
-pattern=recipient mx=.*mandic\.com\.br
-action=rate(global/200/3600) defer_if_permit "Limite de 200/h para Mandic."
-
-id=limit-titan
-pattern=recipient mx=.*titan\.email
-action=rate(global/500/3600) defer_if_permit "Limite de 500/h para Titan."
-
-id=limit-google
-pattern=recipient mx=.*google
-action=rate(global/2000/3600) defer_if_permit "Limite de 2000/h para Google."
-
-id=limit-hotmail
-pattern=recipient mx=.*hotmail\.com
-action=rate(global/1000/86400) defer_if_permit "Limite de 1000/dia para Hotmail."
-
-id=limit-office365
-pattern=recipient mx=.*outlook\.com
-action=rate(global/2000/3600) defer_if_permit "Limite de 2000/h para Office 365."
-
-id=limit-secureserver
-pattern=recipient mx=.*secureserver\.net
-action=rate(global/300/3600) defer_if_permit "Limite de 300/h para GoDaddy."
-
-id=limit-zimbra
-pattern=recipient mx=.*zimbra
-action=rate(global/400/3600) defer_if_permit "Limite de 400/h para Zimbra."
-
-# Argentina
-id=limit-fibertel
-pattern=recipient mx=.*fibertel\.com\.ar
-action=rate(global/200/3600) defer_if_permit "Limite de 200/h para Fibertel."
-
-id=limit-speedy
-pattern=recipient mx=.*speedy\.com\.ar
-action=rate(global/200/3600) defer_if_permit "Limite de 200/h para Speedy."
-
-id=limit-personal
-pattern=recipient mx=.*personal\.com\.ar
-action=rate(global/200/3600) defer_if_permit "Limite de 200/h para Personal."
-
-id=limit-telecom
-pattern=recipient mx=.*telecom\.com\.ar
-action=rate(global/200/3600) defer_if_permit "Limite de 200/h para Telecom."
-
-id=limit-claro-ar
-pattern=recipient mx=.*claro\.com\.ar
-action=rate(global/200/3600) defer_if_permit "Limite de 200/h para Claro AR."
-
-# México
-id=limit-telmex
-pattern=recipient mx=.*prodigy\.net\.mx
-action=rate(global/200/3600) defer_if_permit "Limite de 200/h para Telmex."
-
-id=limit-axtel
-pattern=recipient mx=.*axtel\.net
-action=rate(global/200/3600) defer_if_permit "Limite de 200/h para Axtel."
-
-id=limit-izzi
-pattern=recipient mx=.*izzi\.net\.mx
-action=rate(global/200/3600) defer_if_permit "Limite de 200/h para Izzi."
-
-id=limit-megacable
-pattern=recipient mx=.*megacable\.com\.mx
-action=rate(global/200/3600) defer_if_permit "Limite de 200/h para Megacable."
-
-id=limit-totalplay
-pattern=recipient mx=.*totalplay\.net\.mx
-action=rate(global/200/3600) defer_if_permit "Limite de 200/h para TotalPlay."
-
-id=limit-telcel
-pattern=recipient mx=.*telcel\.net
-action=rate(global/200/3600) defer_if_permit "Limite de 200/h para Telcel."
-
-# ===== CATCH-ALL: o que não casou acima segue permitido =====
-id=no-limit
-pattern=recipient mx=.*
-action=permit
+# Catch-all (tudo que não casou acima)
+id=no-limit; action=permit
 EOF
 chmod 0644 /etc/postfwd/postfwd.cf
 echo "[postfwd] regras gravadas."
