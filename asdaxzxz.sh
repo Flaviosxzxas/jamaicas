@@ -520,112 +520,218 @@ systemctl restart postfix
 
 logger -p mail.info "postfix: teste de log (rsyslog ativo)"
 
-# ============================ POSTFWD (à prova de falhas) ============================
-{
-  echo "[postfwd] Instalando (ou validando) pacote…"
-  apt-get install -y postfwd >/dev/null 2>&1 || true
+###############################################################################
+# POSTFWD (policy de rate limit por MX) rodando como postfix:postfix
+###############################################################################
+export DEBIAN_FRONTEND=noninteractive
 
-  PFWBIN="$(command -v postfwd2 || command -v postfwd || true)"
-  if [ -z "$PFWBIN" ]; then
-    echo "[postfwd] ERRO: binário não encontrado mesmo após instalar (seguindo sem postfwd)."
-    exit 0
-  fi
-  echo "[postfwd] Usando binário: $PFWBIN"
+echo "=== [postfwd] instalando/validando dependências…"
+apt-get update -y
+apt-get install -y postfwd grep sed iproute2 iputils-ping ca-certificates curl >/dev/null 2>&1 || true
 
-  install -d -m 0755 /etc/postfwd
-  cat > /etc/postfwd/postfwd.cf <<'EOF'
-# === LIMITES POR MX (ajuste conforme sua realidade) ===
-id=limit-kinghost       pattern=recipient mx=.*kinghost\.net       action=rate(global/300/3600)  defer_if_permit "Limite de 300/h KingHost."
-id=limit-uolhost        pattern=recipient mx=.*uhserver             action=rate(global/300/3600)  defer_if_permit "Limite de 300/h UOL."
-id=limit-locaweb        pattern=recipient mx=.*locaweb\.com\.br     action=rate(global/500/3600)  defer_if_permit "Limite de 500/h LocaWeb."
-id=limit-yahoo          pattern=recipient mx=.*yahoo\.com           action=rate(global/150/3600)  defer_if_permit "Limite de 150/h Yahoo."
-id=limit-mandic         pattern=recipient mx=.*mandic\.com\.br      action=rate(global/200/3600)  defer_if_permit "Limite de 200/h Mandic."
-id=limit-titan          pattern=recipient mx=.*titan\.email         action=rate(global/500/3600)  defer_if_permit "Limite de 500/h Titan."
-id=limit-google         pattern=recipient mx=.*google               action=rate(global/2000/3600) defer_if_permit "Limite de 2000/h Google."
-id=limit-hotmail        pattern=recipient mx=.*hotmail\.com         action=rate(global/1000/86400) defer_if_permit "Limite de 1000/dia Hotmail."
-id=limit-office365      pattern=recipient mx=.*outlook\.com         action=rate(global/2000/3600) defer_if_permit "Limite de 2000/h O365."
-id=limit-secureserver   pattern=recipient mx=.*secureserver\.net    action=rate(global/300/3600)  defer_if_permit "Limite de 300/h GoDaddy."
-id=limit-zimbra         pattern=recipient mx=.*zimbra               action=rate(global/400/3600)  defer_if_permit "Limite de 400/h Zimbra."
-# AR
-id=limit-fibertel       pattern=recipient mx=.*fibertel\.com\.ar    action=rate(global/200/3600)  defer_if_permit "Limite de 200/h Fibertel."
-id=limit-speedy         pattern=recipient mx=.*speedy\.com\.ar      action=rate(global/200/3600)  defer_if_permit "Limite de 200/h Speedy."
-id=limit-personal       pattern=recipient mx=.*personal\.com\.ar    action=rate(global/200/3600)  defer_if_permit "Limite de 200/h Personal."
-id=limit-telecom        pattern=recipient mx=.*telecom\.com\.ar     action=rate(global/200/3600)  defer_if_permit "Limite de 200/h Telecom."
-id=limit-claro-ar       pattern=recipient mx=.*claro\.com\.ar       action=rate(global/200/3600)  defer_if_permit "Limite de 200/h Claro AR."
-# MX
-id=limit-telmex         pattern=recipient mx=.*prodigy\.net\.mx     action=rate(global/200/3600)  defer_if_permit "Limite de 200/h Telmex."
-id=limit-axtel          pattern=recipient mx=.*axtel\.net           action=rate(global/200/3600)  defer_if_permit "Limite de 200/h Axtel."
-id=limit-izzi           pattern=recipient mx=.*izzi\.net\.mx        action=rate(global/200/3600)  defer_if_permit "Limite de 200/h Izzi."
-id=limit-megacable      pattern=recipient mx=.*megacable\.com\.mx   action=rate(global/200/3600)  defer_if_permit "Limite de 200/h Megacable."
-id=limit-totalplay      pattern=recipient mx=.*totalplay\.net\.mx   action=rate(global/200/3600)  defer_if_permit "Limite de 200/h TotalPlay."
-id=limit-telcel         pattern=recipient mx=.*telcel\.net          action=rate(global/200/3600)  defer_if_permit "Limite de 200/h Telcel."
-# Catch-all
-id=no-limit             pattern=recipient mx=.*                     action=permit
+# Descobre binário disponível
+PFWBIN="$(command -v postfwd3 || command -v postfwd2 || command -v postfwd || true)"
+if [ -z "$PFWBIN" ]; then
+  echo "[postfwd] ERRO: não encontrei o binário postfwd/postfwd2 após tentar instalar."
+  # não aborta o script inteiro
+else
+  echo "[postfwd] usando binário: $PFWBIN"
+fi
+
+# Regras (idempotente)
+mkdir -p /etc/postfwd
+cat >/etc/postfwd/postfwd.cf <<'EOF'
+# ==== LIMITES POR PROVEDOR (ajuste as taxas conforme sua realidade) =====
+# Sintaxe: action=rate(<bucket>/<limite>/<janela_em_segundos>) defer_if_permit "mensagem"
+
+id=limit-kinghost
+pattern=recipient mx=.*kinghost\.net
+action=rate(global/300/3600) defer_if_permit "Limite de 300/h para KingHost."
+
+id=limit-uolhost
+pattern=recipient mx=.*uhserver
+action=rate(global/300/3600) defer_if_permit "Limite de 300/h para UOL Host."
+
+id=limit-locaweb
+pattern=recipient mx=.*locaweb\.com\.br
+action=rate(global/500/3600) defer_if_permit "Limite de 500/h para LocaWeb."
+
+id=limit-yahoo
+pattern=recipient mx=.*yahoo\.com
+action=rate(global/150/3600) defer_if_permit "Limite de 150/h para Yahoo."
+
+id=limit-mandic
+pattern=recipient mx=.*mandic\.com\.br
+action=rate(global/200/3600) defer_if_permit "Limite de 200/h para Mandic."
+
+id=limit-titan
+pattern=recipient mx=.*titan\.email
+action=rate(global/500/3600) defer_if_permit "Limite de 500/h para Titan."
+
+id=limit-google
+pattern=recipient mx=.*google
+action=rate(global/2000/3600) defer_if_permit "Limite de 2000/h para Google."
+
+id=limit-hotmail
+pattern=recipient mx=.*hotmail\.com
+action=rate(global/1000/86400) defer_if_permit "Limite de 1000/dia para Hotmail."
+
+id=limit-office365
+pattern=recipient mx=.*outlook\.com
+action=rate(global/2000/3600) defer_if_permit "Limite de 2000/h para Office 365."
+
+id=limit-secureserver
+pattern=recipient mx=.*secureserver\.net
+action=rate(global/300/3600) defer_if_permit "Limite de 300/h para GoDaddy."
+
+id=limit-zimbra
+pattern=recipient mx=.*zimbra
+action=rate(global/400/3600) defer_if_permit "Limite de 400/h para Zimbra."
+
+# Argentina
+id=limit-fibertel
+pattern=recipient mx=.*fibertel\.com\.ar
+action=rate(global/200/3600) defer_if_permit "Limite de 200/h para Fibertel."
+
+id=limit-speedy
+pattern=recipient mx=.*speedy\.com\.ar
+action=rate(global/200/3600) defer_if_permit "Limite de 200/h para Speedy."
+
+id=limit-personal
+pattern=recipient mx=.*personal\.com\.ar
+action=rate(global/200/3600) defer_if_permit "Limite de 200/h para Personal."
+
+id=limit-telecom
+pattern=recipient mx=.*telecom\.com\.ar
+action=rate(global/200/3600) defer_if_permit "Limite de 200/h para Telecom."
+
+id=limit-claro-ar
+pattern=recipient mx=.*claro\.com\.ar
+action=rate(global/200/3600) defer_if_permit "Limite de 200/h para Claro AR."
+
+# México
+id=limit-telmex
+pattern=recipient mx=.*prodigy\.net\.mx
+action=rate(global/200/3600) defer_if_permit "Limite de 200/h para Telmex."
+
+id=limit-axtel
+pattern=recipient mx=.*axtel\.net
+action=rate(global/200/3600) defer_if_permit "Limite de 200/h para Axtel."
+
+id=limit-izzi
+pattern=recipient mx=.*izzi\.net\.mx
+action=rate(global/200/3600) defer_if_permit "Limite de 200/h para Izzi."
+
+id=limit-megacable
+pattern=recipient mx=.*megacable\.com\.mx
+action=rate(global/200/3600) defer_if_permit "Limite de 200/h para Megacable."
+
+id=limit-totalplay
+pattern=recipient mx=.*totalplay\.net\.mx
+action=rate(global/200/3600) defer_if_permit "Limite de 200/h para TotalPlay."
+
+id=limit-telcel
+pattern=recipient mx=.*telcel\.net
+action=rate(global/200/3600) defer_if_permit "Limite de 200/h para Telcel."
+
+# ===== CATCH-ALL: o que não casou acima segue permitido =====
+id=no-limit
+pattern=recipient mx=.*
+action=permit
 EOF
-  chmod 0644 /etc/postfwd/postfwd.cf
-  echo "[postfwd] Regras gravadas."
+chmod 0644 /etc/postfwd/postfwd.cf
+echo "[postfwd] regras gravadas."
 
-  # Desabilita o SysV do pacote (para não tentar update-rc.d)
-  systemctl stop postfwd 2>/dev/null || true
-  systemctl disable postfwd 2>/dev/null || true
-  echo "[postfwd] SysV do pacote desabilitado (se existia)."
+# Desabilita o SysV do pacote (evita 'Default-Start contains no runlevels')
+systemctl stop postfwd 2>/dev/null || true
+systemctl disable postfwd 2>/dev/null || true
 
-  # Service nativo (forking) – cria /run/postfwd como root antes de iniciar
-  cat > /etc/systemd/system/postfwd-local.service <<EOF
+# Unidade systemd nativa rodando como postfix:postfix
+cat >/etc/systemd/system/postfwd-local.service <<'EOF'
 [Unit]
 Description=postfwd policy daemon (local-only)
-After=network-online.target
+After=network-online.target postfix.service
 Wants=network-online.target
+Requires=postfix.service
 
 [Service]
 Type=forking
+# Cria /run/postfwd como root antes de trocar para o usuário do serviço
 PermissionsStartOnly=true
 ExecStartPre=/usr/bin/install -d -o postfix -g postfix -m 0755 /run/postfwd
-ExecStart=$PFWBIN --shortlog --summary=600 \
+
+# Importante: rodar como postfix:postfix para evitar tentativa de cair para 'nobody'
+User=postfix
+Group=postfix
+
+# Executa postfwd2 em modo daemon (sem --nodaemon para rate() funcionar)
+ExecStart=/usr/sbin/postfwd2 -u postfix -g postfix \
+  --shortlog --summary=600 \
   --cache=600 --cache-rbl-timeout=3600 \
   --cleanup-requests=1200 --cleanup-rbls=1800 --cleanup-rates=1200 \
   --file=/etc/postfwd/postfwd.cf --interface=127.0.0.1 --port=10045
-User=postfix
-Group=postfix
+
 Restart=on-failure
+RestartSec=2s
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-  systemctl daemon-reload || true
-  systemctl enable --now postfwd-local || true
-  sleep 1
+systemctl daemon-reload
+systemctl enable --now postfwd-local >/dev/null 2>&1 || true
 
-  # ===== Health + (auto)fallback: se não subir, remove a policy do Postfix =====
-  NEED='check_policy_service inet:127.0.0.1:10045'
-  if ss -ltn | grep -q '127\.0\.0\.1:10045'; then
-    echo "[postfwd] OK: porta 10045 ouvindo"
-    CURR="$(postconf -h smtpd_recipient_restrictions 2>/dev/null || true)"
-    if ! echo "$CURR" | grep -qF "$NEED"; then
-      [ -z "$CURR" ] && CURR='permit_mynetworks, permit_sasl_authenticated, reject_non_fqdn_recipient, reject_unknown_recipient_domain, reject_unauth_destination, reject_unlisted_recipient'
-      postconf -e "smtpd_recipient_restrictions=${CURR}, ${NEED}" || true
-      systemctl reload postfix || systemctl restart postfix || true
-      echo "[postfwd] policy adicionada às restrições de recipient."
+# Espera um instante e verifica se está ouvindo
+sleep 1
+if ss -ltn 2>/dev/null | grep -q '127\.0\.0\.1:10045'; then
+  echo "[postfwd] OK: ouvindo em 127.0.0.1:10045"
+  PFW_OK=1
+else
+  echo "[postfwd] WARN: serviço não está ouvindo; mantendo Postfix sem policy."
+  PFW_OK=0
+fi
+
+# Integração no Postfix (adiciona ou remove a policy conforme status)
+NEEDED='check_policy_service inet:127.0.0.1:10045'
+CURRENT="$(postconf -h smtpd_recipient_restrictions 2>/dev/null || echo '')"
+
+sanitize_csv() { echo "$1" | sed -E 's/[,[:space:]]+/, /g; s/^, //; s/, $//'; }
+
+if [ "$PFW_OK" -eq 1 ]; then
+  # Adiciona se não existir
+  if ! echo "$CURRENT" | grep -qF "$NEEDED"; then
+    if [ -z "$CURRENT" ]; then
+      # baseline conservadora + policy
+      NEWVAL="permit_mynetworks, permit_sasl_authenticated, reject_non_fqdn_recipient, reject_unknown_recipient_domain, reject_unauth_destination, reject_unlisted_recipient, $NEEDED"
     else
-      echo "[postfwd] policy já presente no Postfix."
+      # remove ocorrências antigas do mesmo check antes de anexar
+      CLEANED="$(echo "$CURRENT" | sed -E 's/,\s*check_policy_service inet:127\.0\.0\.1:10045//g')"
+      NEWVAL="$(sanitize_csv "$CLEANED"), $NEEDED"
     fi
+    postconf -e "smtpd_recipient_restrictions=$NEWVAL"
+    systemctl reload postfix
+    echo "[postfwd] policy adicionada em smtpd_recipient_restrictions."
   else
-    echo "[postfwd] WARN: serviço não está ouvindo; removendo policy para não afetar envio."
-    CURR="$(postconf -h smtpd_recipient_restrictions 2>/dev/null || true)"
-    if echo "$CURR" | grep -qF "$NEED"; then
-      NEW="$(printf '%s\n' "$CURR" \
-        | sed -E 's/(^|,)[[:space:]]*check_policy_service inet:127\.0\.0\.1:10045([[:space:]]*,|$)/\1/g; s/,,+/,/g; s/^,\s*//; s/,\s*$//')"
-      postconf -e "smtpd_recipient_restrictions=${NEW}" || true
-      systemctl reload postfix || systemctl restart postfix || true
-      echo "[postfwd] policy removida (fallback)."
-    fi
+    echo "[postfwd] policy já presente no Postfix."
   fi
+else
+  # Serviço não está OK: remove a policy, se existir
+  if echo "$CURRENT" | grep -qF "$NEEDED"; then
+    CLEANED="$(echo "$CURRENT" | sed -E 's/,\s*check_policy_service inet:127\.0\.0\.1:10045//g; s/check_policy_service inet:127\.0\.0\.1:10045,?\s*//g')"
+    CLEANED="$(sanitize_csv "$CLEANED")"
+    postconf -e "smtpd_recipient_restrictions=$CLEANED"
+    systemctl reload postfix
+    echo "[postfwd] policy removida (fallback para não impactar envios)."
+  fi
+fi
 
-  # Logs resumidos (não derrubam o script)
-  systemctl --no-pager --full status postfwd-local | sed -n '1,25p' || true
-} || echo "[postfwd] WARN: bloco falhou, mas o script seguiu."
-# ==========================================================================================
+# Mostra status resumido
+systemctl --no-pager --full status postfwd-local | sed -n '1,20p' || true
+postconf -n | grep -E '^smtpd_recipient_restrictions|^smtpd_milters|^non_smtpd_milters' || true
+###############################################################################
+# FIM DO BLOCO POSTFWD
+###############################################################################
+
 
 
 
