@@ -180,7 +180,6 @@ certbot certonly --non-interactive --agree-tos --register-unsafely-without-email
   --dns-cloudflare-propagation-seconds 60 --rsa-key-size 4096 -d "$ServerName"
 
 wait
-
 # ============================================
 #  Corrigir SyntaxWarning em cloudflare.py
 # ============================================
