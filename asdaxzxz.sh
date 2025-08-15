@@ -625,6 +625,7 @@ Type=forking
 # Cria /run/postfwd como root antes de trocar para o usuário do serviço
 PermissionsStartOnly=true
 ExecStartPre=/usr/bin/install -d -o postfix -g postfix -m 0755 /run/postfwd
+ExecReload=/bin/kill -HUP $MAINPID
 
 # Importante: rodar como postfix:postfix para evitar tentativa de cair para 'nobody'
 User=postfix
