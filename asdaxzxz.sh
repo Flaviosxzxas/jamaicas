@@ -167,9 +167,7 @@ mkdir -p /root/.secrets && chmod 0700 /root/.secrets/ && touch /root/.secrets/cl
 echo "dns_cloudflare_email = $CloudflareEmail
 dns_cloudflare_api_key = $CloudflareAPI" > /root/.secrets/cloudflare.cfg
 
-echo -e "127.0.0.1 localhost
-127.0.0.1 $ServerName
-$ServerIP $ServerName" > /etc/hosts
+printf "127.0.0.1 localhost\n%s %s\n" "$ServerIP" "$ServerName" > /etc/hosts
 
 echo -e "$ServerName" > /etc/hostname
 
@@ -813,7 +811,8 @@ echo "[Postfix] Ajustando dependência systemd (DKIM/DMARC antes do Postfix)..."
 mkdir -p /etc/systemd/system/postfix.service.d
 cat >/etc/systemd/system/postfix.service.d/override.conf <<'EOF'
 [Unit]
-After=opendkim.service opendmarc.service
+After=opendkim.service opendmarc.service postfwd-local.service
+Wants=postfwd-local.service
 Requires=opendkim.service opendmarc.service
 EOF
 systemctl daemon-reload
