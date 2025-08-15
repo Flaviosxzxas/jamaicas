@@ -569,40 +569,40 @@ mkdir -p /etc/postfwd
 cat >/etc/postfwd/postfwd.cf <<'EOF'
 # ===== Regras postfwd2 (uma por linha; tokens separados por ";") =====
 # Grandes provedores globais
-id=limit-gmail;      recipient=~/.+@gmail\.com$/;                                 action=rate(global/2000/3600) defer_if_permit "Limite 2000/h atingido p/ Gmail."
-id=limit-msn;        recipient=~/.+@(outlook\.com|hotmail\.com|live\.com|msn\.com)$/; action=rate(global/1000/86400) defer_if_permit "Limite 1000/dia atingido p/ Microsoft."
-id=limit-yahoo;      recipient=~/.+@yahoo\.(com|com\.br|com\.ar|com\.mx)$/;       action=rate(global/150/3600)  defer_if_permit "Limite 150/h atingido p/ Yahoo."
-# Nota: Google Workspace com domínio próprio NÃO entra aqui (domínio não é gmail.com)
+id=limit-gmail;      recipient=~/.+@gmail\.com$/;                                      action=rate(global/2000/3600) defer_if_permit "Limite 2000/h atingido p/ Gmail."
+id=limit-msn;        recipient=~/.+@(outlook\.com|hotmail\.com|live\.com|msn\.com)$/;  action=rate(global/1000/86400) defer_if_permit "Limite 1000/dia atingido p/ Microsoft."
+id=limit-yahoo;      recipient=~/.+@yahoo\.(com|com\.br|com\.ar|com\.mx)$/;            action=rate(global/150/3600)  defer_if_permit "Limite 150/h atingido p/ Yahoo."
+# Observação: domínios Google Workspace próprios não entram aqui (não são gmail.com)
 
-# Provedores/hostings "de marca" (funciona só quando o destinatário usa o domínio do provedor)
-id=limit-kinghost;   recipient=~/.+@kinghost\.net$/;                               action=rate(global/300/3600)  defer_if_permit "Limite 300/h atingido p/ KingHost."
-id=limit-uol;        recipient=~/.+@uol\.com\.br$/;                                action=rate(global/300/3600)  defer_if_permit "Limite 300/h atingido p/ UOL."
-id=limit-locaweb;    recipient=~/.+@locaweb\.com\.br$/;                            action=rate(global/500/3600)  defer_if_permit "Limite 500/h atingido p/ Locaweb."
-id=limit-mandic;     recipient=~/.+@mandic\.com\.br$/;                             action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Mandic."
-id=limit-titan;      recipient=~/.+@titan\.email$/;                                action=rate(global/500/3600)  defer_if_permit "Limite 500/h atingido p/ Titan."
-id=limit-godaddy;    recipient=~/.+@secureserver\.net$/;                           action=rate(global/300/3600)  defer_if_permit "Limite 300/h atingido p/ GoDaddy (secureserver)."
-id=limit-zimbra;     recipient=~/.+@zimbra\..+$/;                                  action=rate(global/400/3600)  defer_if_permit "Limite 400/h atingido p/ Zimbra."
+# Provedores/hostings “de marca”
+id=limit-kinghost;   recipient=~/.+@kinghost\.net$/;                                   action=rate(global/300/3600)  defer_if_permit "Limite 300/h atingido p/ KingHost."
+id=limit-uol;        recipient=~/.+@uol\.com\.br$/;                                    action=rate(global/300/3600)  defer_if_permit "Limite 300/h atingido p/ UOL."
+id=limit-locaweb;    recipient=~/.+@locaweb\.com\.br$/;                                action=rate(global/500/3600)  defer_if_permit "Limite 500/h atingido p/ Locaweb."
+id=limit-mandic;     recipient=~/.+@mandic\.com\.br$/;                                 action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Mandic."
+id=limit-titan;      recipient=~/.+@titan\.email$/;                                    action=rate(global/500/3600)  defer_if_permit "Limite 500/h atingido p/ Titan."
+id=limit-godaddy;    recipient=~/.+@secureserver\.net$/;                               action=rate(global/300/3600)  defer_if_permit "Limite 300/h atingido p/ GoDaddy (secureserver)."
+id=limit-zimbra;     recipient=~/.+@zimbra\..+$/;                                      action=rate(global/400/3600)  defer_if_permit "Limite 400/h atingido p/ Zimbra."
 
-# Microsoft 365 "de marca" (outlook.com já está acima)
-id=limit-office365;  recipient=~/.+@office365\.com$/;                              action=rate(global/2000/3600) defer_if_permit "Limite 2000/h atingido p/ Office 365."
+# Microsoft 365 “de marca” (endereços @outlook.com já cobertos acima)
+id=limit-office365;  recipient=~/.+@office365\.com$/;                                  action=rate(global/2000/3600) defer_if_permit "Limite 2000/h atingido p/ Office 365."
 
 # Argentina — ISPs/domínios comuns
-id=limit-fibertel;   recipient=~/.+@fibertel\.com\.ar$/;                           action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Fibertel."
-id=limit-speedy;     recipient=~/.+@speedy\.com\.ar$/;                             action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Speedy."
-id=limit-personal;   recipient=~/.+@personal\.com\.ar$/;                           action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Personal (Arnet)."
-id=limit-telecom;    recipient=~/.+@telecom\.com\.ar$/;                            action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Telecom."
-id=limit-claro-ar;   recipient=~/.+@claro\.com\.ar$/;                              action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Claro AR."
+id=limit-fibertel;   recipient=~/.+@fibertel\.com\.ar$/;                               action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Fibertel."
+id=limit-speedy;     recipient=~/.+@speedy\.com\.ar$/;                                 action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Speedy."
+id=limit-personal;   recipient=~/.+@personal\.com\.ar$/;                               action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Personal (Arnet)."
+id=limit-telecom;    recipient=~/.+@telecom\.com\.ar$/;                                action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Telecom."
+id=limit-claro-ar;   recipient=~/.+@claro\.com\.ar$/;                                  action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Claro AR."
 
 # México — ISPs/domínios comuns
-id=limit-telmex;     recipient=~/.+@prodigy\.net\.mx$/;                            action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Telmex."
-id=limit-axtel;      recipient=~/.+@axtel\.net$/;                                  action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Axtel."
-id=limit-izzi;       recipient=~/.+@izzi\.net\.mx$/;                               action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Izzi."
-id=limit-megacable;  recipient=~/.+@megacable\.com\.mx$/;                          action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Megacable."
-id=limit-totalplay;  recipient=~/.+@totalplay\.net\.mx$/;                          action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ TotalPlay."
-id=limit-telcel;     recipient=~/.+@telcel\.net$/;                                 action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Telcel."
+id=limit-telmex;     recipient=~/.+@prodigy\.net\.mx$/;                                action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Telmex."
+id=limit-axtel;      recipient=~/.+@axtel\.net$/;                                      action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Axtel."
+id=limit-izzi;       recipient=~/.+@izzi\.net\.mx$/;                                   action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Izzi."
+id=limit-megacable;  recipient=~/.+@megacable\.com\.mx$/;                              action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Megacable."
+id=limit-totalplay;  recipient=~/.+@totalplay\.net\.mx$/;                              action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ TotalPlay."
+id=limit-telcel;     recipient=~/.+@telcel\.net$/;                                     action=rate(global/200/3600)  defer_if_permit "Limite 200/h atingido p/ Telcel."
 
 # Catch-all (tudo que não casou acima)
-id=no-limit; action=permit
+id=no-limit; recipient=~/.+/;                                                           action=permit
 EOF
 chmod 0644 /etc/postfwd/postfwd.cf
 echo "[postfwd] regras gravadas."
