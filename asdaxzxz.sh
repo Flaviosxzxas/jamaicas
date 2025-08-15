@@ -461,14 +461,15 @@ non_smtpd_milters = \$smtpd_milters
 
 # Restrições de destinatários
 smtpd_recipient_restrictions =
-    permit_mynetworks,
-    permit_sasl_authenticated,
-    check_recipient_access hash:/etc/postfix/access.recipients,
     reject_non_fqdn_recipient,
     reject_unknown_recipient_domain,
     reject_unauth_destination,
+    check_policy_service inet:127.0.0.1:10045,
+    permit_sasl_authenticated,
+    permit_mynetworks,
     reject_unlisted_recipient,
-    check_policy_service inet:127.0.0.1:10045
+    check_recipient_access hash:/etc/postfix/access.recipients
+
     
 # Não deixe vazio (evita aceitar locais inexistentes)
 local_recipient_maps = proxy:unix:passwd.byname \$alias_maps
@@ -487,8 +488,7 @@ smtpd_helo_required = yes
 smtpd_helo_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_invalid_helo_hostname, reject_non_fqdn_helo_hostname, reject_unknown_helo_hostname
 
 # TLS
-smtpd_tls_cert_file=/etc/letsencrypt/live/$ServerName/fullchain.pem
-smtpd_tls_key_file=/etc/letsencrypt/live/$ServerName/privkey.pem
+
 smtpd_tls_security_level = may
 smtpd_tls_loglevel = 2
 smtpd_tls_received_header = yes
