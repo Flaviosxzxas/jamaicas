@@ -737,107 +737,92 @@ postconf -n | grep -E '^smtpd_recipient_restrictions|^smtpd_milters|^non_smtpd_m
 
 echo "==================================================== OpenDMARC ===================================================="
 
-# ============================================
-#  Criar diretórios OpenDMARC
-# ============================================
+# --- Diretórios OpenDMARC (idempotente)
 echo "[OpenDMARC] Criando diretórios..."
-mkdir -p /run/opendmarc /etc/opendmarc /var/log/opendmarc /var/lib/opendmarc
-chown opendmarc:opendmarc /run/opendmarc /etc/opendmarc /var/log/opendmarc /var/lib/opendmarc
-chmod 750 /run/opendmarc /etc/opendmarc /var/log/opendmarc /var/lib/opendmarc
+install -d -o opendmarc -g opendmarc -m 0750 /run/opendmarc
+install -d -o opendmarc -g opendmarc -m 0750 /etc/opendmarc
+install -d -o opendmarc -g opendmarc -m 0750 /var/log/opendmarc
+install -d -o opendmarc -g opendmarc -m 0750 /var/lib/opendmarc
 
-# /etc/opendmarc.conf
-preencher_opendmarc_conf() {
-    local opendmarc_conf="/etc/opendmarc.conf"
+# --- Config OpenDMARC (arquivo determinístico; reescreve em cada run)
+cat >/etc/opendmarc.conf <<EOF
+# OpenDMARC básico – loopback apenas
+Syslog                  true
+Socket                  inet:54321@127.0.0.1
+PidFile                 /run/opendmarc/opendmarc.pid
 
-    if [[ ! -f "$opendmarc_conf" ]]; then
-        echo "[OpenDMARC] Criando $opendmarc_conf..."
-        touch "$opendmarc_conf"
-    fi
+# AuthservID é o identificador do servidor que assina Authentication-Results
+AuthservID              ${ServerName}
+TrustedAuthservIDs      ${ServerName}
 
-    local configuracoes=(
-        "Syslog true"
-        "Socket inet:54321@127.0.0.1"
-        "PidFile /run/opendmarc/opendmarc.pid"
-        "AuthservID OpenDMARC"
-        "IgnoreHosts /etc/opendmarc/ignore.hosts"
-        "RejectFailures false"
-        "TrustedAuthservIDs ${ServerName}"
-        "HistoryFile /var/lib/opendmarc/opendmarc.dat"
-    )
+IgnoreHosts             /etc/opendmarc/ignore.hosts
+HistoryFile             /var/lib/opendmarc/opendmarc.dat
 
-    echo "[OpenDMARC] Preenchendo $opendmarc_conf..."
-    for cfg in "${configuracoes[@]}"; do
-        if ! grep -q "^${cfg//\//\\/}" "$opendmarc_conf"; then
-            echo "$cfg" >> "$opendmarc_conf"
-        fi
-    done
+# Não rejeita mensagens no milter por falha de DMARC (deixa o Postfix decidir)
+RejectFailures          false
+EOF
+chown opendmarc:opendmarc /etc/opendmarc.conf
+chmod 0644 /etc/opendmarc.conf
 
-    chown opendmarc:opendmarc "$opendmarc_conf"
-    chmod 644 "$opendmarc_conf"
-}
-
-preencher_opendmarc_conf
-
-# /etc/opendmarc/ignore.hosts
-touch /etc/opendmarc/ignore.hosts
-if ! grep -q "127.0.0.1" /etc/opendmarc/ignore.hosts; then
-    echo "127.0.0.1" >> /etc/opendmarc/ignore.hosts
-fi
-if ! grep -q "::1" /etc/opendmarc/ignore.hosts; then
-    echo "::1" >> /etc/opendmarc/ignore.hosts
-fi
+# --- Ignore hosts
+{
+  echo "127.0.0.1"
+  echo "::1"
+} >/etc/opendmarc/ignore.hosts
 chown opendmarc:opendmarc /etc/opendmarc/ignore.hosts
-chmod 644 /etc/opendmarc/ignore.hosts
+chmod 0644 /etc/opendmarc/ignore.hosts
 
-# Arquivo de histórico
-touch /var/lib/opendmarc/opendmarc.dat
+# --- Arquivo de histórico
+: > /var/lib/opendmarc/opendmarc.dat
 chown opendmarc:opendmarc /var/lib/opendmarc/opendmarc.dat
-chmod 644 /var/lib/opendmarc/opendmarc.dat
+chmod 0644 /var/lib/opendmarc/opendmarc.dat
 
+# --- Limpa PID antigo se existir
 rm -f /run/opendmarc/opendmarc.pid
 
+# --- Reinícios
 echo "[OpenDKIM] Reiniciando OpenDKIM..."
 systemctl enable opendkim >/dev/null 2>&1 || true
-systemctl restart opendkim
+systemctl restart opendkim || true
 if systemctl is-active --quiet opendkim; then
-    echo "[OpenDKIM] OpenDKIM reiniciado com sucesso."
+  echo "[OpenDKIM] OK."
 else
-    echo "[OpenDKIM] Falha ao reiniciar OpenDKIM."
+  echo "[OpenDKIM] AVISO: falha ao iniciar OpenDKIM."
 fi
 
 echo "[OpenDMARC] Reiniciando OpenDMARC..."
 systemctl enable opendmarc >/dev/null 2>&1 || true
-systemctl restart opendmarc
+systemctl restart opendmarc || true
 if systemctl is-active --quiet opendmarc; then
-    echo "[OpenDMARC] OpenDMARC reiniciado com sucesso."
+  echo "[OpenDMARC] OK."
 else
-    echo "[OpenDMARC] Falha ao reiniciar OpenDMARC."
+  echo "[OpenDMARC] AVISO: falha ao iniciar OpenDMARC."
 fi
 
+# --- Postfix depende (soft) de DKIM/DMARC (sem travar se um deles cair)
 echo "[Postfix] Ajustando dependência systemd (DKIM/DMARC antes do Postfix)..."
-mkdir -p /etc/systemd/system/postfix.service.d
-cat >/etc/systemd/system/postfix.service.d/override.conf <<'EOF'
+install -d /etc/systemd/system/postfix.service.d
+cat >/etc/systemd/system/postfix.service.d/10-milters.conf <<'EOF'
 [Unit]
-After=opendkim.service opendmarc.service postfwd-local.service
-Wants=postfwd-local.service
-Requires=opendkim.service opendmarc.service
+# Sobe Postfix depois dos milters; não é 'Requires' para não bloquear o SMTP
+Wants=opendkim.service opendmarc.service postfwd-local.service
+After=network-online.target opendkim.service opendmarc.service postfwd-local.service
 EOF
+
 systemctl daemon-reload
 
-# (garanta no seu main.cf:)
-# milter_protocol = 6
-# milter_default_action = accept
-# smtpd_milters = inet:127.0.0.1:12301, inet:127.0.0.1:54321
-# non_smtpd_milters = $smtpd_milters
+# (Se quiser garantir os milters via postconf, descomente as 4 linhas abaixo)
+# postconf -e "milter_protocol = 6"
+# postconf -e "milter_default_action = accept"
+# postconf -e "smtpd_milters = inet:127.0.0.1:12301, inet:127.0.0.1:54321"
+# postconf -e "non_smtpd_milters = \$smtpd_milters"
 
 systemctl enable postfix >/dev/null 2>&1 || true
-systemctl restart postfix
+systemctl restart postfix || true
 
-# sanity check (opcional)
-systemctl is-active --quiet postfix && echo "[Postfix] Postfix ativo."
-systemctl show postfix -p After -p Requires
-
-
+# --- Sanidade rápida (sem pager e sem travar)
+systemctl --no-pager --full status postfix | sed -n '1,15p' || true
+echo "[OK] Dependências aplicadas."
 
 echo "==================================================== CLOUDFLARE ===================================================="
 
