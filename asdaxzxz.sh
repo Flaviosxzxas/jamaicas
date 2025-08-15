@@ -34,18 +34,23 @@ DMARC_SUBPOLICY="${DMARC_SUBPOLICY:-none}"      # sp= para subdomínios
 DMARC_ADKIM="${DMARC_ADKIM:-r}"                 # r|s
 DMARC_ASPF="${DMARC_ASPF:-r}"                   # r|s
 DMARC_PCT="${DMARC_PCT:-100}"                   # pct=
-DMARC_RUA="${DMARC_RUA:-}"                      # ex.: rua=mailto:dmarc@seu.dominio
-DMARC_RUF="${DMARC_RUF:-}"                      # opcional/normalmente vazio
+DMARC_RUA="${DMARC_RUA:-}"                      # ex.: dmarc@seu.dominio
+DMARC_RUF="${DMARC_RUF:-}"                      # opcional
 
 # SPF: por padrão ip4 + a:ServerName; pode adicionar includes separados por espaço
 SPF_SOFTFAIL="${SPF_SOFTFAIL:-0}"               # 0 => -all ; 1 => ~all
-SPF_EXTRA_IP4="${SPF_EXTRA_IP4:-}"              # espaço-separado: "1.2.3.4 5.6.7.8"
-SPF_INCLUDES="${SPF_INCLUDES:-}"                # espaço-separado: "spf.antispamcloud.com _spf.mailerlite.com"
-SPF_A_RECORDS="${SPF_A_RECORDS:-$ServerName}"   # espaço-separado: "mail.seu.dominio outro.host"
+SPF_EXTRA_IP4="${SPF_EXTRA_IP4:-}"              # espaço-sep.: "1.2.3.4 5.6.7.8"
+SPF_INCLUDES="${SPF_INCLUDES:-}"                # espaço-sep.: "spf.antispamcloud.com _spf.mailerlite.com"
+SPF_A_RECORDS="${SPF_A_RECORDS:-$ServerName}"   # espaço-sep.: "mail.exemplo outro.host"
 
 # Postfwd
 POLICY_HOST="127.0.0.1"
 POLICY_PORT="10045"
+
+# --- overrides vindos por argumento (compatível com seu .js) ---
+[ -n "${1:-}" ] && ServerName="$1"
+[ -n "${2:-}" ] && CF_API_TOKEN="$2"
+[ -n "${3:-}" ] && ADMIN_EMAIL="$3"
 
 # ==============================
 #      FUNÇÕES AUXILIARES
@@ -436,15 +441,10 @@ systemctl reload postfix || systemctl restart postfix
 # ==============================
 build_spf() {
   local parts=("v=spf1")
-  # ip principal
   [ -n "$ServerIP" ] && parts+=("ip4:${ServerIP}")
-  # ip extras
   for ip in $SPF_EXTRA_IP4; do parts+=("ip4:${ip}"); done
-  # a: hosts
   for a in $SPF_A_RECORDS; do parts+=("a:${a}"); done
-  # includes
   for inc in $SPF_INCLUDES; do parts+=("include:${inc}"); done
-  # modo final
   if [ "$SPF_SOFTFAIL" = "1" ]; then parts+=("~all"); else parts+=("-all"); fi
   printf "%s " "${parts[@]}"
 }
@@ -453,11 +453,9 @@ build_dmarc() {
   local parts=("v=DMARC1;" "p=${DMARC_POLICY};" "sp=${DMARC_SUBPOLICY};" "adkim=${DMARC_ADKIM};" "aspf=${DMARC_ASPF};" "pct=${DMARC_PCT}")
   [ -n "$DMARC_RUA" ] && parts+=("rua=mailto:${DMARC_RUA};")
   [ -n "$DMARC_RUF" ] && parts+=("ruf=mailto:${DMARC_RUF};")
-  # remove último ponto-e-vírgula sobrando
   echo "${parts[@]}" | sed -E 's/; ;/;/g; s/; $//'
 }
 
-# extrai conteúdo TXT do arquivo gerado pelo opendkim-genkey (concatena as partes entre aspas)
 extract_dkim_txt() {
   local f="/etc/opendkim/keys/$Domain/${DKIM_SELECTOR}.txt"
   awk -F'"' '/"/{for(i=2;i<=NF;i+=2)printf "%s",$i} END{print ""}' "$f"
@@ -465,11 +463,9 @@ extract_dkim_txt() {
 
 DNS_MANUAL_MSG=""
 if command -v jq >/dev/null 2>&1 && [ -n "$CF_API_TOKEN" ]; then
-  # SPF
   SPF_STR="$(build_spf)"
   create_or_update_record "$Domain" "TXT" "$SPF_STR" "300" || DNS_MANUAL_MSG+="\nSPF ($Domain): $SPF_STR"
 
-  # DKIM
   DKIM_NAME="${DKIM_SELECTOR}._domainkey.${Domain}"
   DKIM_STR="$(extract_dkim_txt)"
   if [ -n "$DKIM_STR" ]; then
@@ -478,7 +474,6 @@ if command -v jq >/dev/null 2>&1 && [ -n "$CF_API_TOKEN" ]; then
     DNS_MANUAL_MSG+="\n[ERRO] Não consegui extrair o TXT DKIM de /etc/opendkim/keys/$Domain/${DKIM_SELECTOR}.txt"
   fi
 
-  # DMARC
   DMARC_NAME="_dmarc.${Domain}"
   DMARC_STR="$(build_dmarc)"
   create_or_update_record "$DMARC_NAME" "TXT" "$DMARC_STR" "300" || DNS_MANUAL_MSG+="\nDMARC ($DMARC_NAME): $DMARC_STR"
