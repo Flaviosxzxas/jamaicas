@@ -4,9 +4,8 @@ set -Eeuo pipefail
 trap 'echo "[ERRO] linha $LINENO: $BASH_COMMAND (status $?)" >&2' ERR
 
 
-# ============================================
-#  Verificação de permissão de root
-# ============================================
+echo "================================================= Verificação de permissão de root ================================================="
+
 if [ "$(id -u)" -ne 0 ]; then
   echo "Este script precisa ser executado como root."
   exit 1
@@ -16,10 +15,9 @@ export DEBIAN_FRONTEND=noninteractive
 
 is_ubuntu() { [ -f /etc/os-release ] && grep -qi ubuntu /etc/os-release; }
 
-# ============================================
-#  Verificação e instalação do PHP (CLI)
-# ============================================
-echo ">> Verificando se o PHP está instalado..."
+
+echo "================================================= Verificação e instalação do PHP (CLI) ================================================="
+
 if ! command -v php >/dev/null 2>&1; then
     echo ">> PHP não encontrado. Instalando..."
     apt-get update -y
@@ -62,10 +60,8 @@ else
     echo "OK: $(php -v | head -n 1)"
 fi
 
-# ============================================
-#  Atualização dos pacotes do sistema
-# ============================================
-echo ">> Atualizando pacotes..."
+echo "================================================= Atualização dos pacotes ================================================="
+
 apt-get update
 apt-get -y upgrade \
   -o Dpkg::Options::="--force-confdef" \
@@ -79,9 +75,8 @@ apt-get -y upgrade \
 # PHPV="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
 # echo "PHP CLI ativo: $PHPV"
 
-# ============================================
-#  Definir variáveis principais
-# ============================================
+echo "================================================= Definir variáveis principais ================================================="
+
 ServerName=$1
 CloudflareAPI=$2
 CloudflareEmail=$3
@@ -99,9 +94,8 @@ if [[ ! "$ServerName" =~ ^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
   exit 1
 fi
 
-# ============================================
-#  Variáveis derivadas
-# ============================================
+echo "================================================= Variáveis derivadas ================================================="
+
 Domain=$(echo "$ServerName" | awk -F. '{print $(NF-1)"."$NF}')
 DKIMSelector=$(echo "$ServerName" | awk -F[.:] '{print $1}')
 
@@ -117,9 +111,8 @@ if [ -z "$ServerIP" ]; then
   exit 1
 fi
 
-# ============================================
-#  Depuração inicial
-# ============================================
+echo "================================================= Depuração inicial ================================================="
+
 echo "===== DEPURAÇÃO ====="
 echo "ServerName: $ServerName"
 echo "CloudflareAPI: $CloudflareAPI"
@@ -128,15 +121,12 @@ echo "Domain: $Domain"
 echo "DKIMSelector: $DKIMSelector"
 echo "ServerIP: $ServerIP"
 echo "======================"
-echo "==================================================================== Hostname && SSL ===================================================================="
-# ============================================
-#  Instalar pacotes básicos
-# ============================================
+echo "================================================= Hostname && SSL ================================================="
+
 apt-get install -y wget curl jq python3-certbot-dns-cloudflare openssl
-# ============================================
-#  Configurar Node.js
-# ============================================
-echo "Configurando Node.js..."
+
+echo "================================================= Configurar Node.js ================================================="
+
 curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && echo "Node.js instalado com sucesso: versão $(node -v)" || {
@@ -179,24 +169,18 @@ printf '%s\t%s\n' "$ServerIP" "$ServerName" >> /etc/hosts
 # hostname
 hostnamectl set-hostname "$ServerName"
 
-
 certbot certonly --non-interactive --agree-tos --register-unsafely-without-email \
   --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.cfg \
   --dns-cloudflare-propagation-seconds 60 --rsa-key-size 4096 -d "$ServerName"
 
-# ============================================
-#  Corrigir SyntaxWarning em cloudflare.py
-# ============================================
-echo "Corrigindo SyntaxWarning no cloudflare.py..."
+echo "================================================= Corrigir SyntaxWarning em cloudflare.py ================================================="
+
 sed -i "s/self\.email is ''/self.email == ''/g" /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
 sed -i "s/self\.token is ''/self.token == ''/g"   /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
 echo "Correção aplicada com sucesso em cloudflare.py."
 
-echo "==================================================================== DKIM ==============================================================================="
+echo "================================================= DKIM ================================================="
 
-# ============================================
-#  Instalar OpenDKIM
-# ============================================
 apt-get install -y opendkim opendkim-tools
 wait
 
@@ -282,9 +266,8 @@ EOF
 chmod 755 /root/dkimcode.sh
 sleep 3
 
-# ============================================
-#  Atualização de pacotes
-# ============================================
+echo "================================================= Atualização de pacotes ================================================="
+
 apt-get update
 apt-get upgrade -y
 
@@ -328,7 +311,7 @@ install_py_pkg() {
 # Uso:
 install_py_pkg "dnspython" "python3-dnspython" 0
 
-echo "==================================================== POSTFIX ===================================================="
+echo "================================================= POSTFIX ================================================="
 
 # Instala Postfix e ferramentas auxiliares em modo não interativo,
 
@@ -395,7 +378,7 @@ inet_interfaces = loopback-only
 inet_protocols = ipv4
 EOF
 
-echo "==================================================== POSTFIX ===================================================="
+echo "================================================= POSTFIX ================================================="
 
 # Salvar variáveis antes de instalar dependências
 ORIGINAL_VARS=$(declare -p ServerName CloudflareAPI CloudflareEmail Domain DKIMSelector ServerIP)
@@ -445,7 +428,7 @@ tail -n 5 /var/log/mail.log || true
 systemctl daemon-reload
 systemctl restart postfix
 
-echo "==================================================== CLOUDFLARE ===================================================="
+echo "================================================= CLOUDFLARE ================================================="
 
 echo "===== DEPURAÇÃO: ANTES DE CONFIGURAÇÃO CLOUDFLARE ====="
 echo "ServerName: $ServerName"
@@ -581,7 +564,7 @@ create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP a:$ServerNam
 create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=reject; rua=mailto:dmarc-reports@$ServerName; ruf=mailto:dmarc-reports@$ServerName; sp=reject; adkim=s; aspf=s\"" ""
 create_or_update_record "mail._domainkey.$ServerName" "TXT" "\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\"" ""
 
-echo "==================================================== APPLICATION ===================================================="
+echo "================================================= APPLICATION ================================================="
 
 # Instalar Apache, PHP e módulos
 DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php php-mbstring
@@ -707,10 +690,9 @@ chmod 644 /var/www/html/unsubscribe.php
 
 # (Opcional) Reiniciar Apache
 systemctl restart apache2 || true
-# ============================================
-#  Habilitar SSL no Apache e redirecionamento
-# ============================================
-echo "Habilitando SSL e Rewrite no Apache..."
+
+echo "================================================= Habilitar SSL no Apache e redirecionamento ================================================="
+
 a2enmod ssl
 a2enmod rewrite
 
@@ -752,12 +734,11 @@ EOF
 a2ensite "ssl-$ServerName"
 systemctl reload apache2
 
-echo "==================================================== APPLICATION ===================================================="
-
+echo "================================================= APPLICATION ================================================="
 # ============================================
 #  CRIAR E DESCARTAR noreply@$ServerName, unsubscribe@$ServerName, contato@$ServerName
 # ============================================
-echo "Configurando noreply@$ServerName, unsubscribe@$ServerName e contacto@$ServerName..."
+echo "================================================= Configurando noreply@$ServerName, unsubscribe@$ServerName e contacto@$ServerName... ================================================="
 
 # Ajusta apenas para um valor explícito, sem $virtual_alias_maps
 # Ajusta apenas para um valor explícito
