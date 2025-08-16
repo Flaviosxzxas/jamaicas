@@ -107,7 +107,7 @@ if [ -z "$Domain" ] || [ -z "$DKIMSelector" ]; then
 fi
 
 # Obter IP público
-ServerIP=$(wget -qO- http://ip-api.com/line?fields=query)
+ServerIP=$(wget -qO- https://api64.ipify.org)
 if [ -z "$ServerIP" ]; then
   echo "Erro: Não foi possível obter o IP público."
   exit 1
@@ -133,12 +133,11 @@ echo "==================================================================== Hostn
 #  Instalar pacotes básicos
 # ============================================
 apt-get install -y wget curl jq python3-certbot-dns-cloudflare openssl
-
 # ============================================
 #  Configurar Node.js
 # ============================================
 echo "Configurando Node.js..."
-curl -fsSL https://deb.nodesource.com/setup_21.x | bash - \
+curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && echo "Node.js instalado com sucesso: versão $(node -v)" || {
         echo "Alerta: Erro ao instalar o Node.js."
