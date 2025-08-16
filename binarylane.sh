@@ -13,39 +13,34 @@ export DEBIAN_FRONTEND=noninteractive
 is_ubuntu() { [ -f /etc/os-release ] && grep -qi ubuntu /etc/os-release; }
 
 # ============================================
-#  Verificação e instalação do PHP (CLI)
+#  Verificação e instalação do PHP
 # ============================================
 echo ">> Verificando se o PHP está instalado..."
 if ! command -v php >/dev/null 2>&1; then
     echo ">> PHP não encontrado. Instalando..."
-    apt-get update -y
+    apt update -y
 
     # Caminho rápido: meta-pacote genérico
-    if apt-get install -y php-cli php-common; then
+    if apt install -y php-cli php-common; then
         :
     else
         echo ">> 'php-cli' indisponível. Tentando versões específicas..."
-        # tenta detectar versões disponíveis no repo e instalar a mais alta
-        CANDIDATES="$(apt-cache search -n '^php[0-9]\.[0-9]-cli$' | awk '{print $1}' | sort -Vr)"
-        OK=0
-        for pkg in $CANDIDATES php8.3-cli php8.2-cli php8.1-cli php7.4-cli; do
-            if apt-get install -y "$pkg"; then OK=1; break; fi
-        done
-        if [ "$OK" -eq 0 ] && is_ubuntu; then
-            echo ">> Adicionando PPA ppa:ondrej/php (fallback)..."
-            apt-get install -y software-properties-common ca-certificates lsb-release || true
-            add-apt-repository -y ppa:ondrej/php || true
-            apt-get update -y
-            apt-get install -y php8.3-cli || apt-get install -y php8.2-cli || apt-get install -y php8.1-cli || apt-get install -y php7.4-cli || true
-        fi
+        apt install -y php8.2-cli || apt install -y php8.1-cli || apt install -y php7.4-cli || {
+
+            # Fallback: adiciona PPA do Ondřej (apenas no Ubuntu), só se tudo acima falhar
+            if is_ubuntu; then
+                echo ">> Adicionando PPA ppa:ondrej/php (fallback)..."
+                apt install -y software-properties-common ca-certificates lsb-release apt-transport-https || true
+                add-apt-repository -y ppa:ondrej/php || true
+                apt update -y
+                apt install -y php8.3-cli || apt install -y php8.2-cli || apt install -y php8.1-cli || apt install -y php7.4-cli || true
+            fi
+        }
     fi
 
-    # Garante que /usr/bin/php aponte para o binário instalado via update-alternatives
-    PHPPATH="$(command -v php || true)"
-    if [ -n "$PHPPATH" ] && [ "$PHPPATH" != "/usr/bin/php" ]; then
-        echo ">> Registrando ${PHPPATH} como alternativa de php..."
-        update-alternatives --install /usr/bin/php php "$PHPPATH" 80 || true
-        update-alternatives --set php "$PHPPATH" || true
+    # Garante que o comando php exista
+    if ! command -v php >/dev/null 2>&1; then
+        ln -sf "$(command -v php8.3 || command -v php8.2 || command -v php8.1 || command -v php8.0 || command -v php7.4)" /usr/bin/php || true
         hash -r || true
     fi
 
@@ -70,10 +65,6 @@ apt-get -y upgrade \
     echo "Erro ao atualizar os pacotes."
     exit 1
   }
-
-# (Opcional) Após o upgrade, recalcule a versão do PHP do CLI se for usar em passos seguintes:
-# PHPV="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
-# echo "PHP CLI ativo: $PHPV"
 
 # ============================================
 #  Definir variáveis principais
@@ -181,12 +172,15 @@ certbot certonly --non-interactive --agree-tos --register-unsafely-without-email
   --dns-cloudflare-propagation-seconds 60 --rsa-key-size 4096 -d "$ServerName"
 
 wait
+
 # ============================================
 #  Corrigir SyntaxWarning em cloudflare.py
 # ============================================
 echo "Corrigindo SyntaxWarning no cloudflare.py..."
-sed -i "s/self\.email is ''/self.email == ''/g" /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
-sed -i "s/self\.token is ''/self.token == ''/g"   /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
+sed -i "s/self.email is ''/self.email == ''/g" /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
+sed -i "s/self.token is ''/self.token == ''/g" /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
+sed -i "s/self.certtoken is None/self.certtoken == None/g" /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
+
 echo "Correção aplicada com sucesso em cloudflare.py."
 
 echo "==================================================================== DKIM ==============================================================================="
@@ -243,7 +237,6 @@ cat <<EOF > /etc/opendkim/TrustedHosts
 127.0.0.1
 localhost
 $ServerName
-::1
 *.$Domain
 EOF
 
@@ -362,7 +355,7 @@ postmap /etc/postfix/access.recipients
 #  Criar e configurar header_checks
 # ============================================
 create_header_checks() {
-    echo '/^[Rr]eceived: by .+ \(Postfix, from userid [0-9]+\)/ IGNORE' > /etc/postfix/header_checks
+    echo '/^[Rr]eceived: by .+? \(Postfix, from userid 0\)/ IGNORE' > /etc/postfix/header_checks
 
     # Converter para formato Unix usando dos2unix
     echo "Convertendo /etc/postfix/header_checks para formato Unix..."
@@ -449,7 +442,6 @@ maximal_queue_lifetime = 3d
 bounce_queue_lifetime = 3d
 smtp_destination_rate_delay = 1s
 
-smtpd_helo_required = yes
 smtpd_helo_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_invalid_helo_hostname, reject_non_fqdn_helo_hostname, reject_unknown_helo_hostname
 
 # TLS
@@ -490,46 +482,242 @@ EOF
 # Salvar variáveis antes de instalar dependências
 ORIGINAL_VARS=$(declare -p ServerName CloudflareAPI CloudflareEmail Domain DKIMSelector ServerIP)
 
+# ============================================
+#  Instalar e usar cpanminus para módulos Perl
+# ============================================
+# Dependências de compilação e Perl extras
+apt-get install -y build-essential make gcc libssl-dev libperl-dev \
+    libnet-dns-perl libio-multiplex-perl libnet-server-perl wget unzip libidn2-0-dev cpanminus
 
-# === MAIL.LOG via rsyslog (com criação e rotação) ===
-apt-get update -y
-apt-get install -y rsyslog logrotate
+export PERL_MM_USE_DEFAULT=1
+export PERL_AUTOINSTALL=--defaultdeps
 
-# rsyslog: direcione apenas mensagens da facility "mail" para /var/log/mail.log
-cat >/etc/rsyslog.d/49-mail.conf <<'EOF'
-mail.*   -/var/log/mail.log
-& stop
-EOF
-
-# garanta o arquivo e as permissões (Ubuntu: syslog:adm)
-touch /var/log/mail.log
-chown syslog:adm /var/log/mail.log
-chmod 0640 /var/log/mail.log
-
-# logrotate para /var/log/mail.log
-cat >/etc/logrotate.d/mail-log <<'EOF'
-/var/log/mail.log {
-    daily
-    missingok
-    rotate 14
-    compress
-    delaycompress
-    notifempty
-    create 0640 syslog adm
-    sharedscripts
-    postrotate
-        invoke-rc.d rsyslog rotate >/dev/null 2>&1 || true
-    endscript
+# Verificar e instalar módulos Perl via cpanminus
+check_and_install_perl_module() {
+    local module_name=$1
+    if perl -M"$module_name" -e '1' 2>/dev/null; then
+        echo "Módulo Perl $module_name já instalado."
+    else
+        echo "Módulo Perl $module_name não encontrado. Instalando..."
+        cpanm --notest "$module_name" || { echo "Erro ao instalar $module_name via cpanminus."; exit 1; }
+    fi
 }
+
+perl_modules=("Net::Server::Daemonize" "Net::Server::Multiplex" "Net::Server::PreFork" "Net::DNS" "IO::Multiplex")
+for module in "${perl_modules[@]}"; do
+    check_and_install_perl_module "$module"
+done
+
+# ============================================
+#  Instalar Postfwd
+# ============================================
+if [ ! -d "/opt/postfwd" ]; then
+    echo "Baixando e instalando o Postfwd..."
+    cd /tmp || { echo "Erro ao acessar /tmp."; exit 1; }
+    wget https://github.com/postfwd/postfwd/archive/master.zip || { echo "Erro ao baixar o Postfwd."; exit 1; }
+    unzip master.zip || { echo "Erro ao descompactar o Postfwd."; exit 1; }
+    mv postfwd-master /opt/postfwd || { echo "Erro ao mover o Postfwd."; exit 1; }
+    echo "Postfwd instalado com sucesso."
+else
+    echo "Pasta /opt/postfwd já existe, assumindo Postfwd instalado."
+fi
+
+eval "$ORIGINAL_VARS"
+
+# ============================================
+#  Criar conf do Postfwd
+# ============================================
+mkdir -p /opt/postfwd/etc
+if [ ! -f "/opt/postfwd/etc/postfwd.cf" ]; then
+    cat <<EOF > /opt/postfwd/etc/postfwd.cf
+#######################################################
+# Regras de Controle de Limites por Servidor
+#######################################################
+# KingHost
+id=limit-kinghost
+pattern=recipient mx=.*kinghost.net
+action=rate(global/300/3600) defer_if_permit "Limite de 300 e-mails por hora atingido para KingHost."
+
+# UOL Host
+id=limit-uolhost
+pattern=recipient mx=.*uhserver
+action=rate(global/300/3600) defer_if_permit "Limite de 300 e-mails por hora atingido para UOL Host."
+
+# LocaWeb
+id=limit-locaweb
+pattern=recipient mx=.*locaweb.com.br
+action=rate(global/500/3600) defer_if_permit "Limite de 500 e-mails por hora atingido para LocaWeb."
+
+# Yahoo
+id=limit-yahoo
+pattern=recipient mx=.*yahoo.com
+action=rate(global/150/3600) defer_if_permit "Limite de 150 e-mails por hora atingido para Yahoo."
+
+# Mandic
+id=limit-mandic
+pattern=recipient mx=.*mandic.com.br
+action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Mandic."
+
+# Titan
+id=limit-titan
+pattern=recipient mx=.*titan.email
+action=rate(global/500/3600) defer_if_permit "Limite de 500 e-mails por hora atingido para Titan."
+
+# Google
+id=limit-google
+pattern=recipient mx=.*google
+action=rate(global/2000/3600) defer_if_permit "Limite de 2000 e-mails por hora atingido para Google."
+
+# Hotmail
+id=limit-hotmail
+pattern=recipient mx=.*hotmail.com
+action=rate(global/1000/86400) defer_if_permit "Limite de 1000 e-mails por dia atingido para Hotmail."
+
+# Office 365
+id=limit-office365
+pattern=recipient mx=.*outlook.com
+action=rate(global/2000/3600) defer_if_permit "Limite de 2000 e-mails por hora atingido para Office 365."
+
+# Secureserver (GoDaddy)
+id=limit-secureserver
+pattern=recipient mx=.*secureserver.net
+action=rate(global/300/3600) defer_if_permit "Limite de 300 e-mails por hora atingido para GoDaddy."
+
+# Zimbra
+id=limit-zimbra
+pattern=recipient mx=.*zimbra
+action=rate(global/400/3600) defer_if_permit "Limite de 400 e-mails por hora atingido para Zimbra."
+
+# Argentina: Fibertel
+id=limit-fibertel
+pattern=recipient mx=.*fibertel.com.ar
+action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Fibertel."
+
+# Speedy
+id=limit-speedy
+pattern=recipient mx=.*speedy.com.ar
+action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Speedy."
+
+# Personal (Arnet)
+id=limit-personal
+pattern=recipient mx=.*personal.com.ar
+action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Personal Arnet."
+
+# Telecom
+id=limit-telecom
+pattern=recipient mx=.*telecom.com.ar
+action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Telecom."
+
+# Claro
+id=limit-claro
+pattern=recipient mx=.*claro.com.ar
+action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Claro."
+
+# México: Telmex
+id=limit-telmex
+pattern=recipient mx=.*prodigy.net.mx
+action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Telmex."
+
+# Axtel
+id=limit-axtel
+pattern=recipient mx=.*axtel.net
+action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Axtel."
+
+# Izzi
+id=limit-izzi
+pattern=recipient mx=.*izzi.net.mx
+action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Izzi Telecom."
+
+# Megacable
+id=limit-megacable
+pattern=recipient mx=.*megacable.com.mx
+action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Megacable."
+
+# TotalPlay
+id=limit-totalplay
+pattern=recipient mx=.*totalplay.net.mx
+action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para TotalPlay."
+
+# Telcel
+id=limit-telcel
+pattern=recipient mx=.*telcel.net
+action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Telcel."
+
+# Outros (sem limite)
+id=no-limit
+pattern=recipient mx=.*
+action=permit
+EOF
+else
+    echo "Arquivo /opt/postfwd/etc/postfwd.cf já existe, pulando."
+fi
+
+# ============================================
+#  Script de inicialização do Postfwd
+# ============================================
+mkdir -p /opt/postfwd/bin
+cat <<'EOF' > /opt/postfwd/bin/postfwd-script.sh
+#!/bin/sh
+#
+# Startscript for the postfwd daemon
+
+PATH=/bin:/usr/bin:/usr/local/bin
+
+PFWCMD=/opt/postfwd/sbin/postfwd3
+PFWCFG=/opt/postfwd/etc/postfwd.cf
+PFWPID=/var/tmp/postfwd3-master.pid
+
+PFWUSER=postfix
+PFWGROUP=postfix
+PFWINET=127.0.0.1
+PFWPORT=10045
+
+PFWARG="--shortlog --summary=600 --cache=600 --cache-rbl-timeout=3600 --cleanup-requests=1200 --cleanup-rbls=1800 --cleanup-rates=1200"
+
+P1="`basename ${PFWCMD}`"
+case "$1" in
+ start*)
+   [ /var/tmp/postfwd3-master.pid ] && rm -Rf /var/tmp/postfwd3-master.pid
+   echo "Starting ${P1}..."
+   ${PFWCMD} ${PFWARG} --daemon --file=${PFWCFG} --interface=${PFWINET} --port=${PFWPORT} --user=${PFWUSER} --group=${PFWGROUP} --pidfile=${PFWPID}
+   ;;
+
+ debug*)
+   echo "Starting ${P1} in debug mode..."
+   ${PFWCMD} ${PFWARG} -vv --daemon --file=${PFWCFG} --interface=${PFWINET} --port=${PFWPORT} --user=${PFWUSER} --group=${PFWGROUP} --pidfile=${PFWPID}
+   ;;
+
+ stop*)
+   ${PFWCMD} --interface=${PFWINET} --port=${PFWPORT} --pidfile=${PFWPID} --kill
+   ;;
+
+ reload*)
+   ${PFWCMD} --interface=${PFWINET} --port=${PFWPORT} --pidfile=${PFWPID} -- reload
+   ;;
+
+ restart*)
+   $0 stop
+   sleep 4
+   $0 start
+   ;;
+
+ *)
+   echo "Unknown argument \"$1\"" >&2
+   echo "Usage: `basename $0` {start|stop|debug|reload|restart}"
+   exit 1
+   ;;
+esac
+exit $?
 EOF
 
-# (re)ativar e reiniciar rsyslog
-systemctl enable --now rsyslog
-systemctl restart rsyslog
+chmod +x /opt/postfwd/bin/postfwd-script.sh
+ln -sf /opt/postfwd/bin/postfwd-script.sh /etc/init.d/postfwd
 
-# teste rápido
-logger -p mail.info "rsyslog: teste de escrita $(date)"
-tail -n 5 /var/log/mail.log || true
+# Reiniciar serviços
+echo "Iniciando o Postfwd..."
+/etc/init.d/postfwd start || { echo "Erro ao iniciar o Postfwd."; exit 1; }
+echo "Reiniciando o Postfix..."
+systemctl restart postfix || { echo "Erro ao reiniciar Postfix."; exit 1; }
 
 echo "==================================================== OpenDMARC ===================================================="
 
@@ -592,12 +780,12 @@ chmod 644 /var/lib/opendmarc/opendmarc.dat
 
 rm -f /run/opendmarc/opendmarc.pid
 
-echo "[OpenDKIM] Reiniciando OpenDKIM..."
+echo "[OpenDMARC] Reiniciando OpenDKIM..."
 systemctl restart opendkim
 if systemctl is-active --quiet opendkim; then
-    echo "[OpenDKIM] OpenDKIM reiniciado com sucesso."
+    echo "[OpenDMARC] OpenDKIM reiniciado com sucesso."
 else
-    echo "[OpenDKIM] Falha ao reiniciar OpenDKIM."
+    echo "[OpenDMARC] Falha ao reiniciar OpenDKIM."
 fi
 
 echo "[OpenDMARC] Reiniciando OpenDMARC..."
@@ -750,9 +938,7 @@ DKIMCode=$(echo "$DKIMCode" | tr -d '\n' | tr -s ' ')
 EscapedDKIMCode=$(printf '%s' "$DKIMCode" | sed 's/\"/\\\"/g')
 
 create_or_update_record "$DKIMSelector" "A" "$ServerIP" ""
-#create_or_update_record "$ServerName" "TXT" "\"v=spf1 a:$ServerName -all\"" ""
-#create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP a:$ServerName -all\"" ""
-create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP -all\"" ""
+create_or_update_record "$ServerName" "TXT" "\"v=spf1 a:$ServerName -all\"" ""
 create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=reject; rua=mailto:dmarc-reports@$ServerName; ruf=mailto:dmarc-reports@$ServerName; sp=reject; adkim=s; aspf=s\"" ""
 create_or_update_record "mail._domainkey.$ServerName" "TXT" "\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\"" ""
 create_or_update_record "$ServerName" "MX" "$ServerName" "10"
@@ -779,110 +965,77 @@ exit();
 EOF
 
 # -----------------------------------------------------------
-# AQUI CRIAMOS O unsubscribe.php (versão PRO) + permissões
+# AQUI CRIAMOS O unsubscribe.php COM O CÓDIGO PARA DESCADASTRO
 # -----------------------------------------------------------
 cat <<'EOF' > /var/www/html/unsubscribe.php
 <?php
-// === Config (use o MESMO segredo do email.php) ===
-const UNSUB_SECRET     = 'Gx9pT3aQ1mRxW7bY5kW2nH8cV4sL0';
-const UNSUB_VALID_SECS = 60 * 60 * 24 * 30; // 30 dias
-const LIST_DIR         = '/var/log/unsub';
-const LIST_FILE        = '/var/log/unsub/unsubscribed.txt';
+/**
+ * unsubscribe.php
+ *
+ * Exemplo de script que lida com descadastramentos de lista de e-mails
+ * via GET e POST (One-Click Unsubscribe).
+ */
 
-// === Utils ===
-function b64url($bin){ return rtrim(strtr(base64_encode($bin), '+/','-_'), '='); }
-function safe_email($e){ return filter_var($e, FILTER_VALIDATE_EMAIL) ? strtolower($e) : ''; }
-function ok($msg='unsubscribed'){ http_response_code(200); header('Content-Type: text/plain; charset=utf-8'); echo $msg; exit; }
-function bad($msg='invalid request'){ http_response_code(400); header('Content-Type: text/plain; charset=utf-8'); echo $msg; exit; }
+// Caminho do arquivo onde salvaremos os e-mails descadastrados
+$unsubFile = __DIR__ . '/unsubscribed_emails.txt';
 
-function verify_token($email, $ts, $sig){
-  if (!$email || !$ts || !$sig) return false;
-  if (abs(time() - (int)$ts) > UNSUB_VALID_SECS) return false;
-  $msg = $email.'|'.$ts;
-  $chk = b64url(hash_hmac('sha256', $msg, UNSUB_SECRET, true));
-  return hash_equals($chk, $sig);
+/**
+ * Função simples para processar e-mail e salvar (exemplo).
+ * Em produção, você poderia remover o e-mail de um BD ou
+ * marcar em sua plataforma de mailing.
+ */
+function unsubscribeEmail($email, $unsubFile) {
+    // Filtra o e-mail para evitar problemas básicos de segurança/formatação
+    $email = filter_var($email, FILTER_SANITIZE_EMAIL);
+
+    // Verifica se ainda parece um e-mail válido
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return false; // E-mail inválido
+    }
+
+    // Neste exemplo, apenas registramos num arquivo de texto
+    file_put_contents($unsubFile, $email . PHP_EOL, FILE_APPEND | LOCK_EX);
+    return true;
 }
 
-function save_unsub($email, $mode='unknown'){
-  if (!$email) return false;
-  if (!is_dir(LIST_DIR)) @mkdir(LIST_DIR, 0755, true);
-  $line = date('c')." | $mode | ".$email.PHP_EOL;
-  return (bool)@file_put_contents(LIST_FILE, $line, FILE_APPEND|LOCK_EX);
-}
-
-// ============== Fluxos ==============
-
-// 1) One-Click (POST) — Gmail/Outlook
+// Detecta se estamos em POST (One-Click) ou GET (clique manual)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-  // Geralmente vem a URL com e/ts/sig no query string
-  $e  = safe_email($_GET['e'] ?? '');
-  $ts = $_GET['ts'] ?? '';
-  $sg = $_GET['sig'] ?? '';
-
-  // Fallback: alguns provedores podem enviar JSON (raro)
-  if (!$e && stripos($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') !== false) {
-    $body = json_decode(file_get_contents('php://input'), true);
-    $e  = safe_email($body['e'] ?? '');
-    $ts = $body['ts'] ?? '';
-    $sg = $body['sig'] ?? '';
-  }
-
-  if (!verify_token($e, $ts, $sg)) bad('invalid token');
-  save_unsub($e, 'one-click') ? ok('unsubscribed') : bad('write failed');
+    if (!empty($_POST['email'])) {
+        $email = $_POST['email'];
+        $ok = unsubscribeEmail($email, $unsubFile);
+        if ($ok) {
+            echo "OK: E-mail '{$email}' removido via POST.";
+        } else {
+            echo "ERRO: E-mail inválido ou problema ao processar (POST).";
+        }
+    } else {
+        echo "ERRO: Parâmetro 'email' não encontrado no POST.";
+    }
+} else {
+    // GET (clique manual no link unsubscribe.php?email=...)
+    if (!empty($_GET['email'])) {
+        $email = $_GET['email'];
+        $ok = unsubscribeEmail($email, $unsubFile);
+        if ($ok) {
+            echo "OK: E-mail '{$email}' removido via GET.";
+        } else {
+            echo "ERRO: E-mail inválido ou problema ao processar (GET).";
+        }
+    } else {
+        echo "ERRO: Parâmetro 'email' não encontrado no GET.";
+    }
 }
-
-// 2) Clique manual (GET) com token seguro
-if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['e'], $_GET['ts'], $_GET['sig'])) {
-  $e  = safe_email($_GET['e'] ?? '');
-  $ts = $_GET['ts'] ?? '';
-  $sg = $_GET['sig'] ?? '';
-  if (!verify_token($e, $ts, $sg)) {
-    http_response_code(400);
-    ?>
-    <!doctype html><meta charset="utf-8"><title>Enlace inválido</title>
-    <body style="font-family:system-ui,Segoe UI,Arial">
-      <h1>Enlace inválido o expirado</h1>
-      <p>El enlace de cancelación no es válido o ha expirado.</p>
-    </body>
-    <?php
-    exit;
-  }
-  save_unsub($e, 'click');
-  http_response_code(200);
-  ?>
-  <!doctype html><meta charset="utf-8"><title>Suscripción cancelada</title>
-  <body style="font-family:system-ui,Segoe UI,Arial;text-align:center;margin-top:12vh">
-    <h1>Suscripción cancelada</h1>
-    <p>Hemos registrado tu solicitud: <b><?=htmlspecialchars($e, ENT_QUOTES)?></b></p>
-    <p>No volverás a recibir mensajes de esta lista.</p>
-  </body>
-  <?php
-  exit;
-}
-
-// 3) Retrocompatibilidade: GET/POST com 'email=' simples (sem token)
-//    — útil para conteúdos antigos. Não recomendado para novos envios.
-$email = safe_email($_REQUEST['email'] ?? '');
-if ($email) {
-  save_unsub($email, 'legacy') ? ok('unsubscribed') : bad('write failed');
-}
-
-// Caso não caia em nenhum fluxo
-bad('method not allowed');
+?>
 EOF
 
-# Logs (fora do webroot) e permissões
-install -d -m 755 /var/log/unsub
-touch /var/log/unsub/unsubscribed.txt
-chown -R www-data:www-data /var/log/unsub
-chmod 644 /var/log/unsub/unsubscribed.txt
+# Criar arquivo de registro e ajustar permissões
+touch /var/www/html/unsubscribed_emails.txt
+chown www-data:www-data /var/www/html/unsubscribed_emails.txt
+chmod 664 /var/www/html/unsubscribed_emails.txt
 
-# Permissões do PHP
-chown www-data:www-data /var/www/html/unsubscribe.php
-chmod 644 /var/www/html/unsubscribe.php
+# Reiniciar Apache para aplicar essas mudanças mínimas
+systemctl restart apache2
 
-# (Opcional) Reiniciar Apache
-systemctl restart apache2 || true
 # ============================================
 #  Habilitar SSL no Apache e redirecionamento
 # ============================================
