@@ -1,5 +1,9 @@
 #!/bin/bash
 
+set -Eeuo pipefail
+trap 'echo "[ERRO] linha $LINENO: $BASH_COMMAND (status $?)" >&2' ERR
+
+
 # ============================================
 #  Verificação de permissão de root
 # ============================================
@@ -124,11 +128,7 @@ echo "Domain: $Domain"
 echo "DKIMSelector: $DKIMSelector"
 echo "ServerIP: $ServerIP"
 echo "======================"
-
-sleep 10
-
 echo "==================================================================== Hostname && SSL ===================================================================="
-
 # ============================================
 #  Instalar pacotes básicos
 # ============================================
@@ -167,20 +167,23 @@ mkdir -p /root/.secrets && chmod 0700 /root/.secrets/ && touch /root/.secrets/cl
 echo "dns_cloudflare_email = $CloudflareEmail
 dns_cloudflare_api_key = $CloudflareAPI" > /root/.secrets/cloudflare.cfg
 
-# remove entradas antigas do FQDN e adiciona a correta
+# garante linha de localhost IPv4
+grep -qE '^\s*127\.0\.0\.1\s+localhost(\s|$)' /etc/hosts || \
+  sed -i '1i 127.0.0.1\tlocalhost' /etc/hosts
+
+# remove entradas antigas do FQDN e adiciona a correta (FQDN -> IP público)
 sed -i "\|[[:space:]]$ServerName\$|d" /etc/hosts
+sed -i "\|127\.0\.1\.1[[:space:]]\+$ServerName\$|d" /etc/hosts
 printf '%s\t%s\n' "$ServerIP" "$ServerName" >> /etc/hosts
 
-
-echo -e "$ServerName" > /etc/hostname
-
+# hostname
 hostnamectl set-hostname "$ServerName"
+
 
 certbot certonly --non-interactive --agree-tos --register-unsafely-without-email \
   --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.cfg \
   --dns-cloudflare-propagation-seconds 60 --rsa-key-size 4096 -d "$ServerName"
 
-wait
 # ============================================
 #  Corrigir SyntaxWarning em cloudflare.py
 # ============================================
@@ -217,24 +220,25 @@ EOF
 cat <<EOF > /etc/opendkim.conf
 AutoRestart             Yes
 AutoRestartRate         10/1h
-UMask                   002
+UMask                   007
 Syslog                  yes
 SyslogSuccess           Yes
 LogWhy                  Yes
+
 Canonicalization        relaxed/relaxed
+Mode                    s
+SignatureAlgorithm      rsa-sha256
+OversignHeaders         From
+RequireSafeKeys         Yes
+UserID                  opendkim:opendkim
+PidFile                 /var/run/opendkim/opendkim.pid
+
 ExternalIgnoreList      refile:/etc/opendkim/TrustedHosts
 InternalHosts           refile:/etc/opendkim/TrustedHosts
 KeyTable                refile:/etc/opendkim/KeyTable
 SigningTable            refile:/etc/opendkim/SigningTable
-Mode                    sv
-PidFile                 /var/run/opendkim/opendkim.pid
-SignatureAlgorithm      rsa-sha256
-UserID                  opendkim:opendkim
-Domain                  ${ServerName}
-KeyFile                 /etc/opendkim/keys/mail.private
-Selector                mail
+
 Socket                  inet:12301@127.0.0.1
-RequireSafeKeys         false
 EOF
 
 # /etc/opendkim/TrustedHosts
@@ -242,20 +246,28 @@ cat <<EOF > /etc/opendkim/TrustedHosts
 127.0.0.1
 localhost
 $ServerName
-::1
 *.$Domain
 EOF
 
-# Gerar chaves DKIM
-opendkim-genkey -b 2048 -s mail -d "$ServerName" -D /etc/opendkim/keys/
-chown opendkim:opendkim /etc/opendkim/keys/mail.private
-chmod 640 /etc/opendkim/keys/mail.private
+# === DKIM por FQDN ===
+# cria pasta específica do host
+mkdir -p "/etc/opendkim/keys/$ServerName"
 
-# KeyTable e SigningTable
-echo "mail._domainkey.${ServerName} ${ServerName}:mail:/etc/opendkim/keys/mail.private" > /etc/opendkim/KeyTable
-echo "*@${ServerName} mail._domainkey.${ServerName}" > /etc/opendkim/SigningTable
+# gera a chave (selector: mail) dentro da pasta do host
+opendkim-genkey -b 2048 -s mail -d "$ServerName" -D "/etc/opendkim/keys/$ServerName"
 
-chmod -R 750 /etc/opendkim/
+# dono e permissões (estritas no .private)
+chown -R opendkim:opendkim "/etc/opendkim/keys/$ServerName"
+chmod 700 "/etc/opendkim/keys/$ServerName"
+chmod 600 "/etc/opendkim/keys/$ServerName/mail.private"
+chmod 644 "/etc/opendkim/keys/$ServerName/mail.txt"  # público (TXT)
+
+# KeyTable/SigningTable (sobrescreve corretamente)
+echo "mail._domainkey.$ServerName $ServerName:mail:/etc/opendkim/keys/$ServerName/mail.private" > /etc/opendkim/KeyTable
+echo "*@$ServerName mail._domainkey.$ServerName" > /etc/opendkim/SigningTable
+
+# NÃO usar chmod -R 750 no /etc/opendkim inteiro; já acertamos o que importa
+
 
 # Script para processar a chave DKIM
 DKIMFileCode=$(cat /etc/opendkim/keys/mail.txt)
@@ -441,17 +453,14 @@ alias_database = hash:/etc/aliases
 # DKIM Settings
 milter_protocol = 6
 milter_default_action = accept
-smtpd_milters = inet:127.0.0.1:54321, inet:127.0.0.1:12301
-non_smtpd_milters = inet:127.0.0.1:54321, inet:127.0.0.1:12301
+smtpd_milters = inet:127.0.0.1:12301
+non_smtpd_milters = inet:127.0.0.1:12301
 
 # Restrições de destinatários
-smtpd_recipient_restrictions = 
+smtpd_helo_required = yes
+smtpd_recipient_restrictions =
     permit_mynetworks,
-    check_recipient_access hash:/etc/postfix/access.recipients,
-    permit_sasl_authenticated,
-    reject_unauth_destination,
-    reject_unknown_recipient_domain,
-    check_policy_service inet:127.0.0.1:10045
+    reject_unauth_destination
 
 smtpd_client_connection_rate_limit = 100
 smtpd_client_connection_count_limit = 50
@@ -462,9 +471,6 @@ default_destination_concurrency_limit = 50
 maximal_queue_lifetime = 3d
 bounce_queue_lifetime = 3d
 smtp_destination_rate_delay = 1s
-
-smtpd_helo_required = yes
-smtpd_helo_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_invalid_helo_hostname, reject_non_fqdn_helo_hostname, reject_unknown_helo_hostname
 
 # TLS
 smtpd_tls_cert_file=/etc/letsencrypt/live/$ServerName/fullchain.pem
@@ -545,89 +551,6 @@ systemctl restart rsyslog
 logger -p mail.info "rsyslog: teste de escrita $(date)"
 tail -n 5 /var/log/mail.log || true
 
-echo "==================================================== OpenDMARC ===================================================="
-
-# ============================================
-#  Criar diretórios OpenDMARC
-# ============================================
-echo "[OpenDMARC] Criando diretórios..."
-mkdir -p /run/opendmarc /etc/opendmarc /var/log/opendmarc /var/lib/opendmarc
-chown opendmarc:opendmarc /run/opendmarc /etc/opendmarc /var/log/opendmarc /var/lib/opendmarc
-chmod 750 /run/opendmarc /etc/opendmarc /var/log/opendmarc /var/lib/opendmarc
-
-# /etc/opendmarc.conf
-preencher_opendmarc_conf() {
-    local opendmarc_conf="/etc/opendmarc.conf"
-
-    if [[ ! -f "$opendmarc_conf" ]]; then
-        echo "[OpenDMARC] Criando $opendmarc_conf..."
-        touch "$opendmarc_conf"
-    fi
-
-    local configuracoes=(
-        "Syslog true"
-        "Socket inet:54321@127.0.0.1"
-        "PidFile /run/opendmarc/opendmarc.pid"
-        "AuthservID OpenDMARC"
-        "IgnoreHosts /etc/opendmarc/ignore.hosts"
-        "RejectFailures false"
-        "TrustedAuthservIDs ${ServerName}"
-        "HistoryFile /var/lib/opendmarc/opendmarc.dat"
-    )
-
-    echo "[OpenDMARC] Preenchendo $opendmarc_conf..."
-    for cfg in "${configuracoes[@]}"; do
-        if ! grep -q "^${cfg//\//\\/}" "$opendmarc_conf"; then
-            echo "$cfg" >> "$opendmarc_conf"
-        fi
-    done
-
-    chown opendmarc:opendmarc "$opendmarc_conf"
-    chmod 644 "$opendmarc_conf"
-}
-
-preencher_opendmarc_conf
-
-# /etc/opendmarc/ignore.hosts
-touch /etc/opendmarc/ignore.hosts
-if ! grep -q "127.0.0.1" /etc/opendmarc/ignore.hosts; then
-    echo "127.0.0.1" >> /etc/opendmarc/ignore.hosts
-fi
-if ! grep -q "::1" /etc/opendmarc/ignore.hosts; then
-    echo "::1" >> /etc/opendmarc/ignore.hosts
-fi
-chown opendmarc:opendmarc /etc/opendmarc/ignore.hosts
-chmod 644 /etc/opendmarc/ignore.hosts
-
-# Arquivo de histórico
-touch /var/lib/opendmarc/opendmarc.dat
-chown opendmarc:opendmarc /var/lib/opendmarc/opendmarc.dat
-chmod 644 /var/lib/opendmarc/opendmarc.dat
-
-rm -f /run/opendmarc/opendmarc.pid
-
-echo "[OpenDKIM] Reiniciando OpenDKIM..."
-systemctl restart opendkim
-if systemctl is-active --quiet opendkim; then
-    echo "[OpenDKIM] OpenDKIM reiniciado com sucesso."
-else
-    echo "[OpenDKIM] Falha ao reiniciar OpenDKIM."
-fi
-
-echo "[OpenDMARC] Reiniciando OpenDMARC..."
-systemctl restart opendmarc
-if systemctl is-active --quiet opendmarc; then
-    echo "[OpenDMARC] OpenDMARC reiniciado com sucesso."
-else
-    echo "[OpenDMARC] Falha ao reiniciar OpenDMARC."
-fi
-
-echo "[Postfix] Ajustando dependência systemd..."
-systemctl edit postfix <<EOF
-[Unit]
-After=opendmarc.service
-Requires=opendmarc.service
-EOF
 
 systemctl daemon-reload
 systemctl restart postfix
@@ -769,7 +692,7 @@ create_or_update_record "$DKIMSelector" "A" "$ServerIP" ""
 create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP -all\"" ""
 create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=reject; rua=mailto:dmarc-reports@$ServerName; ruf=mailto:dmarc-reports@$ServerName; sp=reject; adkim=s; aspf=s\"" ""
 create_or_update_record "mail._domainkey.$ServerName" "TXT" "\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\"" ""
-create_or_update_record "$ServerName" "MX" "$ServerName" "10"
+#create_or_update_record "$ServerName" "MX" "$ServerName" "10"
 
 echo "==================================================== APPLICATION ===================================================="
 
