@@ -484,7 +484,7 @@ smtpd_tls_ciphers = high
 smtpd_tls_exclude_ciphers = aNULL, MD5, 3DES
 
 smtp_tls_security_level = may
-smtp_tls_loglevel = 2
+smtp_tls_loglevel = 0
 smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
 smtp_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
 smtp_tls_ciphers = high
