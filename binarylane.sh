@@ -156,7 +156,7 @@ npm install -g pm2 && echo "PM2 instalado: versão $(pm2 -v)" || {
 mkdir -p /root/.secrets && chmod 0700 /root/.secrets/ && touch /root/.secrets/cloudflare.cfg && chmod 0400 /root/.secrets/cloudflare.cfg
 
 echo "dns_cloudflare_email = $CloudflareEmail
-dns_cloudflare_api_key = $CloudflareAPI" > /root/.secrets/cloudflare.cfg
+dns_cloudflare_api_token = $CloudflareAPI" > /root/.secrets/cloudflare.cfg
 
 echo -e "127.0.0.1 localhost
 127.0.0.1 $ServerName
