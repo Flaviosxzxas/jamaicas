@@ -124,7 +124,7 @@ echo "======================"
 sleep 10
 echo "================================================= Hostname && SSL ================================================="
 
-apt-get install -y wget curl jq python3-certbot-dns-cloudflare openssl
+apt-get install -y python3-certbot-dns-cloudflare=1.8.0-1 openssl
 
 echo "================================================= Configurar Node.js ================================================="
 
