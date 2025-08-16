@@ -121,6 +121,7 @@ echo "Domain: $Domain"
 echo "DKIMSelector: $DKIMSelector"
 echo "ServerIP: $ServerIP"
 echo "======================"
+sleep 10
 echo "================================================= Hostname && SSL ================================================="
 
 apt-get install -y wget curl jq python3-certbot-dns-cloudflare openssl
