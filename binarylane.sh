@@ -191,7 +191,6 @@ echo "Correção aplicada com sucesso em cloudflare.py."
 
 echo "==================================================================== DKIM ==============================================================================="
 
-
 # ============================================
 #  Instalar OpenDKIM
 # ============================================
@@ -287,6 +286,47 @@ apt-get upgrade -y
 # Desativar config automática do opendmarc
 echo "dbconfig-common dbconfig-common/dbconfig-install boolean false" | debconf-set-selections
 echo "opendmarc opendmarc/dbconfig-install boolean false" | debconf-set-selections
+
+# Tenta APT primeiro; se não houver, tenta venv + pip; como último recurso, pip do sistema.
+install_py_pkg() {
+  local pip_name="$1"    # ex.: dnspython
+  local apt_name="$2"    # ex.: python3-dnspython
+  local required="${3:-0}"
+  local ok=0
+
+  echo "==> Instalando ${pip_name} (APT -> venv -> pip)..."
+  apt-get update -y >/dev/null 2>&1 || true
+
+  # 1) APT
+  if apt-get install -y "${apt_name}"; then
+    echo "OK via APT: ${apt_name}"; ok=1
+  else
+    # 2) venv + pip
+    apt-get install -y python3-venv python3-pip >/dev/null 2>&1 || true
+    if python3 -m venv /opt/venv >/dev/null 2>&1; then
+      . /opt/venv/bin/activate
+      if pip install -q "${pip_name}" >/tmp/pip_${pip_name}_venv.log 2>&1; then
+        echo "OK via venv: ${pip_name} (em /opt/venv)"; ok=1
+      fi
+      deactivate || true
+    fi
+
+    # 3) (opcional) permitir pip no sistema se ALLOW_PIP_BREAK=1
+    if [ "$ok" -eq 0 ] && [ "${ALLOW_PIP_BREAK:-0}" = "1" ]; then
+      if python3 -m pip install --break-system-packages -q "${pip_name}" >/tmp/pip_${pip_name}.log 2>&1; then
+        echo "OK via pip (--break-system-packages): ${pip_name}"; ok=1
+      fi
+    fi
+  fi
+
+  if [ "$ok" -eq 1 ]; then return 0; fi
+  echo "AVISO: não foi possível instalar ${pip_name}."
+  [ "$required" -eq 1 ] && exit 1 || return 0
+}
+
+# Uso:
+install_py_pkg "dnspython" "python3-dnspython" 0
+
 
 # ============================================
 #  Funções para corrigir permissões
