@@ -254,19 +254,15 @@ EOF
 mkdir -p "/etc/opendkim/keys/$ServerName"
 
 # gera a chave (selector: mail) dentro da pasta do host
-opendkim-genkey -b 2048 -s mail -d "$ServerName" -D "/etc/opendkim/keys/$ServerName"
+opendkim-genkey -b 2048 -s mail -d "$ServerName" -D /etc/opendkim/keys/
 
 # dono e permissões (estritas no .private)
-chown -R opendkim:opendkim "/etc/opendkim/keys/$ServerName"
-chmod 700 "/etc/opendkim/keys/$ServerName"
-chmod 600 "/etc/opendkim/keys/$ServerName/mail.private"
-chmod 644 "/etc/opendkim/keys/$ServerName/mail.txt"  # público (TXT)
+chown opendkim:opendkim /etc/opendkim/keys/mail.private
+chmod 640 /etc/opendkim/keys/mail.private
 
 # KeyTable/SigningTable (sobrescreve corretamente)
-echo "mail._domainkey.$ServerName $ServerName:mail:/etc/opendkim/keys/$ServerName/mail.private" > /etc/opendkim/KeyTable
-echo "*@$ServerName mail._domainkey.$ServerName" > /etc/opendkim/SigningTable
-
-# NÃO usar chmod -R 750 no /etc/opendkim inteiro; já acertamos o que importa
+echo "mail._domainkey.${ServerName} ${ServerName}:mail:/etc/opendkim/keys/mail.private" > /etc/opendkim/KeyTable
+echo "*@${ServerName} mail._domainkey.${ServerName}" > /etc/opendkim/SigningTable
 
 
 # Script para processar a chave DKIM
