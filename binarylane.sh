@@ -807,47 +807,41 @@ echo "==================================================== APPLICATION =========
 echo "Configurando noreply@$ServerName, unsubscribe@$ServerName e contacto@$ServerName..."
 
 # Ajusta apenas para um valor explícito, sem $virtual_alias_maps
+# Ajusta apenas para um valor explícito
 postconf -e "virtual_alias_domains = $ServerName"
 postconf -e "virtual_alias_maps = hash:/etc/postfix/virtual"
 postconf -e "local_recipient_maps="
 
-if [ ! -f /etc/postfix/virtual ]; then
-    touch /etc/postfix/virtual
-fi
+[ -f /etc/postfix/virtual ] || touch /etc/postfix/virtual
 
 # noreply
-if ! grep -q "noreply@$ServerName" /etc/postfix/virtual; then
+grep -q "^noreply@$ServerName[[:space:]]" /etc/postfix/virtual || \
   echo "noreply@$ServerName   noreply" >> /etc/postfix/virtual
-fi
 
 # unsubscribe
-if ! grep -q "unsubscribe@$ServerName" /etc/postfix/virtual; then
+grep -q "^unsubscribe@$ServerName[[:space:]]" /etc/postfix/virtual || \
   echo "unsubscribe@$ServerName   unsubscribe" >> /etc/postfix/virtual
-fi
 
 # contacto
-if ! grep -q "contacto@$ServerName" /etc/postfix/virtual; then
+grep -q "^contacto@$ServerName[[:space:]]" /etc/postfix/virtual || \
   echo "contacto@$ServerName   contacto" >> /etc/postfix/virtual
-fi
+
+# bounce  (ESSENCIAL para capturar bounce+token@)
+grep -q "^bounce@$ServerName[[:space:]]" /etc/postfix/virtual || \
+  echo "bounce@$ServerName   bounce" >> /etc/postfix/virtual
 
 postmap /etc/postfix/virtual
 
-# Descartar local "noreply", "unsubscribe" e "contacto"
-if ! grep -q "^noreply:" /etc/aliases; then
-  echo "noreply: /dev/null" >> /etc/aliases
-fi
-
-if ! grep -q "^unsubscribe:" /etc/aliases; then
-  echo "unsubscribe: /dev/null" >> /etc/aliases
-fi
-
-if ! grep -q "^contacto:" /etc/aliases; then
-  echo "contacto: /dev/null" >> /etc/aliases
-fi
+# /etc/aliases -> descartar localmente
+grep -q "^noreply:" /etc/aliases     || echo "noreply: /dev/null" >> /etc/aliases
+grep -q "^unsubscribe:" /etc/aliases || echo "unsubscribe: /dev/null" >> /etc/aliases
+grep -q "^contacto:" /etc/aliases    || echo "contacto: /dev/null" >> /etc/aliases
+grep -q "^bounce:" /etc/aliases      || echo "bounce: /dev/null" >> /etc/aliases
 
 newaliases
 systemctl reload postfix
-echo "Feito! Agora noreply@$ServerName, unsubscribe@$ServerName e contacto@$ServerName existem e são descartados (sem erro)."
+echo "Feito! noreply@, unsubscribe@, contacto@ e bounce(+token)@$ServerName mapeados e descartados sem erro."
+
 
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
 
