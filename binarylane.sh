@@ -291,10 +291,6 @@ sleep 3
 apt-get update
 apt-get upgrade -y
 
-# Desativar config automática do opendmarc
-echo "dbconfig-common dbconfig-common/dbconfig-install boolean false" | debconf-set-selections
-echo "opendmarc opendmarc/dbconfig-install boolean false" | debconf-set-selections
-
 # Tenta APT primeiro; se não houver, tenta venv + pip; como último recurso, pip do sistema.
 install_py_pkg() {
   local pip_name="$1"    # ex.: dnspython
@@ -366,7 +362,7 @@ fix_makedefs_permissions() {
 }
 
 # Instalar Postfix e outros
-DEBIAN_FRONTEND=noninteractive apt-get install -y postfix opendmarc pflogsumm
+DEBIAN_FRONTEND=noninteractive apt-get install -y postfix pflogsumm
 wait
 
 fix_makedefs_symlink
@@ -628,12 +624,9 @@ DKIMCode=$(echo "$DKIMCode" | tr -d '\n' | tr -s ' ')
 EscapedDKIMCode=$(printf '%s' "$DKIMCode" | sed 's/\"/\\\"/g')
 
 create_or_update_record "$DKIMSelector" "A" "$ServerIP" ""
-#create_or_update_record "$ServerName" "TXT" "\"v=spf1 a:$ServerName -all\"" ""
-#create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP a:$ServerName -all\"" ""
-create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP -all\"" ""
+create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP a:$ServerName -all\"" ""
 create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=reject; rua=mailto:dmarc-reports@$ServerName; ruf=mailto:dmarc-reports@$ServerName; sp=reject; adkim=s; aspf=s\"" ""
 create_or_update_record "mail._domainkey.$ServerName" "TXT" "\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\"" ""
-#create_or_update_record "$ServerName" "MX" "$ServerName" "10"
 
 echo "==================================================== APPLICATION ===================================================="
 
