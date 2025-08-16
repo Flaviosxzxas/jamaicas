@@ -384,60 +384,6 @@ debconf-set-selections <<< "postfix postfix/destinations string 'localhost'"
 echo -e "$ServerName OK" > /etc/postfix/access.recipients
 postmap /etc/postfix/access.recipients
 
-# ============================================
-#  Criar e configurar header_checks
-# ============================================
-create_header_checks() {
-    echo '/^[Rr]eceived: by .+ \(Postfix, from userid [0-9]+\)/ IGNORE' > /etc/postfix/header_checks
-
-    # Converter para formato Unix usando dos2unix
-    echo "Convertendo /etc/postfix/header_checks para formato Unix..."
-    dos2unix /etc/postfix/header_checks
-
-    echo "Conteúdo do arquivo /etc/postfix/header_checks:"
-    cat -A /etc/postfix/header_checks
-
-    postconf -e "header_checks = regexp:/etc/postfix/header_checks"
-}
-
-install_dos2unix() {
-    if ! command -v dos2unix &> /dev/null; then
-        echo "dos2unix não encontrado. Instalando..."
-        apt-get update
-        apt-get install -y dos2unix
-        if [ $? -ne 0 ]; then
-            echo "Erro ao instalar dos2unix."
-            exit 1
-        fi
-    fi
-}
-
-main_header_checks() {
-    install_dos2unix
-    create_header_checks
-
-    echo "Verificando erros específicos..."
-    # Caso precise de algo adicional aqui
-}
-
-# Criar diretório para autenticação do Postfix
-echo "Criando /var/spool/postfix/private..."
-mkdir -p /var/spool/postfix/private
-chown postfix:postfix /var/spool/postfix/private
-chmod 700 /var/spool/postfix/private
-
-# Verificar se o arquivo de autenticação existe
-if [ ! -f /var/spool/postfix/private/auth ]; then
-  echo "Criando arquivo de autenticação..."
-  touch /var/spool/postfix/private/auth
-  chown postfix:postfix /var/spool/postfix/private/auth
-  chmod 660 /var/spool/postfix/private/auth
-else
-  echo "Arquivo de autenticação já existe."
-fi
-
-main_header_checks
-
 # /etc/postfix/main.cf
 cat <<EOF > /etc/postfix/main.cf
 myhostname = $ServerName
@@ -446,7 +392,6 @@ biff = no
 readme_directory = no
 compatibility_level = 3.6
 
-header_checks = regexp:/etc/postfix/header_checks
 alias_maps = hash:/etc/aliases
 alias_database = hash:/etc/aliases
 
