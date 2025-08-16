@@ -157,14 +157,9 @@ mkdir -p /root/.secrets && chmod 0700 /root/.secrets/ && touch /root/.secrets/cl
 echo "dns_cloudflare_email = $CloudflareEmail
 dns_cloudflare_api_key = $CloudflareAPI" > /root/.secrets/cloudflare.cfg
 
-# garante linha de localhost IPv4
-grep -qE '^\s*127\.0\.0\.1\s+localhost(\s|$)' /etc/hosts || \
-  sed -i '1i 127.0.0.1\tlocalhost' /etc/hosts
-
-# remove entradas antigas do FQDN e adiciona a correta (FQDN -> IP público)
-sed -i "\|[[:space:]]$ServerName\$|d" /etc/hosts
-sed -i "\|127\.0\.1\.1[[:space:]]\+$ServerName\$|d" /etc/hosts
-printf '%s\t%s\n' "$ServerIP" "$ServerName" >> /etc/hosts
+echo -e "127.0.0.1 localhost
+127.0.0.1 $ServerName
+$ServerIP $ServerName" > /etc/hosts
 
 # hostname
 hostnamectl set-hostname "$ServerName"
