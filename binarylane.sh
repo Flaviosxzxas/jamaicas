@@ -128,7 +128,7 @@ apt-get install -y wget curl jq python3-certbot-dns-cloudflare openssl
 
 echo "================================================= Configurar Node.js ================================================="
 
-curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+curl -fsSL https://deb.nodesource.com/setup_21.x | bash - \
     && apt-get install -y nodejs \
     && echo "Node.js instalado com sucesso: versão $(node -v)" || {
         echo "Alerta: Erro ao instalar o Node.js."
@@ -162,12 +162,15 @@ echo -e "127.0.0.1 localhost
 127.0.0.1 $ServerName
 $ServerIP $ServerName" > /etc/hosts
 
-# hostname
+echo -e "$ServerName" > /etc/hostname
+
 hostnamectl set-hostname "$ServerName"
 
 certbot certonly --non-interactive --agree-tos --register-unsafely-without-email \
   --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.cfg \
   --dns-cloudflare-propagation-seconds 60 --rsa-key-size 4096 -d "$ServerName"
+
+wait
 
 echo "================================================= Corrigir SyntaxWarning em cloudflare.py ================================================="
 
