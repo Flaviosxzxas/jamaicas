@@ -288,32 +288,6 @@ apt-get upgrade -y
 echo "dbconfig-common dbconfig-common/dbconfig-install boolean false" | debconf-set-selections
 echo "opendmarc opendmarc/dbconfig-install boolean false" | debconf-set-selections
 
-# Instalar dependências
-echo "Instalando python3-pip e dnspython..."
-apt-get install -y python3-pip
-pip3 install dnspython
-
-if [ $? -eq 0 ]; then
-  echo "python3-pip e dnspython instalados com sucesso!"
-else
-  echo "Erro ao instalar python3-pip ou dnspython."
-  exit 1
-fi
-
-# ============================================
-# Instalar dependências para gerar PDF protegido
-# ============================================
-echo "Instalando wkhtmltopdf, pdfkit e PyPDF2 para PDF protegido..."
-apt-get install -y wkhtmltopdf
-pip3 install pdfkit PyPDF2
-
-if [ $? -eq 0 ]; then
-    echo "Dependências de PDF instaladas com sucesso!"
-else
-    echo "Erro ao instalar dependências de PDF (wkhtmltopdf, pdfkit, PyPDF2)."
-    exit 1
-fi
-
 # ============================================
 #  Funções para corrigir permissões
 # ============================================
