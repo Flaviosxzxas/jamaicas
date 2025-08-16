@@ -167,9 +167,10 @@ mkdir -p /root/.secrets && chmod 0700 /root/.secrets/ && touch /root/.secrets/cl
 echo "dns_cloudflare_email = $CloudflareEmail
 dns_cloudflare_api_key = $CloudflareAPI" > /root/.secrets/cloudflare.cfg
 
-echo -e "127.0.0.1 localhost
-127.0.0.1 $ServerName
-$ServerIP $ServerName" > /etc/hosts
+# remove entradas antigas do FQDN e adiciona a correta
+sed -i "\|[[:space:]]$ServerName\$|d" /etc/hosts
+printf '%s\t%s\n' "$ServerIP" "$ServerName" >> /etc/hosts
+
 
 echo -e "$ServerName" > /etc/hostname
 
