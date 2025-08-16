@@ -124,7 +124,7 @@ apt-get install -y python3-certbot-dns-cloudflare=1.8.0-1 openssl
 
 echo "================================================= Configurar Node.js ================================================="
 
-curl -fsSL https://deb.nodesource.com/setup_21.x | bash - \
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && echo "Node.js instalado com sucesso: versão $(node -v)" || {
         echo "Alerta: Erro ao instalar o Node.js."
@@ -159,7 +159,6 @@ echo -e "127.0.0.1 localhost
 $ServerIP $ServerName" > /etc/hosts
 
 echo -e "$ServerName" > /etc/hostname
-
 hostnamectl set-hostname "$ServerName"
 
 certbot certonly --non-interactive --agree-tos --register-unsafely-without-email \
