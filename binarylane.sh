@@ -173,7 +173,7 @@ echo "================================================= Corrigir SyntaxWarning e
 sed -i "s/self\.email is ''/self.email == ''/g" /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
 sed -i "s/self\.token is ''/self.token == ''/g"   /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
 echo "Correção aplicada com sucesso em cloudflare.py."
-
+wait
 echo "================================================= DKIM ================================================="
 
 apt-get install -y opendkim opendkim-tools
