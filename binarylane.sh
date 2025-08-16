@@ -280,9 +280,6 @@ console.log(
 EOF
 
 chmod 755 /root/dkimcode.sh
-
-echo "==================================================== POSTFIX ===================================================="
-
 sleep 3
 
 # ============================================
@@ -331,35 +328,9 @@ install_py_pkg() {
 # Uso:
 install_py_pkg "dnspython" "python3-dnspython" 0
 
+echo "==================================================== POSTFIX ===================================================="
 
-# ============================================
-#  Funções para corrigir permissões
-# ============================================
-fix_makedefs_symlink() {
-    local target_file="/usr/share/postfix/makedefs.out"
-    local symlink="/etc/postfix/makedefs.out"
-
-    if [ ! -L "$symlink" ]; then
-        echo "Criando symlink de $target_file para $symlink..."
-        ln -sf "$target_file" "$symlink"
-    fi
-}
-
-fix_makedefs_permissions() {
-    local target_file="/usr/share/postfix/makedefs.out"
-    local symlink="/etc/postfix/makedefs.out"
-
-    echo "Ajustando permissões do arquivo $target_file..."
-    if [ -f "$target_file" ]; then
-        chmod 644 "$target_file" || { echo "Erro ao ajustar permissões de $target_file."; exit 1; }
-        chown root:root "$target_file" || { echo "Erro ao ajustar dono de $target_file."; exit 1; }
-    fi
-
-    if [ -L "$symlink" ]; then
-        chmod 644 "$symlink" || { echo "Erro ao ajustar permissões do symlink $symlink."; exit 1; }
-        chown root:root "$symlink" || { echo "Erro ao ajustar dono do symlink $symlink."; exit 1; }
-    fi
-}
+# Instala Postfix e ferramentas auxiliares em modo não interativo,
 
 # Instalar Postfix e outros
 DEBIAN_FRONTEND=noninteractive apt-get install -y postfix pflogsumm
@@ -384,34 +355,17 @@ biff = no
 readme_directory = no
 compatibility_level = 3.6
 
+# Aliases locais (descartar bounce/noreply/etc via /etc/aliases)
 alias_maps = hash:/etc/aliases
 alias_database = hash:/etc/aliases
 
-# DKIM Settings
+# DKIM (OpenDKIM)
 milter_protocol = 6
 milter_default_action = accept
 smtpd_milters = inet:127.0.0.1:12301
 non_smtpd_milters = inet:127.0.0.1:12301
 
-# Restrições de destinatários
-smtpd_helo_required = yes
-smtpd_recipient_restrictions =
-    permit_mynetworks,
-    reject_unauth_destination
-
-smtpd_client_connection_rate_limit = 100
-smtpd_client_connection_count_limit = 50
-anvil_rate_time_unit = 60s
-
-message_size_limit = 10485760
-default_destination_concurrency_limit = 50
-maximal_queue_lifetime = 3d
-bounce_queue_lifetime = 3d
-smtp_destination_rate_delay = 1s
-
-# TLS
-smtpd_tls_cert_file=/etc/letsencrypt/live/$ServerName/fullchain.pem
-smtpd_tls_key_file=/etc/letsencrypt/live/$ServerName/privkey.pem
+# TLS - entrada local (PHP -> Postfix em 127.0.0.1)
 smtpd_tls_security_level = may
 smtpd_tls_loglevel = 2
 smtpd_tls_received_header = yes
@@ -419,7 +373,10 @@ smtpd_tls_session_cache_timeout = 3600s
 smtpd_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
 smtpd_tls_ciphers = high
 smtpd_tls_exclude_ciphers = aNULL, MD5, 3DES
+smtpd_tls_cert_file = /etc/letsencrypt/live/$ServerName/fullchain.pem
+smtpd_tls_key_file  = /etc/letsencrypt/live/$ServerName/privkey.pem
 
+# TLS - saída (cliente SMTP)
 smtp_tls_security_level = may
 smtp_tls_loglevel = 0
 smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
@@ -427,13 +384,7 @@ smtp_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
 smtp_tls_ciphers = high
 smtp_tls_exclude_ciphers = aNULL, MD5, 3DES
 
-smtpd_sasl_auth_enable = yes
-smtpd_sasl_type = dovecot
-smtpd_sasl_path = private/auth
-smtpd_sasl_security_options = noanonymous, noplaintext
-smtpd_sasl_tls_security_options = noanonymous
-smtpd_tls_auth_only = yes
-
+# Base
 myorigin = localhost
 mydestination = localhost
 relayhost =
@@ -443,6 +394,8 @@ recipient_delimiter = +
 inet_interfaces = loopback-only
 inet_protocols = ipv4
 EOF
+
+echo "==================================================== POSTFIX ===================================================="
 
 # Salvar variáveis antes de instalar dependências
 ORIGINAL_VARS=$(declare -p ServerName CloudflareAPI CloudflareEmail Domain DKIMSelector ServerIP)
