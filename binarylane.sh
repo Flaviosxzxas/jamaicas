@@ -71,10 +71,6 @@ apt-get -y upgrade \
     exit 1
   }
 
-# (Opcional) Após o upgrade, recalcule a versão do PHP do CLI se for usar em passos seguintes:
-# PHPV="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
-# echo "PHP CLI ativo: $PHPV"
-
 echo "================================================= Definir variáveis principais ================================================="
 
 ServerName=$1
@@ -156,7 +152,7 @@ npm install -g pm2 && echo "PM2 instalado: versão $(pm2 -v)" || {
 mkdir -p /root/.secrets && chmod 0700 /root/.secrets/ && touch /root/.secrets/cloudflare.cfg && chmod 0400 /root/.secrets/cloudflare.cfg
 
 echo "dns_cloudflare_email = $CloudflareEmail
-dns_cloudflare_api_token = $CloudflareAPI" > /root/.secrets/cloudflare.cfg
+dns_cloudflare_api_key = $CloudflareAPI" > /root/.secrets/cloudflare.cfg
 
 echo -e "127.0.0.1 localhost
 127.0.0.1 $ServerName
@@ -170,8 +166,6 @@ certbot certonly --non-interactive --agree-tos --register-unsafely-without-email
   --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.cfg \
   --dns-cloudflare-propagation-seconds 60 --rsa-key-size 4096 -d "$ServerName"
 
-wait
-
 echo "================================================= Corrigir SyntaxWarning em cloudflare.py ================================================="
 
 sed -i "s/self\.email is ''/self.email == ''/g" /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
@@ -181,7 +175,6 @@ wait
 echo "================================================= DKIM ================================================="
 
 apt-get install -y opendkim opendkim-tools
-wait
 
 # Criação dos diretórios
 mkdir -p /etc/opendkim && mkdir -p /etc/opendkim/keys
@@ -316,10 +309,6 @@ echo "================================================= POSTFIX ================
 
 # Instalar Postfix e outros
 DEBIAN_FRONTEND=noninteractive apt-get install -y postfix pflogsumm
-wait
-
-fix_makedefs_symlink
-fix_makedefs_permissions
 
 # Configurações básicas do Postfix
 debconf-set-selections <<< "postfix postfix/mailname string '$ServerName'"
