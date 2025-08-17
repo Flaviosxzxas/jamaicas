@@ -113,7 +113,7 @@ if [ -z "$Domain" ] || [ -z "$DKIMSelector" ]; then
 fi
 
 # Obter IP público
-ServerIP=$(curl -fsS https://api64.ipify.org)
+ServerIP=$(curl -4 -fsS https://api.ipify.org)
 if [ -z "$ServerIP" ]; then
   echo "Erro: Não foi possível obter o IP público."
   exit 1
