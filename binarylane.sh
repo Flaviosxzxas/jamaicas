@@ -101,7 +101,7 @@ if [ -z "$Domain" ] || [ -z "$DKIMSelector" ]; then
 fi
 
 # Obter IP público
-ServerIP=$(wget -qO- https://api64.ipify.org)
+ServerIP=$(curl -fsS https://api64.ipify.org)
 if [ -z "$ServerIP" ]; then
   echo "Erro: Não foi possível obter o IP público."
   exit 1
@@ -151,16 +151,15 @@ npm install -g pm2 && echo "PM2 instalado: versão $(pm2 -v)" || {
 
 mkdir -p /root/.secrets && chmod 0700 /root/.secrets/ && touch /root/.secrets/cloudflare.cfg && chmod 0400 /root/.secrets/cloudflare.cfg
 
-# /etc/hosts: manter localhost e apontar FQDN -> IP público
-sed -i "\|[[:space:]]$ServerName\$|d" /etc/hosts
-sed -i "\|^\s*127\.0\.1\.1\s\+$ServerName\$|d" /etc/hosts
+echo "dns_cloudflare_email = $CloudflareEmail
+dns_cloudflare_api_key = $CloudflareAPI" > /root/.secrets/cloudflare.cfg
 
-grep -qE '^\s*127\.0\.0\.1\s+localhost(\s|$)' /etc/hosts || \
-  sed -i '1i 127.0.0.1\tlocalhost' /etc/hosts
+echo -e "127.0.0.1 localhost
+127.0.0.1 $ServerName
+$ServerIP $ServerName" > /etc/hosts
 
-printf '%s\t%s\n' "$ServerIP" "$ServerName" >> /etc/hosts
+echo -e "$ServerName" > /etc/hostname
 
-# hostname (opcional; hostnamectl já atualiza /etc/hostname)
 hostnamectl set-hostname "$ServerName"
 
 certbot certonly --non-interactive --agree-tos --register-unsafely-without-email \
