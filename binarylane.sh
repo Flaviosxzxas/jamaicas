@@ -305,18 +305,13 @@ install_py_pkg "dnspython" "python3-dnspython" 0
 
 echo "================================================= POSTFIX ================================================="
 
+# Instalar Postfix e outros
+DEBIAN_FRONTEND=noninteractive apt-get install -y postfix pflogsumm
+
 # Configurações básicas do Postfix
 debconf-set-selections <<< "postfix postfix/mailname string '$ServerName'"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
 debconf-set-selections <<< "postfix postfix/destinations string 'localhost'"
-
-# Instalar Postfix + pflogsumm (compatível com várias versões do Ubuntu)
-if DEBIAN_FRONTEND=noninteractive apt-get install -y postfix postfix-pflogsumm; then
-  echo "Postfix + postfix-pflogsumm instalados."
-else
-  echo "Tentando fallback: postfix + pflogsumm antigo..."
-  DEBIAN_FRONTEND=noninteractive apt-get install -y postfix pflogsumm || true
-fi
 
 echo -e "$ServerName OK" > /etc/postfix/access.recipients
 postmap /etc/postfix/access.recipients
