@@ -9,7 +9,6 @@ if [ "$(id -u)" -ne 0 ]; then
   echo "Este script precisa ser executado como root."
   exit 1
 fi
-
 # ================================================
 # Correção: evitar duplicação de repositórios no Ubuntu 24.04+
 # ================================================
@@ -269,8 +268,6 @@ sleep 3
 
 echo "================================================= Atualização de pacotes ================================================="
 
-apt-get update
-apt-get upgrade -y
 
 # Tenta APT primeiro; se não houver, tenta venv + pip; como último recurso, pip do sistema.
 install_py_pkg() {
@@ -314,13 +311,13 @@ install_py_pkg "dnspython" "python3-dnspython" 0
 
 echo "================================================= POSTFIX ================================================="
 
-# Instalar Postfix e outros
-DEBIAN_FRONTEND=noninteractive apt-get install -y postfix pflogsumm
-
 # Configurações básicas do Postfix
 debconf-set-selections <<< "postfix postfix/mailname string '$ServerName'"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
 debconf-set-selections <<< "postfix postfix/destinations string 'localhost'"
+
+# Instalar Postfix e outros
+DEBIAN_FRONTEND=noninteractive apt-get install -y postfix pflogsumm
 
 echo -e "$ServerName OK" > /etc/postfix/access.recipients
 postmap /etc/postfix/access.recipients
@@ -435,7 +432,6 @@ echo "ServerIP: $ServerIP"
 
 # Instalar jq (caso não exista)
 if ! command -v jq &> /dev/null; then
-  apt-get update
   apt-get install -y jq
 fi
 
