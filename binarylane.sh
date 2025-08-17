@@ -569,12 +569,35 @@ fi
 
 rm -f /var/www/html/index.html
 
-cat <<EOF > /var/www/html/index.php
+cat <<'EOF' > /var/www/html/index.php
 <?php
-header('HTTP/1.0 403 Forbidden');
-http_response_code(401);
-exit();
+function generateRandom($min, $max) {
+    $characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    $length = rand($min, $max);
+    $charactersLength = strlen($characters);
+    $randomString = '';
+
+    for ($i = 0; $i < $length; $i++) {
+        $randomString .= $characters[rand(0, $charactersLength - 1)];
+    }
+
+    return $randomString;
+}
 ?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title><?php echo generateRandom(2, 10);?></title>
+    <link rel="icon" href="data:,">
+    <p style="display: none;">
+       <?php echo generateRandom(2, 10);?>
+    </p>
+</head>
+<body>
+</body>
+</html>
 EOF
 
 # -----------------------------------------------------------
