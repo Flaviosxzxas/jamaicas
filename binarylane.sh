@@ -26,16 +26,17 @@ is_ubuntu() { [ -f /etc/os-release ] && grep -qi ubuntu /etc/os-release; }
 
 echo "================================================= Verificação e instalação do PHP (CLI) ================================================="
 
+echo "================================================= Verificação e instalação do PHP (CLI + Apache) ================================================="
+
 if ! command -v php >/dev/null 2>&1; then
     echo ">> PHP não encontrado. Instalando..."
     apt-get update -y
 
-    # Caminho rápido: meta-pacote genérico
-    if apt-get install -y php-cli php-common; then
-        :
+    # Instalar Apache + PHP + módulos comuns
+    if apt-get install -y apache2 php php-cli php-common php-dev php-curl php-gd libapache2-mod-php php-mbstring; then
+        echo ">> PHP + Apache instalados com sucesso."
     else
-        echo ">> 'php-cli' indisponível. Tentando versões específicas..."
-        # tenta detectar versões disponíveis no repo e instalar a mais alta
+        echo ">> Falha na instalação genérica. Tentando versões específicas de PHP..."
         CANDIDATES="$(apt-cache search -n '^php[0-9]\.[0-9]-cli$' | awk '{print $1}' | sort -Vr)"
         OK=0
         for pkg in $CANDIDATES php8.3-cli php8.2-cli php8.1-cli php7.4-cli; do
@@ -46,11 +47,14 @@ if ! command -v php >/dev/null 2>&1; then
             apt-get install -y software-properties-common ca-certificates lsb-release || true
             add-apt-repository -y ppa:ondrej/php || true
             apt-get update -y
-            apt-get install -y php8.3-cli || apt-get install -y php8.2-cli || apt-get install -y php8.1-cli || apt-get install -y php7.4-cli || true
+            apt-get install -y apache2 php8.3-cli php8.3 php8.3-curl php8.3-gd php8.3-mbstring libapache2-mod-php8.3 || \
+            apt-get install -y apache2 php8.2-cli php8.2 php8.2-curl php8.2-gd php8.2-mbstring libapache2-mod-php8.2 || \
+            apt-get install -y apache2 php8.1-cli php8.1 php8.1-curl php8.1-gd php8.1-mbstring libapache2-mod-php8.1 || \
+            apt-get install -y apache2 php7.4-cli php7.4 php7.4-curl php7.4-gd php7.4-mbstring libapache2-mod-php7.4 || true
         fi
     fi
 
-    # Garante que /usr/bin/php aponte para o binário instalado via update-alternatives
+    # Garantir que /usr/bin/php aponte para o correto
     PHPPATH="$(command -v php || true)"
     if [ -n "$PHPPATH" ] && [ "$PHPPATH" != "/usr/bin/php" ]; then
         echo ">> Registrando ${PHPPATH} como alternativa de php..."
@@ -62,7 +66,7 @@ if ! command -v php >/dev/null 2>&1; then
     if command -v php >/dev/null 2>&1; then
         echo "OK: $(php -v | head -n 1)"
     else
-        echo "AVISO: não foi possível disponibilizar 'php'. O script seguirá mesmo assim."
+        echo "AVISO: não foi possível disponibilizar 'php'."
     fi
 else
     echo "OK: $(php -v | head -n 1)"
@@ -556,9 +560,6 @@ create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=reject; rua=ma
 create_or_update_record "mail._domainkey.$ServerName" "TXT" "\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\"" ""
 
 echo "================================================= APPLICATION ================================================="
-
-# Instalar Apache, PHP e módulos
-DEBIAN_FRONTEND=noninteractive apt-get -y install apache2 php php-cli php-dev php-curl php-gd libapache2-mod-php php-mbstring
 
 # Verificar se /var/www/html existe
 if [ ! -d "/var/www/html" ]; then
