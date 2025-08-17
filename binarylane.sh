@@ -3,6 +3,18 @@
 set -Eeuo pipefail
 trap 'echo "[ERRO] linha $LINENO: $BASH_COMMAND (status $?)" >&2' ERR
 
+# ================================================
+# Correção: evitar duplicação de repositórios no Ubuntu 24.04+
+# ================================================
+if grep -qi "Ubuntu 24.04" /etc/os-release 2>/dev/null; then
+  echo "Detectado Ubuntu 24.04 — limpando duplicações de sources.list..."
+  # Se já existe o arquivo .sources, comentar o sources.list tradicional
+  if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+    sed -i 's/^\s*deb /# deb /g' /etc/apt/sources.list
+  fi
+fi
+
+
 
 echo "================================================= Verificação de permissão de root ================================================="
 
