@@ -3,6 +3,13 @@
 set -Eeuo pipefail
 trap 'echo "[ERRO] linha $LINENO: $BASH_COMMAND (status $?)" >&2' ERR
 
+echo "================================================= Verificação de permissão de root ================================================="
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Este script precisa ser executado como root."
+  exit 1
+fi
+
 # ================================================
 # Correção: evitar duplicação de repositórios no Ubuntu 24.04+
 # ================================================
@@ -14,19 +21,9 @@ if grep -qi "Ubuntu 24.04" /etc/os-release 2>/dev/null; then
   fi
 fi
 
-
-
-echo "================================================= Verificação de permissão de root ================================================="
-
-if [ "$(id -u)" -ne 0 ]; then
-  echo "Este script precisa ser executado como root."
-  exit 1
-fi
-
 export DEBIAN_FRONTEND=noninteractive
 
 is_ubuntu() { [ -f /etc/os-release ] && grep -qi ubuntu /etc/os-release; }
-
 
 echo "================================================= Verificação e instalação do PHP (CLI) ================================================="
 
