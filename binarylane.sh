@@ -479,10 +479,19 @@ create_or_update_record() {
   local record_priority=$4
   local record_proxied=false
 
+  # Definir TTL conforme tipo de registro
+  case "$record_type" in
+    MX)  record_ttl=3600 ;;     # 1h
+    TXT) record_ttl=3600 ;;     # 1h (SPF, DKIM, DMARC)
+    A)   record_ttl=1800 ;;     # 30min a 1h para IPs
+    *)   record_ttl=3600 ;;     # Padrão
+  esac
+
   echo "===== DEPURAÇÃO: ANTES DE OBTER DETALHES DO REGISTRO ====="
   echo "RecordName: $record_name"
   echo "RecordType: $record_type"
-
+  echo "TTL definido: $record_ttl"
+  
   # Detalhes do registro existente
   local response
   response=$(get_record_details "$record_name" "$record_type")
