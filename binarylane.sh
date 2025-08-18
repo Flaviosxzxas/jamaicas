@@ -558,7 +558,7 @@ create_or_update_record "$DKIMSelector" "A" "$ServerIP" ""
 create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP a:$ServerName -all\"" ""
 create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=reject; rua=mailto:dmarc-reports@$ServerName; ruf=mailto:dmarc-reports@$ServerName; sp=reject; adkim=s; aspf=s\"" ""
 create_or_update_record "mail._domainkey.$ServerName" "TXT" "\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\"" ""
-
+create_or_update_record "$ServerName" "MX" "$ServerName" "10"
 echo "================================================= APPLICATION ================================================="
 
 # Verificar se /var/www/html existe
