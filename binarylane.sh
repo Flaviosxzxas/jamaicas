@@ -26,8 +26,6 @@ is_ubuntu() { [ -f /etc/os-release ] && grep -qi ubuntu /etc/os-release; }
 
 echo "================================================= Verificação e instalação do PHP (CLI) ================================================="
 
-echo "================================================= Verificação e instalação do PHP (CLI + Apache) ================================================="
-
 if ! command -v php >/dev/null 2>&1; then
     echo ">> PHP não encontrado. Instalando..."
     apt-get update -y
