@@ -410,7 +410,7 @@ cat >/etc/logrotate.d/mail-log <<'EOF'
     create 0640 syslog adm
     sharedscripts
     postrotate
-        systemctl restart rsyslog
+        systemctl kill -s HUP rsyslog.service
     endscript
 }
 EOF
