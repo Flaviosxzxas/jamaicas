@@ -389,6 +389,10 @@ mail.*   -/var/log/mail.log
 & stop
 EOF
 
+# garanta as permissões corretas do diretório /var/log
+chown root:root /var/log
+chmod 755 /var/log
+
 # garanta o arquivo e as permissões (Ubuntu: syslog:adm)
 touch /var/log/mail.log
 chown syslog:adm /var/log/mail.log
@@ -406,7 +410,7 @@ cat >/etc/logrotate.d/mail-log <<'EOF'
     create 0640 syslog adm
     sharedscripts
     postrotate
-        systemctl kill -s HUP rsyslog.service
+        systemctl restart rsyslog
     endscript
 }
 EOF
