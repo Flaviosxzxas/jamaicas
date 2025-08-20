@@ -406,7 +406,7 @@ cat >/etc/logrotate.d/mail-log <<'EOF'
     create 0640 syslog adm
     sharedscripts
     postrotate
-        invoke-rc.d rsyslog rotate >/dev/null 2>&1 || true
+        systemctl kill -s HUP rsyslog.service
     endscript
 }
 EOF
