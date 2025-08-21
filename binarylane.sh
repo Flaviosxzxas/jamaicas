@@ -197,7 +197,7 @@ chmod -R 750 /etc/opendkim/
 # /etc/default/opendkim
 cat <<EOF > /etc/default/opendkim
 RUNDIR=/run/opendkim
-SOCKET="inet:12301@127.0.0.1"
+SOCKET="local:/var/run/opendkim/opendkim.sock"
 USER=opendkim
 GROUP=opendkim
 PIDFILE=\$RUNDIR/\$NAME.pid
@@ -224,8 +224,6 @@ ExternalIgnoreList      refile:/etc/opendkim/TrustedHosts
 InternalHosts           refile:/etc/opendkim/TrustedHosts
 KeyTable                refile:/etc/opendkim/KeyTable
 SigningTable            refile:/etc/opendkim/SigningTable
-
-Socket                  inet:12301@127.0.0.1
 EOF
 
 # /etc/opendkim/TrustedHosts
@@ -340,8 +338,8 @@ alias_database = hash:/etc/aliases
 # DKIM (OpenDKIM)
 milter_protocol = 6
 milter_default_action = accept
-smtpd_milters = inet:127.0.0.1:12301
-non_smtpd_milters = inet:127.0.0.1:12301
+smtpd_milters = unix:/var/run/opendkim/opendkim.sock
+non_smtpd_milters = unix:/var/run/opendkim/opendkim.sock
 
 # TLS - entrada local (PHP -> Postfix em 127.0.0.1)
 smtpd_tls_security_level = may
