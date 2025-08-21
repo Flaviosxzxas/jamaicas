@@ -335,8 +335,8 @@ alias_database = hash:/etc/aliases
 # DKIM (OpenDKIM)
 milter_protocol = 6
 milter_default_action = accept
-smtpd_milters = inet:127.0.0.1:12301
-non_smtpd_milters = inet:127.0.0.1:12301
+smtpd_milters = unix:/run/opendkim/opendkim.sock
+non_smtpd_milters = unix:/run/opendkim/opendkim.sock
 
 # TLS - entrada local (PHP -> Postfix em 127.0.0.1)
 smtpd_tls_security_level = may
