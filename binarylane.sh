@@ -71,8 +71,6 @@ else
 fi
 
 echo "================================================= Atualização dos pacotes ================================================="
-
-apt-get update
 apt-get -y upgrade \
   -o Dpkg::Options::="--force-confdef" \
   -o Dpkg::Options::="--force-confold" \
@@ -276,7 +274,7 @@ install_py_pkg() {
   local ok=0
 
   echo "==> Instalando ${pip_name} (APT -> venv -> pip)..."
-  apt-get update -y >/dev/null 2>&1 || true
+#apt-get update -y >/dev/null 2>&1 || true
 
   # 1) APT
   if apt-get install -y "${apt_name}"; then
@@ -376,7 +374,6 @@ ORIGINAL_VARS=$(declare -p ServerName CloudflareAPI CloudflareEmail Domain DKIMS
 
 
 # === MAIL.LOG via rsyslog (com criação e rotação) ===
-apt-get update -y
 apt-get install -y rsyslog logrotate
 
 # rsyslog: direcione apenas mensagens da facility "mail" para /var/log/mail.log
