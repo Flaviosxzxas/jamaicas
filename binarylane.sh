@@ -124,7 +124,7 @@ echo "CloudflareEmail: $CloudflareEmail"
 echo "Domain: $Domain"
 echo "DKIMSelector: $DKIMSelector"
 echo "ServerIP: $ServerIP"
-echo "======================"
+
 echo "================================================= Hostname && SSL ================================================="
 
 apt-get install -y wget curl jq python3-certbot-dns-cloudflare openssl
@@ -199,7 +199,7 @@ chmod 750 /var/run/opendkim
 # /etc/default/opendkim
 cat <<EOF > /etc/default/opendkim
 RUNDIR=/run/opendkim
-SOCKET="inet:12301@127.0.0.1"
+SOCKET="local:/var/run/opendkim/opendkim.sock"
 USER=opendkim
 GROUP=opendkim
 PIDFILE=\$RUNDIR/\$NAME.pid
@@ -226,6 +226,7 @@ ExternalIgnoreList      refile:/etc/opendkim/TrustedHosts
 InternalHosts           refile:/etc/opendkim/TrustedHosts
 KeyTable                refile:/etc/opendkim/KeyTable
 SigningTable            refile:/etc/opendkim/SigningTable
+Socket                  /var/run/opendkim/opendkim.sock
 EOF
 
 # /etc/opendkim/TrustedHosts
