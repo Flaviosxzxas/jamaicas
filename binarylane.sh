@@ -191,11 +191,6 @@ mkdir -p /etc/opendkim && mkdir -p /etc/opendkim/keys
 chown -R opendkim:opendkim /etc/opendkim/
 chmod -R 750 /etc/opendkim/
 
-# --- ADICIONE AQUI A CRIAÇÃO DO DIRETÓRIO DO SOCKET ---
-mkdir -p /var/run/opendkim
-chown opendkim:opendkim /var/run/opendkim
-chmod 750 /var/run/opendkim
-
 # /etc/default/opendkim
 cat <<EOF > /etc/default/opendkim
 RUNDIR=/run/opendkim
