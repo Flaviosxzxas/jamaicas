@@ -127,7 +127,6 @@ echo "Domain: $Domain"
 echo "DKIMSelector: $DKIMSelector"
 echo "ServerIP: $ServerIP"
 echo "======================"
-sleep 10
 echo "================================================= Hostname && SSL ================================================="
 
 apt-get install -y wget curl jq python3-certbot-dns-cloudflare openssl
@@ -265,7 +264,6 @@ console.log(
 EOF
 
 chmod 755 /root/dkimcode.sh
-sleep 3
 
 echo "================================================= Atualização de pacotes ================================================="
 
@@ -441,7 +439,6 @@ if ! command -v jq &> /dev/null; then
 fi
 
 DKIMCode=$(/root/dkimcode.sh)
-sleep 5
 
 echo "===== DEPURAÇÃO: ANTES DE OBTER ZONA CLOUDFLARE ====="
 echo "DKIMCode: $DKIMCode"
