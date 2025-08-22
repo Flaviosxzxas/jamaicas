@@ -203,7 +203,7 @@ EOF
 cat <<EOF > /etc/opendkim.conf
 AutoRestart             Yes
 AutoRestartRate         10/1h
-UMask                   007
+UMask                   002
 Syslog                  yes
 SyslogSuccess           Yes
 LogWhy                  Yes
@@ -232,23 +232,14 @@ $ServerName
 EOF
 
   # Prepara diretório do socket
-  mkdir -p /var/spool/postfix/var/run/opendkim || true
-  chown -R opendkim:opendkim /var/spool/postfix/var/run/opendkim || true
-  chmod 750 /var/spool/postfix/var/run/opendkim || true
+mkdir -p /var/spool/postfix/var/run/opendkim
+chown -R opendkim:opendkim /var/spool/postfix/var/run/opendkim
+chmod 750 /var/spool/postfix/var/run/opendkim
 
-  # Adiciona postfix ao grupo opendkim somente se existir (não quebra se não existir)
-  id postfix >/dev/null 2>&1 && usermod -aG opendkim postfix || true
-else
-  # TCP (modo universal): evita problemas de permissões/chroot
-  sed -i -E \
-    -e "s|^Socket[[:space:]].*|Socket  inet:9982@127.0.0.1|" \
-    /etc/opendkim.conf || true
-fi
 
-# Algumas distros precisam (Debian-based): regenera unidade e recarrega
-[ -x /lib/opendkim/opendkim.service.generate ] && /lib/opendkim/opendkim.service.generate || true
-systemctl daemon-reload || true
-systemctl restart opendkim || true
+/lib/opendkim/opendkim.service.generate
+systemctl daemon-reload
+systemctl restart opendkim
 
 # === DKIM por FQDN ===
 # cria pasta específica do host
