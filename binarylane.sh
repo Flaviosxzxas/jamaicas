@@ -318,6 +318,14 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y postfix pflogsumm
 echo -e "$ServerName OK" > /etc/postfix/access.recipients
 postmap /etc/postfix/access.recipients
 
+# Criar rate limiting específico por provedor PRIMEIRO
+cat > /etc/postfix/transport <<'EOF'
+gmail.com       smtp:[smtp.gmail.com]:587
+yahoo.com       smtp:[smtp.mail.yahoo.com]:587
+outlook.com     smtp:[smtp-mail.outlook.com]:587
+hotmail.com     smtp:[smtp-mail.outlook.com]:587
+EOF
+
 # /etc/postfix/main.cf
 cat <<EOF > /etc/postfix/main.cf
 myhostname = $ServerName
@@ -364,8 +372,35 @@ mailbox_size_limit = 0
 recipient_delimiter = +
 inet_interfaces = loopback-only
 inet_protocols = ipv4
-EOF
 
+maximal_queue_lifetime = 2h
+bounce_queue_lifetime = 1h
+
+# Otimizar timeouts
+smtp_connect_timeout = 30s
+smtp_helo_timeout = 30s
+smtp_mail_timeout = 30s
+smtp_rcpt_timeout = 30s
+smtp_data_timeout = 120s
+
+# Rate limiting por transporte
+transport_maps = hash:/etc/postfix/transport
+
+# Configurações específicas por destino
+gmail_destination_concurrency_limit = 5
+gmail_destination_rate_delay = 2s
+
+yahoo_destination_concurrency_limit = 3  
+yahoo_destination_rate_delay = 3s
+
+outlook_destination_concurrency_limit = 8
+outlook_destination_rate_delay = 1s
+EOF
+# Aplicar configurações
+postmap /etc/postfix/transport
+postfix reload
+
+echo "✓ Postfix configurado com rate limiting por provedor!"
 echo "================================================= POSTFIX ================================================="
 
 # Salvar variáveis antes de instalar dependências
