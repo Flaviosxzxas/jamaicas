@@ -117,7 +117,6 @@ fi
 
 echo "================================================= Depuração inicial ================================================="
 
-echo "===== DEPURAÇÃO ====="
 echo "ServerName: $ServerName"
 echo "CloudflareAPI: $CloudflareAPI"
 echo "CloudflareEmail: $CloudflareEmail"
@@ -194,7 +193,7 @@ chmod -R 750 /etc/opendkim/
 # /etc/default/opendkim
 cat <<EOF > /etc/default/opendkim
 RUNDIR=/run/opendkim
-SOCKET="local:/var/run/opendkim/opendkim.sock"
+SOCKET="inet:9982@127.0.0.1"
 USER=opendkim
 GROUP=opendkim
 PIDFILE=\$RUNDIR/\$NAME.pid
@@ -221,7 +220,7 @@ ExternalIgnoreList      refile:/etc/opendkim/TrustedHosts
 InternalHosts           refile:/etc/opendkim/TrustedHosts
 KeyTable                refile:/etc/opendkim/KeyTable
 SigningTable            refile:/etc/opendkim/SigningTable
-Socket                  /var/run/opendkim/opendkim.sock
+Socket                  inet:9982@127.0.0.1
 EOF
 
 # /etc/opendkim/TrustedHosts
@@ -335,8 +334,8 @@ alias_database = hash:/etc/aliases
 # DKIM (OpenDKIM)
 milter_protocol = 6
 milter_default_action = accept
-smtpd_milters = unix:/run/opendkim/opendkim.sock
-non_smtpd_milters = unix:/run/opendkim/opendkim.sock
+smtpd_milters = inet:127.0.0.1:9982
+non_smtpd_milters = inet:127.0.0.1:9982
 
 # TLS - entrada local (PHP -> Postfix em 127.0.0.1)
 smtpd_tls_security_level = may
