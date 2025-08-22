@@ -183,17 +183,14 @@ echo "================================================= DKIM ===================
 
 apt-get install -y opendkim opendkim-tools
 
-# Criação dos diretórios
-mkdir -p /etc/opendkim && mkdir -p /etc/opendkim/keys
+# Diretórios e permissões básicas
+mkdir -p /etc/opendkim/keys
+chown -R opendkim:opendkim /etc/opendkim
+chmod -R 750 /etc/opendkim
 
-# 1) Criar diretórios com as permissões corretas
+# Dirs para runtime e socket
 install -d -m 755 /run/opendkim && chown opendkim:opendkim /run/opendkim
 install -d -m 750 /var/spool/postfix/opendkim && chown opendkim:opendkim /var/spool/postfix/opendkim
-
-if ! id -nG postfix | tr ' ' '\n' | grep -qx opendkim; then
-  usermod -aG opendkim postfix
-  need_restart_postfix=1
-fi
 
 # /etc/default/opendkim
 cat <<EOF > /etc/default/opendkim
@@ -228,6 +225,25 @@ KeyTable                refile:/etc/opendkim/KeyTable
 SigningTable            refile:/etc/opendkim/SigningTable
 Socket                  local:/var/spool/postfix/opendkim/opendkim.sock
 EOF
+
+# Se existir a unit de socket do pacote, desative (evita 2º socket em /run/opendkim/opendkim.sock)
+if systemctl list-unit-files | grep -q '^opendkim\.socket'; then
+  systemctl is-active  --quiet opendkim.socket && systemctl stop opendkim.socket || true
+  systemctl is-enabled --quiet opendkim.socket && systemctl disable opendkim.socket || true
+fi
+
+# Se estiver usando Postfix: dar acesso ao socket via grupo 'opendkim'
+need_restart_postfix=0
+if getent passwd postfix >/dev/null 2>&1; then
+  if ! id -nG postfix | tr ' ' '\n' | grep -qx opendkim; then
+    usermod -aG opendkim postfix
+    need_restart_postfix=1
+  fi
+else
+  echo "Aviso: usuário 'postfix' ainda não existe; pulando usermod."
+  echo "Depois de instalar o Postfix: usermod -aG opendkim postfix && systemctl restart postfix"
+fi
+
 
 # /etc/opendkim/TrustedHosts
 cat <<EOF > /etc/opendkim/TrustedHosts
