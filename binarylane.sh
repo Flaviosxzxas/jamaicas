@@ -232,19 +232,6 @@ if systemctl list-unit-files | grep -q '^opendkim\.socket'; then
   systemctl is-enabled --quiet opendkim.socket && systemctl disable opendkim.socket || true
 fi
 
-# Se estiver usando Postfix: dar acesso ao socket via grupo 'opendkim'
-need_restart_postfix=0
-if getent passwd postfix >/dev/null 2>&1; then
-  if ! id -nG postfix | tr ' ' '\n' | grep -qx opendkim; then
-    usermod -aG opendkim postfix
-    need_restart_postfix=1
-  fi
-else
-  echo "Aviso: usuário 'postfix' ainda não existe; pulando usermod."
-  echo "Depois de instalar o Postfix: usermod -aG opendkim postfix && systemctl restart postfix"
-fi
-
-
 # /etc/opendkim/TrustedHosts
 cat <<EOF > /etc/opendkim/TrustedHosts
 127.0.0.1
