@@ -236,8 +236,6 @@ mkdir -p /var/spool/postfix/var/run/opendkim
 chown -R opendkim:opendkim /var/spool/postfix/var/run/opendkim
 chmod 750 /var/spool/postfix/var/run/opendkim
 
-
-/lib/opendkim/opendkim.service.generate
 systemctl daemon-reload
 systemctl restart opendkim
 
