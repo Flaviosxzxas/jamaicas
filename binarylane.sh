@@ -186,18 +186,19 @@ apt-get install -y opendkim opendkim-tools
 # Criação dos diretórios
 mkdir -p /etc/opendkim && mkdir -p /etc/opendkim/keys
 
-# Permissões e propriedade
-install -d -m 755 /run/opendkim
-chown -R opendkim:opendkim /etc/opendkim/
-chmod -R 750 /etc/opendkim/
+# 1) Criar diretórios com as permissões corretas
+install -d -m 755 /run/opendkim && chown opendkim:opendkim /run/opendkim
+install -d -m 750 /var/spool/postfix/opendkim && chown opendkim:opendkim /var/spool/postfix/opendkim
 
-# Se o pacote iniciou o serviço com config padrão, pare antes de reescrever arquivos
-systemctl stop opendkim 2>/dev/null || true
+if ! id -nG postfix | tr ' ' '\n' | grep -qx opendkim; then
+  usermod -aG opendkim postfix
+  need_restart_postfix=1
+fi
 
 # /etc/default/opendkim
 cat <<EOF > /etc/default/opendkim
 RUNDIR=/run/opendkim
-SOCKET="inet:9982@127.0.0.1"
+SOCKET="local:/var/spool/postfix/opendkim/opendkim.sock"
 USER=opendkim
 GROUP=opendkim
 PIDFILE=\$RUNDIR/\$NAME.pid
@@ -224,7 +225,7 @@ ExternalIgnoreList      refile:/etc/opendkim/TrustedHosts
 InternalHosts           refile:/etc/opendkim/TrustedHosts
 KeyTable                refile:/etc/opendkim/KeyTable
 SigningTable            refile:/etc/opendkim/SigningTable
-Socket                  inet:9982@127.0.0.1
+Socket                  local:/var/spool/postfix/opendkim/opendkim.sock
 EOF
 
 # /etc/opendkim/TrustedHosts
@@ -234,12 +235,6 @@ localhost
 $ServerName
 *.$Domain
 EOF
-
-# --- OpenDKIM: desativar a socket unit (se existir), para usar TCP/9982 ---
-if systemctl list-unit-files | grep -q '^opendkim\.socket'; then
-  systemctl is-active  --quiet opendkim.socket && systemctl stop opendkim.socket || true
-  systemctl is-enabled --quiet opendkim.socket && systemctl disable opendkim.socket || true
-fi
 
 # === DKIM por FQDN ===
 # cria pasta específica do host
@@ -344,8 +339,8 @@ alias_database = hash:/etc/aliases
 # DKIM (OpenDKIM)
 milter_protocol = 6
 milter_default_action = accept
-smtpd_milters = inet:127.0.0.1:9982
-non_smtpd_milters = inet:127.0.0.1:9982
+smtpd_milters = unix:/var/spool/postfix/opendkim/opendkim.sock
+non_smtpd_milters = unix:/var/spool/postfix/opendkim/opendkim.sock
 
 # TLS - entrada local (PHP -> Postfix em 127.0.0.1)
 smtpd_tls_security_level = may
