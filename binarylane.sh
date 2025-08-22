@@ -398,7 +398,7 @@ outlook_destination_rate_delay = 1s
 EOF
 # Aplicar configurações
 postmap /etc/postfix/transport
-postfix reload
+systemctl restart postfix
 
 echo "✓ Postfix configurado com rate limiting por provedor!"
 echo "================================================= POSTFIX ================================================="
