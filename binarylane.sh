@@ -183,19 +183,17 @@ echo "================================================= DKIM ===================
 
 apt-get install -y opendkim opendkim-tools
 
-# Diretórios e permissões básicas
-mkdir -p /etc/opendkim/keys
-chown -R opendkim:opendkim /etc/opendkim
-chmod -R 750 /etc/opendkim
+# Criação dos diretórios
+mkdir -p /etc/opendkim && mkdir -p /etc/opendkim/keys
 
-install -d -m 750 /var/spool/postfix/opendkim
-chown opendkim:opendkim /var/spool/postfix/opendkim
+# Permissões e propriedade
+chown -R opendkim:opendkim /etc/opendkim/
+chmod -R 750 /etc/opendkim/
 
 # /etc/default/opendkim
 cat <<EOF > /etc/default/opendkim
-NAME=opendkim
 RUNDIR=/run/opendkim
-SOCKET="local:/var/spool/postfix/var/run/opendkim/opendkim.sock"
+SOCKET="inet:9982@127.0.0.1"
 USER=opendkim
 GROUP=opendkim
 PIDFILE=\$RUNDIR/\$NAME.pid
@@ -222,14 +220,8 @@ ExternalIgnoreList      refile:/etc/opendkim/TrustedHosts
 InternalHosts           refile:/etc/opendkim/TrustedHosts
 KeyTable                refile:/etc/opendkim/KeyTable
 SigningTable            refile:/etc/opendkim/SigningTable
-Socket                  local:/var/spool/postfix/opendkim/opendkim.sock
+Socket                  inet:9982@127.0.0.1
 EOF
-
-# Se existir a unit de socket do pacote, desative (evita 2º socket em /run/opendkim/opendkim.sock)
-if systemctl list-unit-files | grep -q '^opendkim\.socket'; then
-  systemctl is-active  --quiet opendkim.socket && systemctl stop opendkim.socket || true
-  systemctl is-enabled --quiet opendkim.socket && systemctl disable opendkim.socket || true
-fi
 
 # /etc/opendkim/TrustedHosts
 cat <<EOF > /etc/opendkim/TrustedHosts
@@ -342,8 +334,8 @@ alias_database = hash:/etc/aliases
 # DKIM (OpenDKIM)
 milter_protocol = 6
 milter_default_action = accept
-smtpd_milters = unix:/opendkim/opendkim.sock
-non_smtpd_milters = unix:/opendkim/opendkim.sock
+smtpd_milters = inet:127.0.0.1:9982
+non_smtpd_milters = inet:127.0.0.1:9982
 
 # TLS - entrada local (PHP -> Postfix em 127.0.0.1)
 smtpd_tls_security_level = may
@@ -424,11 +416,8 @@ systemctl restart rsyslog
 logger -p mail.info "rsyslog: teste de escrita $(date)"
 tail -n 5 /var/log/mail.log || true
 
-# --- OpenDKIM: habilitar e iniciar o serviço tradicional ---
-systemctl enable --now opendkim
 
 systemctl daemon-reload
-systemctl restart opendkim
 systemctl restart postfix
 
 echo "================================================= CLOUDFLARE ================================================="
