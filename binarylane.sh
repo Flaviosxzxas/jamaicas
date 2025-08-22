@@ -191,8 +191,6 @@ chmod -R 750 /etc/opendkim
 install -d -m 750 /var/spool/postfix/opendkim
 chown opendkim:opendkim /var/spool/postfix/opendkim
 
-
-
 # /etc/default/opendkim
 cat <<EOF > /etc/default/opendkim
 NAME=opendkim
@@ -232,8 +230,6 @@ if systemctl list-unit-files | grep -q '^opendkim\.socket'; then
   systemctl is-active  --quiet opendkim.socket && systemctl stop opendkim.socket || true
   systemctl is-enabled --quiet opendkim.socket && systemctl disable opendkim.socket || true
 fi
-
-sudo service opendkim restart
 
 # /etc/opendkim/TrustedHosts
 cat <<EOF > /etc/opendkim/TrustedHosts
