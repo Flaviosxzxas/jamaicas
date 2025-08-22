@@ -188,15 +188,19 @@ mkdir -p /etc/opendkim/keys
 chown -R opendkim:opendkim /etc/opendkim
 chmod -R 750 /etc/opendkim
 
+sudo adduser postfix opendkim
+
 # Dirs para runtime e socket
-install -d -m 755 /run/opendkim && chown opendkim:opendkim /run/opendkim
-install -d -m 750 /var/spool/postfix/opendkim && chown opendkim:opendkim /var/spool/postfix/opendkim
+sudo mkdir -p /var/spool/postfix/var/run/opendkim
+sudo chown opendkim:opendkim /var/spool/postfix/var/run/opendkim
+
+sudo service opendkim restar
 
 # /etc/default/opendkim
 cat <<EOF > /etc/default/opendkim
 NAME=opendkim
 RUNDIR=/run/opendkim
-SOCKET="local:/var/spool/postfix/opendkim/opendkim.sock"
+SOCKET="local:/var/spool/postfix/var/run/opendkim/opendkim.sock"
 USER=opendkim
 GROUP=opendkim
 PIDFILE=\$RUNDIR/\$NAME.pid
@@ -232,9 +236,7 @@ if systemctl list-unit-files | grep -q '^opendkim\.socket'; then
   systemctl is-enabled --quiet opendkim.socket && systemctl disable opendkim.socket || true
 fi
 
-# Subir OpenDKIM
-systemctl enable opendkim
-systemctl restart opendkim
+sudo service opendkim restart
 
 # /etc/opendkim/TrustedHosts
 cat <<EOF > /etc/opendkim/TrustedHosts
