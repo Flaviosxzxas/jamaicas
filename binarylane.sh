@@ -179,7 +179,6 @@ sed -i "s/self\.email is ''/self.email == ''/g" /usr/lib/python3/dist-packages/C
 sed -i "s/self\.token is ''/self.token == ''/g"   /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
 echo "Correção aplicada com sucesso em cloudflare.py."
 wait
-echo "================================================= DKIM ================================================="
 
 echo "================================================= DKIM ================================================="
 
@@ -247,37 +246,39 @@ $ServerName
 *.$Domain
 EOF
 
-# Configurar permissões corretas
+# Configurar permissões dos diretórios (antes de iniciar o serviço)
 chown -R opendkim:opendkim /etc/opendkim/
 chmod -R 755 /etc/opendkim/
 chown -R opendkim:opendkim /var/run/opendkim
 chmod 755 /var/run/opendkim
-chown -R opendkim:opendkim /var/spool/postfix/var/run/opendkim
-chmod 755 /var/spool/postfix/var/run/opendkim
+chown -R opendkim:postfix /var/spool/postfix/var/run/opendkim
+chmod 750 /var/spool/postfix/var/run/opendkim
 
 # Verificar se o grupo postfix existe antes de adicionar o usuário
 if getent group postfix > /dev/null 2>&1; then
     echo "Adicionando usuário opendkim ao grupo postfix..."
     usermod -a -G postfix opendkim
+    usermod -a -G opendkim postfix
 else
-    echo "Grupo postfix não existe ainda. Será configurado posteriormente quando o Postfix for instalado."
-    # Criar um arquivo para lembrar de fazer isso depois
-    echo "usermod -a -G postfix opendkim" > /tmp/dkim_postfix_config.sh
-    chmod +x /tmp/dkim_postfix_config.sh
+    echo "Grupo postfix não existe ainda. Será configurado posteriormente."
 fi
 
-# Recarregar e reiniciar serviços
+# Recarregar e iniciar serviços
 systemctl daemon-reload
-
-# Verificar se o serviço pode ser iniciado
 systemctl enable opendkim
+systemctl start opendkim
 
-# Tentar iniciar o serviço
-if systemctl start opendkim; then
-    echo "OpenDKIM iniciado com sucesso!"
+# Aguardar o socket ser criado
+sleep 3
+
+# AGORA sim, ajustar permissões do socket (depois que ele foi criado)
+if [ -S /var/spool/postfix/var/run/opendkim/opendkim.sock ]; then
+    echo "Socket criado, ajustando permissões..."
+    chown opendkim:postfix /var/spool/postfix/var/run/opendkim/opendkim.sock
+    chmod 660 /var/spool/postfix/var/run/opendkim/opendkim.sock
+    echo "Permissões do socket ajustadas!"
 else
-    echo "Aviso: OpenDKIM não conseguiu iniciar completamente. Isso pode ser normal se o Postfix ainda não estiver instalado."
-    echo "O serviço será configurado automaticamente quando o Postfix for instalado."
+    echo "Aviso: Socket não foi criado ainda."
 fi
 
 echo "OpenDKIM configurado com sucesso!"
