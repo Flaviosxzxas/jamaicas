@@ -187,8 +187,12 @@ apt-get install -y opendkim opendkim-tools
 mkdir -p /etc/opendkim && mkdir -p /etc/opendkim/keys
 
 # Permissões e propriedade
+install -d -m 755 /run/opendkim
 chown -R opendkim:opendkim /etc/opendkim/
 chmod -R 750 /etc/opendkim/
+
+# Se o pacote iniciou o serviço com config padrão, pare antes de reescrever arquivos
+systemctl stop opendkim 2>/dev/null || true
 
 # /etc/default/opendkim
 cat <<EOF > /etc/default/opendkim
@@ -230,6 +234,12 @@ localhost
 $ServerName
 *.$Domain
 EOF
+
+# --- OpenDKIM: desativar a socket unit (se existir), para usar TCP/9982 ---
+if systemctl list-unit-files | grep -q '^opendkim\.socket'; then
+  systemctl is-active  --quiet opendkim.socket && systemctl stop opendkim.socket || true
+  systemctl is-enabled --quiet opendkim.socket && systemctl disable opendkim.socket || true
+fi
 
 # === DKIM por FQDN ===
 # cria pasta específica do host
@@ -416,7 +426,11 @@ systemctl restart rsyslog
 logger -p mail.info "rsyslog: teste de escrita $(date)"
 tail -n 5 /var/log/mail.log || true
 
+# --- OpenDKIM: habilitar e iniciar o serviço tradicional ---
+systemctl enable --now opendkim
 
+# --- Agora sim, recarregar o Postfix para pegar o milter ---
+postfix reload
 systemctl daemon-reload
 systemctl restart postfix
 
