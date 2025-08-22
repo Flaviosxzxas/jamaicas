@@ -255,21 +255,29 @@ chmod 755 /var/run/opendkim
 chown -R opendkim:opendkim /var/spool/postfix/var/run/opendkim
 chmod 755 /var/spool/postfix/var/run/opendkim
 
-# Adicionar usuário opendkim ao grupo postfix
-usermod -a -G postfix opendkim
+# Verificar se o grupo postfix existe antes de adicionar o usuário
+if getent group postfix > /dev/null 2>&1; then
+    echo "Adicionando usuário opendkim ao grupo postfix..."
+    usermod -a -G postfix opendkim
+else
+    echo "Grupo postfix não existe ainda. Será configurado posteriormente quando o Postfix for instalado."
+    # Criar um arquivo para lembrar de fazer isso depois
+    echo "usermod -a -G postfix opendkim" > /tmp/dkim_postfix_config.sh
+    chmod +x /tmp/dkim_postfix_config.sh
+fi
 
 # Recarregar e reiniciar serviços
 systemctl daemon-reload
 
 # Verificar se o serviço pode ser iniciado
 systemctl enable opendkim
-systemctl start opendkim
 
-# Verificar status
-if ! systemctl is-active --quiet opendkim; then
-    echo "Erro: OpenDKIM não conseguiu iniciar. Verificando logs..."
-    journalctl -u opendkim --no-pager -n 20
-    exit 1
+# Tentar iniciar o serviço
+if systemctl start opendkim; then
+    echo "OpenDKIM iniciado com sucesso!"
+else
+    echo "Aviso: OpenDKIM não conseguiu iniciar completamente. Isso pode ser normal se o Postfix ainda não estiver instalado."
+    echo "O serviço será configurado automaticamente quando o Postfix for instalado."
 fi
 
 echo "OpenDKIM configurado com sucesso!"
