@@ -232,6 +232,10 @@ if systemctl list-unit-files | grep -q '^opendkim\.socket'; then
   systemctl is-enabled --quiet opendkim.socket && systemctl disable opendkim.socket || true
 fi
 
+# Subir OpenDKIM
+systemctl enable opendkim
+systemctl restart opendkim
+
 # /etc/opendkim/TrustedHosts
 cat <<EOF > /etc/opendkim/TrustedHosts
 127.0.0.1
