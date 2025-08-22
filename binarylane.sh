@@ -188,13 +188,10 @@ mkdir -p /etc/opendkim/keys
 chown -R opendkim:opendkim /etc/opendkim
 chmod -R 750 /etc/opendkim
 
-sudo adduser postfix opendkim
+install -d -m 750 /var/spool/postfix/opendkim
+chown opendkim:opendkim /var/spool/postfix/opendkim
 
-# Dirs para runtime e socket
-sudo mkdir -p /var/spool/postfix/var/run/opendkim
-sudo chown opendkim:opendkim /var/spool/postfix/var/run/opendkim
 
-sudo service opendkim restar
 
 # /etc/default/opendkim
 cat <<EOF > /etc/default/opendkim
@@ -349,8 +346,8 @@ alias_database = hash:/etc/aliases
 # DKIM (OpenDKIM)
 milter_protocol = 6
 milter_default_action = accept
-smtpd_milters = unix:/var/spool/postfix/opendkim/opendkim.sock
-non_smtpd_milters = unix:/var/spool/postfix/opendkim/opendkim.sock
+smtpd_milters = unix:/opendkim/opendkim.sock
+non_smtpd_milters = unix:/opendkim/opendkim.sock
 
 # TLS - entrada local (PHP -> Postfix em 127.0.0.1)
 smtpd_tls_security_level = may
@@ -435,6 +432,7 @@ tail -n 5 /var/log/mail.log || true
 systemctl enable --now opendkim
 
 systemctl daemon-reload
+systemctl restart opendkim
 systemctl restart postfix
 
 echo "================================================= CLOUDFLARE ================================================="
