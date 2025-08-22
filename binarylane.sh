@@ -179,63 +179,48 @@ sed -i "s/self\.email is ''/self.email == ''/g" /usr/lib/python3/dist-packages/C
 sed -i "s/self\.token is ''/self.token == ''/g"   /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
 echo "Correção aplicada com sucesso em cloudflare.py."
 wait
-
 echo "================================================= DKIM ================================================="
 
-# Instalar pacotes necessários
-apt-get update
 apt-get install -y opendkim opendkim-tools
 
-# Verificar se a instalação foi bem-sucedida
-if [ $? -ne 0 ]; then
-    echo "Erro na instalação do OpenDKIM"
-    exit 1
-fi
-
-# Parar o serviço antes de configurar
-systemctl stop opendkim 2>/dev/null || true
-
 # Criação dos diretórios
-mkdir -p /etc/opendkim/keys
-mkdir -p /var/run/opendkim
-mkdir -p /var/spool/postfix/var/run/opendkim
+mkdir -p /etc/opendkim && mkdir -p /etc/opendkim/keys
 
-# Verificar se as variáveis estão definidas
-if [ -z "$ServerName" ] || [ -z "$Domain" ]; then
-    echo "Erro: Variáveis ServerName ou Domain não estão definidas"
-    exit 1
-fi
+# Permissões e propriedade
+chown -R opendkim:opendkim /etc/opendkim/
+chmod -R 750 /etc/opendkim/
 
 # /etc/default/opendkim
 cat <<EOF > /etc/default/opendkim
-RUNDIR=/var/run/opendkim
-SOCKET="local:/var/spool/postfix/var/run/opendkim/opendkim.sock"
+RUNDIR=/run/opendkim
+SOCKET="inet:9982@127.0.0.1"
 USER=opendkim
 GROUP=opendkim
-PIDFILE=\$RUNDIR/opendkim.pid
-EXTRAAFTER=
+PIDFILE=\$RUNDIR/\$NAME.pid
 EOF
 
 # /etc/opendkim.conf
 cat <<EOF > /etc/opendkim.conf
-AutoRestart Yes
-AutoRestartRate 10/1h
-UMask 002
-Syslog yes
-SyslogSuccess Yes
-LogWhy Yes
-Canonicalization relaxed/simple
-Mode sv
-SignatureAlgorithm rsa-sha256
-OversignHeaders From
-RequireSafeKeys Yes
-UserID opendkim:opendkim
-PidFile /var/run/opendkim/opendkim.pid
-ExternalIgnoreList refile:/etc/opendkim/TrustedHosts
-InternalHosts refile:/etc/opendkim/TrustedHosts
-KeyTable refile:/etc/opendkim/KeyTable
-SigningTable refile:/etc/opendkim/SigningTable
-Socket local:/var/spool/postfix/var/run/opendkim/opendkim.sock
+AutoRestart             Yes
+AutoRestartRate         10/1h
+UMask                   007
+Syslog                  yes
+SyslogSuccess           Yes
+LogWhy                  Yes
+
+Canonicalization        relaxed/relaxed
+Mode                    s
+SignatureAlgorithm      rsa-sha256
+OversignHeaders         From
+RequireSafeKeys         Yes
+UserID                  opendkim:opendkim
+PidFile                 /var/run/opendkim/opendkim.pid
+
+ExternalIgnoreList      refile:/etc/opendkim/TrustedHosts
+InternalHosts           refile:/etc/opendkim/TrustedHosts
+KeyTable                refile:/etc/opendkim/KeyTable
+SigningTable            refile:/etc/opendkim/SigningTable
+Socket                  inet:9982@127.0.0.1
 EOF
 
 # /etc/opendkim/TrustedHosts
@@ -245,43 +230,6 @@ localhost
 $ServerName
 *.$Domain
 EOF
-
-# Configurar permissões dos diretórios (antes de iniciar o serviço)
-chown -R opendkim:opendkim /etc/opendkim/
-chmod -R 755 /etc/opendkim/
-chown -R opendkim:opendkim /var/run/opendkim
-chmod 755 /var/run/opendkim
-chown -R opendkim:postfix /var/spool/postfix/var/run/opendkim
-chmod 750 /var/spool/postfix/var/run/opendkim
-
-# Verificar se o grupo postfix existe antes de adicionar o usuário
-if getent group postfix > /dev/null 2>&1; then
-    echo "Adicionando usuário opendkim ao grupo postfix..."
-    usermod -a -G postfix opendkim
-    usermod -a -G opendkim postfix
-else
-    echo "Grupo postfix não existe ainda. Será configurado posteriormente."
-fi
-
-# Recarregar e iniciar serviços
-systemctl daemon-reload
-systemctl enable opendkim
-systemctl start opendkim
-
-# Aguardar o socket ser criado
-sleep 3
-
-# AGORA sim, ajustar permissões do socket (depois que ele foi criado)
-if [ -S /var/spool/postfix/var/run/opendkim/opendkim.sock ]; then
-    echo "Socket criado, ajustando permissões..."
-    chown opendkim:postfix /var/spool/postfix/var/run/opendkim/opendkim.sock
-    chmod 660 /var/spool/postfix/var/run/opendkim/opendkim.sock
-    echo "Permissões do socket ajustadas!"
-else
-    echo "Aviso: Socket não foi criado ainda."
-fi
-
-echo "OpenDKIM configurado com sucesso!"
 
 # === DKIM por FQDN ===
 # cria pasta específica do host
@@ -386,8 +334,8 @@ alias_database = hash:/etc/aliases
 # DKIM (OpenDKIM)
 milter_protocol = 6
 milter_default_action = accept
-smtpd_milters = unix:var/run/opendkim/opendkim.sock
-non_smtpd_milters = unix:var/run/opendkim/opendkim.sock
+smtpd_milters = inet:127.0.0.1:9982
+non_smtpd_milters = inet:127.0.0.1:9982
 
 # TLS - entrada local (PHP -> Postfix em 127.0.0.1)
 smtpd_tls_security_level = may
@@ -425,49 +373,102 @@ echo "================================================= POSTFIX ================
 ORIGINAL_VARS=$(declare -p ServerName CloudflareAPI CloudflareEmail Domain DKIMSelector ServerIP)
 
 
-# === MAIL.LOG via rsyslog (com criação e rotação) ===
+# === MAIL.LOG via rsyslog (VERSÃO MELHORADA) ===
+echo "Configurando logs de email dedicados..."
+
 apt-get install -y rsyslog logrotate
 
-# rsyslog: direcione apenas mensagens da facility "mail" para /var/log/mail.log
+# Backup da configuração atual (segurança)
+cp /etc/rsyslog.conf /etc/rsyslog.conf.backup.$(date +%Y%m%d)
+
+# rsyslog: direcione mensagens da facility "mail" para /var/log/mail.log
 cat >/etc/rsyslog.d/49-mail.conf <<'EOF'
-mail.*   -/var/log/mail.log
+# Log all mail facility messages to dedicated file
+mail.*                          -/var/log/mail.log
+
+# Stop processing mail messages (don't duplicate in syslog)
 & stop
 EOF
 
-# garanta as permissões corretas do diretório /var/log
+# Criar diretório de logs se não existir
+mkdir -p /var/log
+
+# Garantir permissões corretas do diretório
 chown root:root /var/log
 chmod 755 /var/log
 
-# garanta o arquivo e as permissões (Ubuntu: syslog:adm)
+# Criar arquivo de log com permissões corretas
 touch /var/log/mail.log
 chown syslog:adm /var/log/mail.log
 chmod 0640 /var/log/mail.log
 
-# logrotate para /var/log/mail.log
+# Configuração de rotação otimizada
 cat >/etc/logrotate.d/mail-log <<'EOF'
 /var/log/mail.log {
     daily
     missingok
-    rotate 14
+    rotate 30
     compress
     delaycompress
     notifempty
     create 0640 syslog adm
     sharedscripts
     postrotate
-        systemctl kill -s HUP rsyslog.service
+        # Reload rsyslog to reopen log files
+        if systemctl is-active rsyslog >/dev/null 2>&1; then
+            systemctl kill -s HUP rsyslog.service
+        fi
     endscript
 }
 EOF
 
-# (re)ativar e reiniciar rsyslog
-systemctl enable --now rsyslog
+# Testar configuração do rsyslog
+rsyslogd -N1 && echo "✓ Configuração rsyslog válida" || echo "✗ Erro na configuração rsyslog"
+
+# Ativar e reiniciar serviços
+systemctl enable rsyslog
 systemctl restart rsyslog
 
-# teste rápido
-logger -p mail.info "rsyslog: teste de escrita $(date)"
-tail -n 5 /var/log/mail.log || true
+# Testar se está funcionando
+logger -p mail.info "Teste de configuração de log de email"
+sleep 1
 
+if grep -q "Teste de configuração" /var/log/mail.log 2>/dev/null; then
+    echo "✓ Logs de email configurados com sucesso!"
+else
+    echo "⚠ Aviso: Teste de log não encontrado, verifique configuração"
+fi
+
+echo "Configuração de logs concluída!"
+
+# Função para criar scripts de análise
+create_mail_analysis_tools() {
+    # Script para estatísticas rápidas
+    cat >/usr/local/bin/mail-stats <<'EOF'
+#!/bin/bash
+echo "=== ESTATÍSTICAS DE EMAIL ==="
+echo "Emails hoje: $(grep "$(date +%b\ %d)" /var/log/mail.log 2>/dev/null | wc -l)"
+echo "Emails rejeitados: $(grep -c "rejected" /var/log/mail.log 2>/dev/null)"
+echo "Emails com DKIM: $(grep -c "DKIM" /var/log/mail.log 2>/dev/null)"
+echo "Emails enviados: $(grep -c "status=sent" /var/log/mail.log 2>/dev/null)"
+echo ""
+echo "Top 5 remetentes:"
+grep "from=" /var/log/mail.log 2>/dev/null | sed 's/.*from=<\$[^>]*\$>.*/\1/' | sort | uniq -c | sort -nr | head -5
+echo ""
+echo "Últimos 5 emails:"
+tail -5 /var/log/mail.log 2>/dev/null | cut -c1-100
+EOF
+    chmod +x /usr/local/bin/mail-stats
+    
+    echo "✓ Script de análise criado: mail-stats"
+    echo "  Use: mail-stats (para ver estatísticas)"
+}
+
+# Chamar a função
+create_mail_analysis_tools
+
+
+systemctl daemon-reload
 systemctl restart postfix
 
 echo "================================================= CLOUDFLARE ================================================="
