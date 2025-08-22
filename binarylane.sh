@@ -318,14 +318,14 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y postfix pflogsumm
 echo -e "$ServerName OK" > /etc/postfix/access.recipients
 postmap /etc/postfix/access.recipients
 
-# Criar rate limiting específico por provedor PRIMEIRO
+echo "================================================= POSTFIX TRANSPORT ================================================="
 cat > /etc/postfix/transport <<'EOF'
 gmail.com       smtp:[smtp.gmail.com]:587
 yahoo.com       smtp:[smtp.mail.yahoo.com]:587
 outlook.com     smtp:[smtp-mail.outlook.com]:587
 hotmail.com     smtp:[smtp-mail.outlook.com]:587
 EOF
-
+echo "================================================= POSTFIX MAIN CF ================================================="
 # /etc/postfix/main.cf
 cat <<EOF > /etc/postfix/main.cf
 myhostname = $ServerName
@@ -397,6 +397,24 @@ outlook_destination_concurrency_limit = 8
 outlook_destination_rate_delay = 1s
 EOF
 # Aplicar configurações
+
+echo "================================================= POSTFIX MASTER CF ================================================="
+cat >> /etc/postfix/master.cf <<'EOF'
+
+# Serviços específicos por provedor
+gmail-smtp    unix  -       -       n       -       -       smtp
+    -o smtp_destination_concurrency_limit=5
+    -o smtp_destination_rate_delay=2s
+
+yahoo-smtp    unix  -       -       n       -       -       smtp
+    -o smtp_destination_concurrency_limit=3
+    -o smtp_destination_rate_delay=3s
+
+outlook-smtp  unix  -       -       n       -       -       smtp
+    -o smtp_destination_concurrency_limit=8
+    -o smtp_destination_rate_delay=1s
+EOF
+
 postmap /etc/postfix/transport
 systemctl restart postfix
 
