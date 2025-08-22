@@ -203,11 +203,12 @@ fi
 
 # /etc/default/opendkim
 cat <<EOF > /etc/default/opendkim
+NAME=opendkim
 RUNDIR=/run/opendkim
 SOCKET="local:/var/spool/postfix/opendkim/opendkim.sock"
 USER=opendkim
 GROUP=opendkim
-PIDFILE=\$RUNDIR/\$NAME.pid
+PIDFILE=$RUNDIR/$NAME.pid
 EOF
 
 # /etc/opendkim.conf
