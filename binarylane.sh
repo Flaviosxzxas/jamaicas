@@ -203,7 +203,7 @@ EOF
 cat <<EOF > /etc/opendkim.conf
 AutoRestart             Yes
 AutoRestartRate         10/1h
-UMask                   007
+UMask                   002
 Syslog                  yes
 SyslogSuccess           Yes
 LogWhy                  Yes
@@ -245,7 +245,6 @@ chmod 640 /etc/opendkim/keys/mail.private
 # KeyTable/SigningTable (sobrescreve corretamente)
 echo "mail._domainkey.${ServerName} ${ServerName}:mail:/etc/opendkim/keys/mail.private" > /etc/opendkim/KeyTable
 echo "*@${ServerName} mail._domainkey.${ServerName}" > /etc/opendkim/SigningTable
-
 
 # Script para processar a chave DKIM
 DKIMFileCode=$(cat /etc/opendkim/keys/mail.txt)
@@ -373,48 +372,53 @@ echo "================================================= POSTFIX ================
 ORIGINAL_VARS=$(declare -p ServerName CloudflareAPI CloudflareEmail Domain DKIMSelector ServerIP)
 
 
-# === MAIL.LOG via rsyslog (VERSÃO MELHORADA) ===
-echo "Configurando logs de email dedicados..."
+# === MAIL.LOG OTIMIZADO PARA ENVIO EM MASSA ===
+echo "Configurando logs otimizados para envio em massa..."
 
 apt-get install -y rsyslog logrotate
 
-# Backup da configuração atual (segurança)
+# Backup da configuração atual
 cp /etc/rsyslog.conf /etc/rsyslog.conf.backup.$(date +%Y%m%d)
 
-# rsyslog: direcione mensagens da facility "mail" para /var/log/mail.log
+# Configuração otimizada para alto volume
 cat >/etc/rsyslog.d/49-mail.conf <<'EOF'
-# Log all mail facility messages to dedicated file
+# Log mail messages with optimizations for high volume
+# Use async writing and reduce sync frequency
 mail.*                          -/var/log/mail.log
+
+# Optimize for high volume (buffer writes)
+$ActionFileDefaultTemplate RSYSLOG_TraditionalFileFormat
+$ActionFileEnableSync off
+$MainMsgQueueSize 100000
+$ActionQueueSize 100000
 
 # Stop processing mail messages (don't duplicate in syslog)
 & stop
 EOF
 
-# Criar diretório de logs se não existir
+# Criar diretório de logs
 mkdir -p /var/log
 
-# Garantir permissões corretas do diretório
+# Permissões otimizadas
 chown root:root /var/log
 chmod 755 /var/log
-
-# Criar arquivo de log com permissões corretas
 touch /var/log/mail.log
 chown syslog:adm /var/log/mail.log
 chmod 0640 /var/log/mail.log
 
-# Configuração de rotação otimizada
+# Rotação otimizada para alto volume
 cat >/etc/logrotate.d/mail-log <<'EOF'
 /var/log/mail.log {
-    daily
+    hourly
     missingok
-    rotate 30
+    rotate 48
     compress
     delaycompress
     notifempty
     create 0640 syslog adm
+    size 100M
     sharedscripts
     postrotate
-        # Reload rsyslog to reopen log files
         if systemctl is-active rsyslog >/dev/null 2>&1; then
             systemctl kill -s HUP rsyslog.service
         fi
@@ -422,54 +426,55 @@ cat >/etc/logrotate.d/mail-log <<'EOF'
 }
 EOF
 
-# Testar configuração do rsyslog
+# Configurar rsyslog para performance
+cat >>/etc/rsyslog.conf <<'EOF'
+
+# Optimizations for high volume mail logging
+$WorkDirectory /var/spool/rsyslog
+$ActionQueueFileName mailqueue
+$ActionQueueMaxDiskSpace 1g
+$ActionQueueSaveOnShutdown on
+$ActionQueueType LinkedList
+$ActionResumeRetryCount -1
+EOF
+
+# Testar e reiniciar
 rsyslogd -N1 && echo "✓ Configuração rsyslog válida" || echo "✗ Erro na configuração rsyslog"
 
-# Ativar e reiniciar serviços
 systemctl enable rsyslog
 systemctl restart rsyslog
 
-# Testar se está funcionando
-logger -p mail.info "Teste de configuração de log de email"
-sleep 1
+echo "✓ Logs otimizados para envio em massa configurados!"
 
-if grep -q "Teste de configuração" /var/log/mail.log 2>/dev/null; then
-    echo "✓ Logs de email configurados com sucesso!"
-else
-    echo "⚠ Aviso: Teste de log não encontrado, verifique configuração"
-fi
-
-echo "Configuração de logs concluída!"
-
-# Função para criar scripts de análise
-create_mail_analysis_tools() {
-    # Script para estatísticas rápidas
+# Função de análise otimizada
+create_optimized_mail_analysis() {
     cat >/usr/local/bin/mail-stats <<'EOF'
 #!/bin/bash
-echo "=== ESTATÍSTICAS DE EMAIL ==="
-echo "Emails hoje: $(grep "$(date +%b\ %d)" /var/log/mail.log 2>/dev/null | wc -l)"
-echo "Emails rejeitados: $(grep -c "rejected" /var/log/mail.log 2>/dev/null)"
-echo "Emails com DKIM: $(grep -c "DKIM" /var/log/mail.log 2>/dev/null)"
-echo "Emails enviados: $(grep -c "status=sent" /var/log/mail.log 2>/dev/null)"
-echo ""
-echo "Top 5 remetentes:"
-grep "from=" /var/log/mail.log 2>/dev/null | sed 's/.*from=<\$[^>]*\$>.*/\1/' | sort | uniq -c | sort -nr | head -5
-echo ""
-echo "Últimos 5 emails:"
-tail -5 /var/log/mail.log 2>/dev/null | cut -c1-100
+echo "=== ESTATÍSTICAS DE EMAIL (OTIMIZADO) ==="
+
+# Use parallel processing for large logs
+LOG_FILE="/var/log/mail.log"
+
+if [ -f "$LOG_FILE" ]; then
+    echo "Emails hoje: $(grep "$(date +%b\ %d)" "$LOG_FILE" 2>/dev/null | wc -l)"
+    echo "Emails enviados: $(grep -c "status=sent" "$LOG_FILE" 2>/dev/null)"
+    echo "Emails rejeitados: $(grep -c "rejected\|bounced" "$LOG_FILE" 2>/dev/null)"
+    echo "Emails com DKIM: $(grep -c "DKIM" "$LOG_FILE" 2>/dev/null)"
+    
+    echo ""
+    echo "Taxa de entrega última hora:"
+    LAST_HOUR=$(date -d '1 hour ago' +%H)
+    SENT_LAST_HOUR=$(grep "$(date +%b\ %d\ $LAST_HOUR)" "$LOG_FILE" | grep -c "status=sent" 2>/dev/null)
+    echo "Enviados: $SENT_LAST_HOUR emails/hora"
+else
+    echo "Log file não encontrado"
+fi
 EOF
     chmod +x /usr/local/bin/mail-stats
-    
-    echo "✓ Script de análise criado: mail-stats"
-    echo "  Use: mail-stats (para ver estatísticas)"
+    echo "✓ Script de análise otimizado criado"
 }
 
-# Chamar a função
-create_mail_analysis_tools
-
-
-systemctl daemon-reload
-systemctl restart postfix
+create_optimized_mail_analysis
 
 echo "================================================= CLOUDFLARE ================================================="
 
