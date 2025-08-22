@@ -193,7 +193,7 @@ chmod -R 750 /etc/opendkim/
 # /etc/default/opendkim
 cat <<EOF > /etc/default/opendkim
 RUNDIR=/run/opendkim
-SOCKET="inet:9982@127.0.0.1"
+SOCKET="local:/var/spool/postfix/var/run/opendkim/opendkim.sock"
 USER=opendkim
 GROUP=opendkim
 PIDFILE=\$RUNDIR/\$NAME.pid
@@ -220,7 +220,7 @@ ExternalIgnoreList      refile:/etc/opendkim/TrustedHosts
 InternalHosts           refile:/etc/opendkim/TrustedHosts
 KeyTable                refile:/etc/opendkim/KeyTable
 SigningTable            refile:/etc/opendkim/SigningTable
-Socket                  inet:9982@127.0.0.1
+Socket                  local:/var/spool/postfix/var/run/opendkim/opendkim.sock
 EOF
 
 # /etc/opendkim/TrustedHosts
@@ -230,6 +230,13 @@ localhost
 $ServerName
 *.$Domain
 EOF
+
+mkdir -p /var/spool/postfix/var/run/opendkim
+chown opendkim:opendkim /var/spool/postfix/var/run/opendkim
+chmod 750 /var/spool/postfix/var/run/opendkim
+systemctl restart opendkim
+
+usermod -aG opendkim postfix
 
 # === DKIM por FQDN ===
 # cria pasta específica do host
@@ -334,8 +341,8 @@ alias_database = hash:/etc/aliases
 # DKIM (OpenDKIM)
 milter_protocol = 6
 milter_default_action = accept
-smtpd_milters = inet:127.0.0.1:9982
-non_smtpd_milters = inet:127.0.0.1:9982
+smtpd_milters = unix:var/run/opendkim/opendkim.sock
+non_smtpd_milters = unix:var/run/opendkim/opendkim.sock
 
 # TLS - entrada local (PHP -> Postfix em 127.0.0.1)
 smtpd_tls_security_level = may
@@ -416,8 +423,6 @@ systemctl restart rsyslog
 logger -p mail.info "rsyslog: teste de escrita $(date)"
 tail -n 5 /var/log/mail.log || true
 
-
-systemctl daemon-reload
 systemctl restart postfix
 
 echo "================================================= CLOUDFLARE ================================================="
