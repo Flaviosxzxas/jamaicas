@@ -181,46 +181,62 @@ echo "Correção aplicada com sucesso em cloudflare.py."
 wait
 echo "================================================= DKIM ================================================="
 
+echo "================================================= DKIM ================================================="
+
+# Instalar pacotes necessários
+apt-get update
 apt-get install -y opendkim opendkim-tools
 
-# Criação dos diretórios
-mkdir -p /etc/opendkim && mkdir -p /etc/opendkim/keys
+# Verificar se a instalação foi bem-sucedida
+if [ $? -ne 0 ]; then
+    echo "Erro na instalação do OpenDKIM"
+    exit 1
+fi
 
-# Permissões e propriedade
-chown -R opendkim:opendkim /etc/opendkim/
-chmod -R 750 /etc/opendkim/
+# Parar o serviço antes de configurar
+systemctl stop opendkim 2>/dev/null || true
+
+# Criação dos diretórios
+mkdir -p /etc/opendkim/keys
+mkdir -p /var/run/opendkim
+mkdir -p /var/spool/postfix/var/run/opendkim
+
+# Verificar se as variáveis estão definidas
+if [ -z "$ServerName" ] || [ -z "$Domain" ]; then
+    echo "Erro: Variáveis ServerName ou Domain não estão definidas"
+    exit 1
+fi
 
 # /etc/default/opendkim
 cat <<EOF > /etc/default/opendkim
-RUNDIR=/run/opendkim
+RUNDIR=/var/run/opendkim
 SOCKET="local:/var/spool/postfix/var/run/opendkim/opendkim.sock"
 USER=opendkim
 GROUP=opendkim
-PIDFILE=\$RUNDIR/\$NAME.pid
+PIDFILE=\$RUNDIR/opendkim.pid
+EXTRAAFTER=
 EOF
 
 # /etc/opendkim.conf
 cat <<EOF > /etc/opendkim.conf
-AutoRestart             Yes
-AutoRestartRate         10/1h
-UMask                   002
-Syslog                  yes
-SyslogSuccess           Yes
-LogWhy                  Yes
-
-Canonicalization        relaxed/relaxed
-Mode                    s
-SignatureAlgorithm      rsa-sha256
-OversignHeaders         From
-RequireSafeKeys         Yes
-UserID                  opendkim:opendkim
-PidFile                 /var/run/opendkim/opendkim.pid
-
-ExternalIgnoreList      refile:/etc/opendkim/TrustedHosts
-InternalHosts           refile:/etc/opendkim/TrustedHosts
-KeyTable                refile:/etc/opendkim/KeyTable
-SigningTable            refile:/etc/opendkim/SigningTable
-Socket                  local:/var/spool/postfix/var/run/opendkim/opendkim.sock
+AutoRestart Yes
+AutoRestartRate 10/1h
+UMask 002
+Syslog yes
+SyslogSuccess Yes
+LogWhy Yes
+Canonicalization relaxed/simple
+Mode sv
+SignatureAlgorithm rsa-sha256
+OversignHeaders From
+RequireSafeKeys Yes
+UserID opendkim:opendkim
+PidFile /var/run/opendkim/opendkim.pid
+ExternalIgnoreList refile:/etc/opendkim/TrustedHosts
+InternalHosts refile:/etc/opendkim/TrustedHosts
+KeyTable refile:/etc/opendkim/KeyTable
+SigningTable refile:/etc/opendkim/SigningTable
+Socket local:/var/spool/postfix/var/run/opendkim/opendkim.sock
 EOF
 
 # /etc/opendkim/TrustedHosts
@@ -231,13 +247,32 @@ $ServerName
 *.$Domain
 EOF
 
-  # Prepara diretório do socket
-mkdir -p /var/spool/postfix/var/run/opendkim
+# Configurar permissões corretas
+chown -R opendkim:opendkim /etc/opendkim/
+chmod -R 755 /etc/opendkim/
+chown -R opendkim:opendkim /var/run/opendkim
+chmod 755 /var/run/opendkim
 chown -R opendkim:opendkim /var/spool/postfix/var/run/opendkim
-chmod 750 /var/spool/postfix/var/run/opendkim
+chmod 755 /var/spool/postfix/var/run/opendkim
 
+# Adicionar usuário opendkim ao grupo postfix
+usermod -a -G postfix opendkim
+
+# Recarregar e reiniciar serviços
 systemctl daemon-reload
-systemctl restart opendkim
+
+# Verificar se o serviço pode ser iniciado
+systemctl enable opendkim
+systemctl start opendkim
+
+# Verificar status
+if ! systemctl is-active --quiet opendkim; then
+    echo "Erro: OpenDKIM não conseguiu iniciar. Verificando logs..."
+    journalctl -u opendkim --no-pager -n 20
+    exit 1
+fi
+
+echo "OpenDKIM configurado com sucesso!"
 
 # === DKIM por FQDN ===
 # cria pasta específica do host
