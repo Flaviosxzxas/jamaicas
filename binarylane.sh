@@ -195,6 +195,12 @@ if ! id -nG postfix | tr ' ' '\n' | grep -qx opendkim; then
   need_restart_postfix=1
 fi
 
+# --- Desativar a socket unit (evita segundo socket em /run/opendkim/opendkim.sock) ---
+if systemctl list-unit-files | grep -q '^opendkim\.socket'; then
+  systemctl is-active  --quiet opendkim.socket && systemctl stop opendkim.socket || true
+  systemctl is-enabled --quiet opendkim.socket && systemctl disable opendkim.socket || true
+fi
+
 # /etc/default/opendkim
 cat <<EOF > /etc/default/opendkim
 RUNDIR=/run/opendkim
@@ -424,8 +430,6 @@ tail -n 5 /var/log/mail.log || true
 # --- OpenDKIM: habilitar e iniciar o serviço tradicional ---
 systemctl enable --now opendkim
 
-# --- Agora sim, recarregar o Postfix para pegar o milter ---
-postfix reload
 systemctl daemon-reload
 systemctl restart postfix
 
