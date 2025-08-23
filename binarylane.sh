@@ -320,10 +320,13 @@ postmap /etc/postfix/access.recipients
 
 echo "================================================= POSTFIX TRANSPORT ================================================="
 cat > /etc/postfix/transport <<'EOF'
-gmail.com       smtp:[smtp.gmail.com]:587
-yahoo.com       smtp:[smtp.mail.yahoo.com]:587
-outlook.com     smtp:[smtp-mail.outlook.com]:587
-hotmail.com     smtp:[smtp-mail.outlook.com]:587
+gmail.com       gmail-smtp:
+yahoo.com       yahoo-smtp:
+yahoo.com.br    yahoo-smtp:
+outlook.com     outlook-smtp:
+hotmail.com     outlook-smtp:
+live.com        outlook-smtp:
+msn.com         outlook-smtp:
 EOF
 echo "================================================= POSTFIX MAIN CF ================================================="
 # /etc/postfix/main.cf
@@ -386,15 +389,8 @@ smtp_data_timeout = 120s
 # Rate limiting por transporte
 transport_maps = hash:/etc/postfix/transport
 
-# Configurações específicas por destino
-gmail_destination_concurrency_limit = 5
-gmail_destination_rate_delay = 2s
-
-yahoo_destination_concurrency_limit = 3  
-yahoo_destination_rate_delay = 3s
-
-outlook_destination_concurrency_limit = 8
-outlook_destination_rate_delay = 1s
+default_destination_concurrency_limit = 10
+default_destination_rate_delay = 1s
 EOF
 # Aplicar configurações
 
