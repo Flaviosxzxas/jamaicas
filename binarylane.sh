@@ -384,7 +384,7 @@ smtp_connect_timeout = 30s
 smtp_helo_timeout = 30s
 smtp_mail_timeout = 30s
 smtp_rcpt_timeout = 30s
-smtp_data_timeout = 120s
+smtp_data_done_timeout = 120s
 
 # Rate limiting por transporte
 transport_maps = hash:/etc/postfix/transport
