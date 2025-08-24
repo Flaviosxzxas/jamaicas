@@ -318,6 +318,22 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y postfix pflogsumm
 echo -e "$ServerName OK" > /etc/postfix/access.recipients
 postmap /etc/postfix/access.recipients
 
+# <<<--- ADICIONAR AQUI - LOGO APÓS A INSTALAÇÃO --->>>
+echo "================================================= CONFIGURANDO ALIASES BÁSICOS ================================================="
+cat > /etc/aliases <<'EOF'
+postmaster: root
+mailer-daemon: postmaster
+abuse: postmaster
+spam: postmaster
+root: /dev/null
+nobody: /dev/null
+www-data: /dev/null
+mail: /dev/null
+EOF
+
+newaliases
+echo "✓ Aliases básicos configurados!"
+
 echo "================================================= POSTFIX TRANSPORT ================================================="
 cat > /etc/postfix/transport <<'EOF'
 gmail.com       gmail-smtp:
