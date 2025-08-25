@@ -375,6 +375,23 @@ EOF
 chmod 640 /etc/dovecot/users
 chown root:dovecot /etc/dovecot/users
 
+# <<<--- ADICIONAR AQUI A CONFIGURAÇÃO SASL --->>>
+echo "================================================= CONFIGURANDO SASL PARA ENVIO ================================================="
+
+# Criar arquivo de senhas para autenticação SASL
+cat > /etc/postfix/sasl_passwd <<EOF
+[$ServerName]:587 admin@$ServerName:dwwzyd
+EOF
+
+# Proteger arquivo
+chmod 600 /etc/postfix/sasl_passwd
+chown root:root /etc/postfix/sasl_passwd
+
+# Compilar
+postmap /etc/postfix/sasl_passwd
+
+echo "✓ SASL configurado para autenticação na porta 587!"
+
 # <<<--- TRANSPORT --->>>
 echo "================================================= POSTFIX TRANSPORT ================================================="
 cat > /etc/postfix/transport <<'EOF'
@@ -411,6 +428,13 @@ smtpd_sasl_auth_enable = yes
 smtpd_sasl_type = dovecot
 smtpd_sasl_path = private/auth
 smtpd_sasl_security_options = noanonymous
+
+# SASL SMTP Authentication
+smtp_sasl_auth_enable = yes
+smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
+smtp_sasl_security_options = noanonymous
+smtp_sasl_mechanism_filter = plain,login
+smtp_tls_security_level = encrypt
 
 # Security restrictions
 smtpd_recipient_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination
