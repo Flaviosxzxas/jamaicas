@@ -412,7 +412,7 @@ smtpd_sasl_security_options = noanonymous
 
 # Security restrictions
 smtpd_recipient_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination
-smtpd_relay_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination
+smtpd_relay_restrictions = permit_mynetworks, permit_sasl_authenticated, defer_unauth_destination
 
 # TLS - entrada local (PHP -> Postfix em 127.0.0.1)
 smtpd_tls_security_level = may
@@ -427,7 +427,7 @@ smtpd_tls_key_file  = /etc/letsencrypt/live/$ServerName/privkey.pem
 
 # TLS - saída (cliente SMTP)
 smtp_tcp_port = 25
-smtp_tls_security_level = encrypt
+smtp_tls_security_level = may
 smtp_tls_loglevel = 1
 smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
 smtp_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
@@ -468,9 +468,17 @@ echo "✓ Porta 587 configurada globalmente!"
 # <<<--- MASTER.CF (seu código atual está perfeito) --->>>
 echo "================================================= POSTFIX MASTER CF ================================================="
 cat >> /etc/postfix/master.cf <<'EOF'
-# Serviço para a porta 25
+# Serviço para a porta 587 (autenticação)
+587       inet  n       -       y       -       -       smtpd
+  -o smtpd_tls_security_level=encrypt
+  -o smtpd_sasl_auth_enable=yes
+  -o smtpd_tls_auth_only=yes
+  -o smtpd_client_restrictions=permit_sasl_authenticated,reject
+
+# Serviço para a porta 25 (relay entre servidores)
 smtp      inet  n       -       y       -       -       smtpd
   -o smtpd_tls_security_level=may
+  -o smtpd_sasl_auth_enable=no
   -o smtpd_tls_auth_only=no
 
 # Serviços específicos por provedor
