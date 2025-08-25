@@ -486,7 +486,7 @@ smtp_tls_exclude_ciphers = aNULL, MD5, 3DES
 # Base
 myorigin = localhost
 mydestination = localhost
-relayhost =
+relayhost = [$ServerName]:587
 mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
 mailbox_size_limit = 0
 recipient_delimiter = +
