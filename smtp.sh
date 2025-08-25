@@ -372,8 +372,8 @@ user1@$ServerName:{PLAIN}dwwzyd
 user2@$ServerName:{PLAIN}dwwzyd
 EOF
 
-chmod 600 /etc/dovecot/users
-chown root:root /etc/dovecot/users
+chmod 640 /etc/dovecot/users
+chown root:dovecot /etc/dovecot/users
 
 # <<<--- TRANSPORT --->>>
 echo "================================================= POSTFIX TRANSPORT ================================================="
