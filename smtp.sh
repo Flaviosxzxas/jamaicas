@@ -361,7 +361,7 @@ passdb {
 }
 userdb {
   driver = static
-  args = uid=vmail gid=vmail home=/var/mail/virtual/%u
+  args = uid=150 gid=8 home=/var/mail/virtual/%u
 }
 EOF
 
