@@ -319,30 +319,6 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y postfix pflogsumm dovecot-core
 echo -e "$ServerName OK" > /etc/postfix/access.recipients
 postmap /etc/postfix/access.recipients
 
-# Instalar saslauthd
-apt-get install -y sasl2-bin
-
-# Configurar saslauthd (VERSÃO CORRIGIDA)
-cat > /etc/default/saslauthd <<'EOF'
-DESC="SASL Authentication Daemon"
-NAME="saslauthd"
-MECHANISMS="pam"
-MECH_OPTIONS=""
-THREADS=5
-OPTIONS="-c -m /var/spool/postfix/var/run/saslauthd"
-START=yes
-EOF
-
-# Criar diretório necessário
-mkdir -p /var/spool/postfix/var/run/saslauthd
-
-# Iniciar saslauthd
-systemctl start saslauthd
-systemctl enable saslauthd
-
-echo "✓ SASLAUTHD configurado!"
-
-# <<<--- ALIASES BÁSICOS --->>>
 echo "================================================= CONFIGURANDO ALIASES BÁSICOS ================================================="
 cat > /etc/aliases <<'EOF'
 postmaster: root
@@ -398,24 +374,6 @@ EOF
 chmod 640 /etc/dovecot/users
 chown root:dovecot /etc/dovecot/users
 
-# <<<--- ADICIONAR AQUI A CONFIGURAÇÃO SASL --->>>
-echo "================================================= CONFIGURANDO SASL PARA ENVIO ================================================="
-
-# Criar arquivo de senhas para autenticação SASL
-cat > /etc/postfix/sasl_passwd <<EOF
-[$ServerName]:587 admin@$ServerName:dwwzyd
-EOF
-
-# Proteger arquivo
-chmod 600 /etc/postfix/sasl_passwd
-chown root:root /etc/postfix/sasl_passwd
-
-# Compilar
-postmap /etc/postfix/sasl_passwd
-
-echo "✓ SASL configurado para autenticação na porta 587!"
-
-# <<<--- TRANSPORT --->>>
 echo "================================================= POSTFIX TRANSPORT ================================================="
 cat > /etc/postfix/transport <<'EOF'
 gmail.com       gmail-smtp:
@@ -452,13 +410,6 @@ smtpd_sasl_type = dovecot
 smtpd_sasl_path = private/auth
 smtpd_sasl_security_options = noanonymous
 
-# SASL SMTP Authentication
-smtp_sasl_auth_enable = yes
-smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
-smtp_sasl_security_options = noanonymous
-smtp_sasl_mechanism_filter = plain,login
-
-
 # Security restrictions
 smtpd_recipient_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination
 smtpd_relay_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination
@@ -475,7 +426,7 @@ smtpd_tls_cert_file = /etc/letsencrypt/live/$ServerName/fullchain.pem
 smtpd_tls_key_file  = /etc/letsencrypt/live/$ServerName/privkey.pem
 
 # TLS - saída (cliente SMTP)
-smtp_tcp_port = 587
+smtp_tcp_port = 25
 smtp_tls_security_level = encrypt
 smtp_tls_loglevel = 1
 smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
@@ -792,10 +743,8 @@ DKIMCode=$(echo "$DKIMCode" | tr -d '\n' | tr -s ' ')
 EscapedDKIMCode=$(printf '%s' "$DKIMCode" | sed 's/\"/\\\"/g')
 
 create_or_update_record "$DKIMSelector" "A" "$ServerIP" ""
-#create_or_update_record "$ServerName" "TXT" "\"v=spf1 a mx ip4:$ServerIP ~all\"" ""
 create_or_update_record "$ServerName" "TXT" "\"v=spf1 mx a ip4:$ServerIP ~all\"" ""
-#create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=none; rua=mailto:admin@$ServerName; ruf=mailto:admin@$ServerName; adkim=r; aspf=r\"" ""
-create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=reject; rua=mailto:admin@$ServerName; ruf=mailto:admin@$ServerName; sp=reject; adkim=s; aspf=s\"" ""
+create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=none; rua=mailto:admin@$ServerName; ruf=mailto:admin@$ServerName; adkim=r; aspf=r\"" ""
 create_or_update_record "mail._domainkey.$ServerName" "TXT" "\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\"" ""
 create_or_update_record "$ServerName" "MX" "$ServerName" "10"
 echo "================================================= APPLICATION ================================================="
