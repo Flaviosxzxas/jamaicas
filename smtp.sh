@@ -322,7 +322,7 @@ postmap /etc/postfix/access.recipients
 # Instalar saslauthd
 apt-get install -y sasl2-bin
 
-# Configurar saslauthd
+# Configurar saslauthd (VERSÃO CORRIGIDA)
 cat > /etc/default/saslauthd <<'EOF'
 DESC="SASL Authentication Daemon"
 NAME="saslauthd"
