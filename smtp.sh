@@ -468,10 +468,11 @@ echo "✓ Porta 587 configurada globalmente!"
 # <<<--- MASTER.CF (seu código atual está perfeito) --->>>
 echo "================================================= POSTFIX MASTER CF ================================================="
 cat >> /etc/postfix/master.cf <<'EOF'
-587       inet  n       -       y       -       -       smtpd
-  -o smtpd_tls_security_level=encrypt
-  -o smtpd_sasl_auth_enable=yes
-  -o smtpd_tls_auth_only=yes
+# Serviço para a porta 25
+smtp      inet  n       -       y       -       -       smtpd
+  -o smtpd_tls_security_level=may
+  -o smtpd_tls_auth_only=no
+
 # Serviços específicos por provedor
 gmail-smtp    unix  -       -       n       -       -       smtp
     -o smtp_destination_concurrency_limit=5
