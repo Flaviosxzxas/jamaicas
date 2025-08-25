@@ -948,6 +948,10 @@ postconf -e "local_recipient_maps="
 
 [ -f /etc/postfix/virtual ] || touch /etc/postfix/virtual
 
+# admin
+grep -q "^admin@$ServerName[[:space:]]" /etc/postfix/virtual ||
+echo "admin@$ServerName admin" >> /etc/postfix/virtual
+
 # noreply
 grep -q "^noreply@$ServerName[[:space:]]" /etc/postfix/virtual || \
   echo "noreply@$ServerName   noreply" >> /etc/postfix/virtual
@@ -967,6 +971,7 @@ grep -q "^bounce@$ServerName[[:space:]]" /etc/postfix/virtual || \
 postmap /etc/postfix/virtual
 
 # /etc/aliases -> descartar localmente
+grep -q "^admin:" /etc/aliases       || echo "admin: /dev/null" >> /etc/aliases
 grep -q "^noreply:" /etc/aliases     || echo "noreply: /dev/null" >> /etc/aliases
 grep -q "^unsubscribe:" /etc/aliases || echo "unsubscribe: /dev/null" >> /etc/aliases
 grep -q "^contacto:" /etc/aliases    || echo "contacto: /dev/null" >> /etc/aliases
