@@ -319,6 +319,29 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y postfix pflogsumm dovecot-core
 echo -e "$ServerName OK" > /etc/postfix/access.recipients
 postmap /etc/postfix/access.recipients
 
+# Instalar saslauthd
+apt-get install -y sasl2-bin
+
+# Configurar saslauthd
+cat > /etc/default/saslauthd <<'EOF'
+DESC="SASL Authentication Daemon"
+NAME="saslauthd"
+MECHANISMS="pam"
+MECH_OPTIONS=""
+THREADS=5
+OPTIONS="-c -m /var/spool/postfix/var/run/saslauthd"
+START=yes
+EOF
+
+# Criar diretório necessário
+mkdir -p /var/spool/postfix/var/run/saslauthd
+
+# Iniciar saslauthd
+systemctl start saslauthd
+systemctl enable saslauthd
+
+echo "✓ SASLAUTHD configurado!"
+
 # <<<--- ALIASES BÁSICOS --->>>
 echo "================================================= CONFIGURANDO ALIASES BÁSICOS ================================================="
 cat > /etc/aliases <<'EOF'
