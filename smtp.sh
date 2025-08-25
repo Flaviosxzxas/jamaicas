@@ -428,8 +428,9 @@ smtpd_tls_cert_file = /etc/letsencrypt/live/$ServerName/fullchain.pem
 smtpd_tls_key_file  = /etc/letsencrypt/live/$ServerName/privkey.pem
 
 # TLS - saída (cliente SMTP)
+smtp_tcp_port = 587
 smtp_tls_security_level = may
-smtp_tls_loglevel = 0
+smtp_tls_loglevel = 1
 smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
 smtp_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
 smtp_tls_ciphers = high
@@ -461,6 +462,10 @@ transport_maps = hash:/etc/postfix/transport
 default_destination_concurrency_limit = 10
 default_destination_rate_delay = 1s
 EOF
+
+echo "================================================= CONFIGURANDO PORTA 587 GLOBAL ================================================="
+
+echo "✓ Porta 587 configurada globalmente!"
 
 # <<<--- MASTER.CF (seu código atual está perfeito) --->>>
 echo "================================================= POSTFIX MASTER CF ================================================="
