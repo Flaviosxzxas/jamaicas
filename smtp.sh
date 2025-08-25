@@ -434,7 +434,7 @@ smtp_sasl_auth_enable = yes
 smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
 smtp_sasl_security_options = noanonymous
 smtp_sasl_mechanism_filter = plain,login
-smtp_tls_security_level = encrypt
+
 
 # Security restrictions
 smtpd_recipient_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination
@@ -453,7 +453,7 @@ smtpd_tls_key_file  = /etc/letsencrypt/live/$ServerName/privkey.pem
 
 # TLS - saída (cliente SMTP)
 smtp_tcp_port = 587
-smtp_tls_security_level = may
+smtp_tls_security_level = encrypt
 smtp_tls_loglevel = 1
 smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
 smtp_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
