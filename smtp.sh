@@ -313,12 +313,13 @@ debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Si
 debconf-set-selections <<< "postfix postfix/destinations string 'localhost'"
 
 # Instalar Postfix e outros
-DEBIAN_FRONTEND=noninteractive apt-get install -y postfix pflogsumm
+# Instalar Postfix e outros
+DEBIAN_FRONTEND=noninteractive apt-get install -y postfix pflogsumm dovecot-core
 
 echo -e "$ServerName OK" > /etc/postfix/access.recipients
 postmap /etc/postfix/access.recipients
 
-# <<<--- ADICIONAR AQUI - LOGO APÓS A INSTALAÇÃO --->>>
+# <<<--- ALIASES BÁSICOS --->>>
 echo "================================================= CONFIGURANDO ALIASES BÁSICOS ================================================="
 cat > /etc/aliases <<'EOF'
 postmaster: root
@@ -334,6 +335,47 @@ EOF
 newaliases
 echo "✓ Aliases básicos configurados!"
 
+# <<<--- CRIAR USUÁRIO VIRTUAL PRIMEIRO --->>>
+echo "================================================= CONFIGURANDO USUÁRIO VIRTUAL ================================================="
+useradd -r -u 150 -g mail -d /var/mail/virtual -s /sbin/nologin -c "Virtual Mail User" vmail
+mkdir -p /var/mail/virtual
+chown -R vmail:mail /var/mail/virtual
+
+# <<<--- CONFIGURAR DOVECOT ANTES DO POSTFIX --->>>
+echo "================================================= CONFIGURANDO DOVECOT ================================================="
+cat > /etc/dovecot/conf.d/10-master.conf <<'EOF'
+service auth {
+  unix_listener /var/spool/postfix/private/auth {
+    mode = 0666
+    user = postfix
+    group = postfix
+  }
+}
+EOF
+
+cat > /etc/dovecot/conf.d/10-auth.conf <<'EOF'
+auth_mechanisms = plain login
+passdb {
+  driver = passwd-file
+  args = username_format=%u /etc/dovecot/users
+}
+userdb {
+  driver = static
+  args = uid=vmail gid=vmail home=/var/mail/virtual/%u
+}
+EOF
+
+# Criar arquivo de usuários
+cat > /etc/dovecot/users <<EOF
+admin@$ServerName:{PLAIN}dwwzyd
+user1@$ServerName:{PLAIN}dwwzyd
+user2@$ServerName:{PLAIN}dwwzyd
+EOF
+
+chmod 600 /etc/dovecot/users
+chown root:root /etc/dovecot/users
+
+# <<<--- TRANSPORT --->>>
 echo "================================================= POSTFIX TRANSPORT ================================================="
 cat > /etc/postfix/transport <<'EOF'
 gmail.com       gmail-smtp:
@@ -344,8 +386,9 @@ hotmail.com     outlook-smtp:
 live.com        outlook-smtp:
 msn.com         outlook-smtp:
 EOF
+
+# <<<--- MAIN.CF (seu código atual está perfeito) --->>>
 echo "================================================= POSTFIX MAIN CF ================================================="
-# /etc/postfix/main.cf
 cat <<EOF > /etc/postfix/main.cf
 myhostname = $ServerName
 smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
@@ -399,7 +442,7 @@ relayhost =
 mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
 mailbox_size_limit = 0
 recipient_delimiter = +
-inet_interfaces = loopback-only
+inet_interfaces = all
 inet_protocols = ipv4
 
 maximal_queue_lifetime = 2h
@@ -418,8 +461,8 @@ transport_maps = hash:/etc/postfix/transport
 default_destination_concurrency_limit = 10
 default_destination_rate_delay = 1s
 EOF
-# Aplicar configurações
 
+# <<<--- MASTER.CF (seu código atual está perfeito) --->>>
 echo "================================================= POSTFIX MASTER CF ================================================="
 cat >> /etc/postfix/master.cf <<'EOF'
 587       inet  n       -       y       -       -       smtpd
@@ -440,25 +483,14 @@ outlook-smtp  unix  -       -       n       -       -       smtp
     -o smtp_destination_rate_delay=1s
 EOF
 
-# Criar usuário virtual
-useradd -r -u 150 -g mail -d /var/mail/virtual -s /sbin/nologin -c "Virtual Mail User" vmail
-mkdir -p /var/mail/virtual
-chown -R vmail:mail /var/mail/virtual
-
-# Criar arquivo de usuários (exemplo)
-cat > /etc/dovecot/users <<'EOF'
-admin@$ServerName:{PLAIN}dwwzyd
-user1@$ServerName:{PLAIN}dwwzyd
-user2@$ServerName:{PLAIN}dwwzyd
-EOF
-
-chmod 600 /etc/dovecot/users
-chown root:root /etc/dovecot/users
-
+# <<<--- INICIAR SERVIÇOS --->>>
+echo "================================================= INICIANDO SERVIÇOS ================================================="
+systemctl enable dovecot
+systemctl restart dovecot
 postmap /etc/postfix/transport
 systemctl restart postfix
 
-echo "✓ Postfix configurado com rate limiting por provedor!"
+echo "✓ Servidor SMTP configurado com autenticação!"
 echo "================================================= POSTFIX ================================================="
 
 # Salvar variáveis antes de instalar dependências
