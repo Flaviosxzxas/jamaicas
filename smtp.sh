@@ -336,9 +336,18 @@ echo "✓ Aliases básicos configurados!"
 
 # <<<--- CRIAR USUÁRIO VIRTUAL PRIMEIRO --->>>
 echo "================================================= CONFIGURANDO USUÁRIO VIRTUAL ================================================="
-useradd -r -u 150 -g mail -d /var/mail/virtual -s /sbin/nologin -c "Virtual Mail User" vmail
+# Verificar se o usuário vmail já existe
+if ! id "vmail" &>/dev/null; then
+    useradd -r -u 150 -g mail -d /var/mail/virtual -s /sbin/nologin -c "Virtual Mail User" vmail
+    echo "✓ Usuário vmail criado"
+else
+    echo "✓ Usuário vmail já existe, pulando criação..."
+fi
+
+# Garantir que o diretório existe e tem permissões corretas
 mkdir -p /var/mail/virtual
 chown -R vmail:mail /var/mail/virtual
+chmod 755 /var/mail/virtual
 
 # <<<--- CONFIGURAR DOVECOT ANTES DO POSTFIX --->>>
 echo "================================================= CONFIGURANDO DOVECOT ================================================="
@@ -467,8 +476,24 @@ echo "✓ Porta 587 configurada globalmente!"
 
 # <<<--- MASTER.CF (seu código atual está perfeito) --->>>
 echo "================================================= POSTFIX MASTER CF ================================================="
+
+# Configurar porta 587 primeiro
+if ! grep -q "587.*inet.*smtpd" /etc/postfix/master.cf; then
+    cat >> /etc/postfix/master.cf <<'EOF'
+# Serviço para a porta 587 (autenticação)
+587       inet  n       -       y       -       -       smtpd
+  -o smtpd_tls_security_level=encrypt
+  -o smtpd_sasl_auth_enable=yes
+  -o smtpd_tls_auth_only=yes
+  -o smtpd_client_restrictions=permit_sasl_authenticated,reject
+EOF
+    echo "✓ Porta 587 configurada"
+else
+    echo "✓ Porta 587 já configurada"
+fi
+
 # Verificar se a entrada para smtp na porta 25 já existe
-if ! grep -q "smtp      inet  n       -       y       -       -       smtpd" /etc/postfix/master.cf; then
+if ! grep -q "^smtp.*inet.*smtpd" /etc/postfix/master.cf; then
     cat >> /etc/postfix/master.cf <<'EOF'
 # Serviço para a porta 25 (relay entre servidores)
 smtp      inet  n       -       y       -       -       smtpd
@@ -476,8 +501,9 @@ smtp      inet  n       -       y       -       -       smtpd
   -o smtpd_sasl_auth_enable=no
   -o smtpd_tls_auth_only=no
 EOF
+    echo "✓ Porta 25 configurada"
 else
-    echo "A entrada para smtp na porta 25 já existe no master.cf."
+    echo "✓ Porta 25 já configurada"
 fi
 
 # Serviços específicos por provedor
