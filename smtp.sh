@@ -468,13 +468,6 @@ echo "✓ Porta 587 configurada globalmente!"
 # <<<--- MASTER.CF (seu código atual está perfeito) --->>>
 echo "================================================= POSTFIX MASTER CF ================================================="
 cat >> /etc/postfix/master.cf <<'EOF'
-# Serviço para a porta 587 (autenticação)
-587       inet  n       -       y       -       -       smtpd
-  -o smtpd_tls_security_level=encrypt
-  -o smtpd_sasl_auth_enable=yes
-  -o smtpd_tls_auth_only=yes
-  -o smtpd_client_restrictions=permit_sasl_authenticated,reject
-
 # Serviço para a porta 25 (relay entre servidores)
 smtp      inet  n       -       y       -       -       smtpd
   -o smtpd_tls_security_level=may
