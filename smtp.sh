@@ -467,13 +467,22 @@ echo "✓ Porta 587 configurada globalmente!"
 
 # <<<--- MASTER.CF (seu código atual está perfeito) --->>>
 echo "================================================= POSTFIX MASTER CF ================================================="
-cat >> /etc/postfix/master.cf <<'EOF'
+# Verificar se a entrada para smtp na porta 25 já existe
+if ! grep -q "smtp      inet  n       -       y       -       -       smtpd" /etc/postfix/master.cf; then
+    cat >> /etc/postfix/master.cf <<'EOF'
 # Serviço para a porta 25 (relay entre servidores)
 smtp      inet  n       -       y       -       -       smtpd
   -o smtpd_tls_security_level=may
   -o smtpd_sasl_auth_enable=no
   -o smtpd_tls_auth_only=no
+EOF
+else
+    echo "A entrada para smtp na porta 25 já existe no master.cf."
+fi
 
+# Serviços específicos por provedor
+if ! grep -q "gmail-smtp    unix  -       -       n       -       -       smtp" /etc/postfix/master.cf; then
+    cat >> /etc/postfix/master.cf <<'EOF'
 # Serviços específicos por provedor
 gmail-smtp    unix  -       -       n       -       -       smtp
     -o smtp_destination_concurrency_limit=5
@@ -487,6 +496,10 @@ outlook-smtp  unix  -       -       n       -       -       smtp
     -o smtp_destination_concurrency_limit=8
     -o smtp_destination_rate_delay=1s
 EOF
+else
+    echo "As entradas para serviços específicos já existem no master.cf."
+fi
+
 
 # <<<--- INICIAR SERVIÇOS --->>>
 echo "================================================= INICIANDO SERVIÇOS ================================================="
