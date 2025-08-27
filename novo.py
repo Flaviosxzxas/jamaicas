@@ -19,7 +19,7 @@ import requests
 import smtplib
 import socket
 import subprocess
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 
 # >>> NOVOS IMPORTS PARA REBOOT (Selenium) <<<
 from selenium import webdriver
@@ -30,9 +30,8 @@ from selenium.webdriver.chrome.service import Service
 from colorama import Fore, Style, init
 init(autoreset=True)
 
-# >>> IMPORTS para BeautifulSoup e regex <<<
+# >>> IMPORTS para BeautifulSoup <<<
 from bs4 import BeautifulSoup
-import re
 
 # >>> PARA FILA DE SMTP (round-robin) <<<
 from collections import deque
@@ -44,6 +43,9 @@ import email.mime.text
 
 # >>> Módulo de Logging <<<
 import logging
+
+# Define a timeout padrão para todas as conexões de socket
+socket.setdefaulttimeout(30)
 
 ########################################
 # >>> EXCEÇÃO PERSONALIZADA PARA TRATAR O 5.7.1 <<<
@@ -375,56 +377,60 @@ def get_smtp_connection(smtp_tuple):
     (host, user, pwd, port, use_ssl, _) = smtp_tuple
     key = (host, user, pwd, port, use_ssl)
 
-    with lock_smtp:
-        cached = smtp_connection_cache.get(key)
-
-    # Se não há cache ou a conexão está fechada, criar nova
+    cached = _get_cached_connection(key)
     if not cached:
-        try:
-            if use_ssl:
-                s = smtplib.SMTP_SSL(host, port, timeout=30)
-            else:
-                s = smtplib.SMTP(host, port, timeout=30)
-            s.ehlo()
-            if not use_ssl:
-                try:
-                    s.starttls()
-                    s.ehlo()
-                except:
-                    pass
-            s.login(user, pwd)
-            with lock_smtp:
-                smtp_connection_cache[key] = s
-            return s
-        except Exception as ex:
-            raise ex
+        return _create_new_smtp_connection(key, host, user, pwd, port, use_ssl)
     else:
-        # Tenta usar a conexão em cache
-        s = cached
-        try:
-            s.noop()  # Testa se a conexão ainda está ativa
-        except:
-            # Se caiu, remover do cache e criar nova
-            with lock_smtp:
-                del smtp_connection_cache[key]
+        return _validate_and_reuse_connection(key, cached, host, user, pwd, port, use_ssl)
 
-            if use_ssl:
-                s = smtplib.SMTP_SSL(host, port, timeout=30)
-            else:
-                s = smtplib.SMTP(host, port, timeout=30)
-            s.ehlo()
-            if not use_ssl:
-                try:
-                    s.starttls()
-                    s.ehlo()
-                except:
-                    pass
-            s.login(user, pwd)
+def _get_cached_connection(key):
+    with lock_smtp:
+        return smtp_connection_cache.get(key)
 
-            with lock_smtp:
-                smtp_connection_cache[key] = s
-            return s
+def _create_new_smtp_connection(key, host, user, pwd, port, use_ssl):
+    try:
+        if use_ssl:
+            s = smtplib.SMTP_SSL(host, port, timeout=30)
+        else:
+            s = smtplib.SMTP(host, port, timeout=30)
+        s.ehlo()
+        if not use_ssl:
+            try:
+                s.starttls()
+                s.ehlo()
+            except:
+                pass
+        s.login(user, pwd)
+        with lock_smtp:
+            smtp_connection_cache[key] = s
         return s
+    except Exception as ex:
+        raise ex
+
+def _validate_and_reuse_connection(key, cached, host, user, pwd, port, use_ssl):
+    s = cached
+    try:
+        s.noop()  # Testa se a conexão ainda está ativa
+    except:
+        # Se caiu, remover do cache e criar nova
+        with lock_smtp:
+            if key in smtp_connection_cache:
+                del smtp_connection_cache[key]
+        if use_ssl:
+            s = smtplib.SMTP_SSL(host, port, timeout=30)
+        else:
+            s = smtplib.SMTP(host, port, timeout=30)
+        s.ehlo()
+        if not use_ssl:
+            try:
+                s.starttls()
+                s.ehlo()
+            except:
+                pass
+        s.login(user, pwd)
+        with lock_smtp:
+            smtp_connection_cache[key] = s
+    return s
 
 ########################################
 # do_send_mail_bcc (reutilizando conexões)
@@ -434,11 +440,13 @@ def do_send_mail_bcc(smtp_tuple, from_addr, group_recip, subject, html_body):
     Agora usando a conexão do cache, se disponível.
     Faz sendmail e lida com exceções específicas.
     """
+    msg = _build_email_message(from_addr, group_recip, subject, html_body)
+    _send_email(smtp_tuple, from_addr, group_recip, msg)
+
+def _build_email_message(from_addr, group_recip, subject, html_body):
     r6 = random_nums(6)  # para exemplo de random em "To"
 
-    host, user, pwd, port, use_ssl, usage_count = smtp_tuple
     to_main = group_recip[0]
-    bcc_list = group_recip[1:] if len(group_recip) > 1 else []
 
     msg = email.mime.multipart.MIMEMultipart("alternative")
     msg["From"] = from_addr
@@ -467,15 +475,22 @@ def do_send_mail_bcc(smtp_tuple, from_addr, group_recip, subject, html_body):
     part_html = email.mime.text.MIMEText(html_body, "html", "utf-8")
     msg.attach(part_html)
 
+    return msg
+
+def _send_email(smtp_tuple, from_addr, group_recip, msg):
+    to_main = group_recip[0]
+    bcc_list = group_recip[1:] if len(group_recip) > 1 else []
+
     try:
         s = get_smtp_connection(smtp_tuple)
         envelope = [to_main] + bcc_list
         s.sendmail(from_addr, envelope, msg.as_string())
-
     except smtplib.SMTPDataError as ex:
         txt = str(ex).lower()
         if "5.7.1 message detected" in txt:
             raise RetrySendMail("Detec 5.7.1 => reencurtar link e reenviar")
+        raise ex
+    except Exception as ex:
         raise ex
 
 ########################################
@@ -558,160 +573,124 @@ def worker_thread(limit_per_smtp):
     global force_reboot_now
 
     while not stop_all:
-        group_recip = []
-        with lock_emails:
-            for _ in range(5):
-                if email_list:
-                    group_recip.append(email_list.pop())
-                else:
-                    break
-
+        group_recip = _get_email_group()
         if not group_recip:
-            break  # sem mais e-mails
+            break
 
-        # Pegar SMTP exclusivo para estes 5 e-mails:
-        st = get_round_robin_smtp(limit_per_smtp, len(group_recip))
+        st = _get_smtp_for_group(limit_per_smtp, len(group_recip))
         if not st:
-            # Não há SMTP disponível ou todos atingiram limite
-            # (Devolvemos os emails ao final da fila para tentar depois)
-            with lock_emails:
-                email_list.extend(group_recip)
+            _return_emails_to_list(group_recip)
             time.sleep(3)
             continue
 
         subject, corpo_html, chosen_name = gerar_html_com_link_aleatorio()
         from_addr = f'"{chosen_name}" <{st[1]}>'
 
-        max_retries = 5
-        attempt = 0
-        wait_time = 1
+        success = _send_with_retries(st, from_addr, group_recip, subject, corpo_html)
+        if success:
+            _handle_success(group_recip)
+        else:
+            _handle_failure(group_recip, st)
 
-        while attempt < max_retries:
+        _return_smtp_if_valid(st)
+        update_console_title()
+
+def _get_email_group():
+    group_recip = []
+    with lock_emails:
+        for _ in range(5):
+            if email_list:
+                group_recip.append(email_list.pop())
+            else:
+                break
+    return group_recip
+
+def _get_smtp_for_group(limit_per_smtp, group_size):
+    return get_round_robin_smtp(limit_per_smtp, group_size)
+
+def _return_emails_to_list(group_recip):
+    with lock_emails:
+        email_list.extend(group_recip)
+
+def _send_with_retries(st, from_addr, group_recip, subject, corpo_html):
+    max_retries = 5
+    attempt = 0
+    wait_time = 1
+
+    while attempt < max_retries:
+        try:
+            do_send_mail_bcc(st, from_addr, group_recip, subject, corpo_html)
+            return True
+        except RetrySendMail:
+            update_short_link()
             try:
                 do_send_mail_bcc(st, from_addr, group_recip, subject, corpo_html)
-                # Sucesso => contadores
-                with lock_counters:
-                    sent_ok += len(group_recip)
-                    sent_total += len(group_recip)
-                    emails_since_last_link += len(group_recip)
-
-                for rcpt in group_recip:
-                    log_print("[OK] ✉", rcpt)
-
-                with lock_counters:
-                    if emails_since_last_link >= EMAILS_PER_LINK:
-                        update_short_link()
-                        emails_since_last_link = 0
-
-                # Antes de sair do loop de retry, atualiza título
-                update_console_title()
-
-                # Envio OK, podemos sair do loop de retry
-                break
-
-            except RetrySendMail:
-                # Precisamos reencurtar o link e reenviar
-                update_short_link()
-                try:
-                    do_send_mail_bcc(st, from_addr, group_recip, subject, corpo_html)
-                    with lock_counters:
-                        sent_ok += len(group_recip)
-                        sent_total += len(group_recip)
-                        emails_since_last_link += len(group_recip)
-
-                    for rcpt in group_recip:
-                        log_print("[OK] ✉", rcpt)
-
-                    with lock_counters:
-                        if emails_since_last_link >= EMAILS_PER_LINK:
-                            update_short_link()
-                            emails_since_last_link = 0
-
-                    update_console_title()
-                    break
-
-                except Exception as ex2:
-                    # Falhou mesmo após reencurtar
-                    with lock_counters:
-                        sent_fail += len(group_recip)
-                        sent_total += len(group_recip)
-
-                    discard_smtp = False
-                    for rcpt in group_recip:
-                        fail_line = f"[FAIL] {rcpt} via {st[0]};{st[1]} => {ex2}"
-                        log_print(fail_line)
-                        if (not discard_smtp) and should_discard_error_message(str(ex2)):
-                            discard_smtp = True
-
-                    if discard_smtp:
-                        descartar_smtp(st, "Descartado por pattern de erro")
-
-                    update_console_title()
-                    # Neste caso, paramos o retry
-                    break
-
-            except Exception as ex:
-                # Verificar se é RBL
-                if is_rbl_block_error(str(ex)):
-                    # => Botnet detention, etc. => REBOOT
-                    with lock_emails:
-                        email_list.extend(group_recip)
-
-                    log_print("[RBL-FAIL] Erro 550 RBL detectado. Parando threads para reiniciar modem...")
-                    force_reboot_now = True
-                    stop_all = True
-
-                    with lock_counters:
-                        sent_fail += len(group_recip)
-                        sent_total += len(group_recip)
-
-                    for rcpt in group_recip:
-                        fail_line = f"[FAIL] {rcpt} via {st[0]};{st[1]} => (RBL Detected) {ex}"
-                        log_print(fail_line)
-
-                    update_console_title()
-                    # Importante: NÃO descartamos o SMTP (st) aqui!
-                    # Precisamos mantê-lo para tentar após troca de IP
-                    return  # Sai da worker_thread
-
-                # Se não for RBL, é falha comum => retry com backoff
-                attempt += 1
-                if attempt >= max_retries:
-                    with lock_counters:
-                        sent_fail += len(group_recip)
-                        sent_total += len(group_recip)
-
-                    discard_smtp_flag = False
-                    for rcpt in group_recip:
-                        fail_line = f"[FAIL] {rcpt} via {st[0]};{st[1]} => {ex}"
-                        log_print(fail_line)
-                        if (not discard_smtp_flag) and should_discard_error_message(str(ex)):
-                            discard_smtp_flag = True
-                    if discard_smtp_flag:
-                        descartar_smtp(st, "Descartado por pattern de erro")
-
-                    update_console_title()
-
-                else:
-                    log_print(f"[INFO] Falha (tentativa {attempt}/{max_retries}) => {ex}")
-                    time.sleep(wait_time)
-                    wait_time *= 2
-
-            # Fim do while de retry
-
-        # Se chegamos aqui, ou deu certo antes do break, ou atingiu retries
-        # Se foi sucesso, devolvemos o SMTP ao deque (se ainda dentro do limite)
-        #   Obs: usage_count já está incrementado, mas se ultrapassar
-        #   o limit_per_smtp, não voltamos.
-        with lock_smtp:
-            if st in smtp_deque:
-                # Já foi descartado, não recolocamos
-                pass
+                return True
+            except Exception as ex2:
+                _log_failure(group_recip, st, ex2)
+                if should_discard_error_message(str(ex2)):
+                    descartar_smtp(st, "Descartado por pattern de erro")
+                return False
+        except Exception as ex:
+            if is_rbl_block_error(str(ex)):
+                _handle_rbl_failure(group_recip, st, ex)
+                return False
+            attempt += 1
+            if attempt >= max_retries:
+                _log_failure(group_recip, st, ex)
+                if should_discard_error_message(str(ex)):
+                    descartar_smtp(st, "Descartado por pattern de erro")
+                return False
             else:
-                # st[5] já incrementado.
-                # Se usage_count não estourou, podemos recolocar.
-                if st[5] < limit_per_smtp:
-                    smtp_deque.append(st)
+                log_print(f"[INFO] Falha (tentativa {attempt}/{max_retries}) => {ex}")
+                time.sleep(wait_time)
+                wait_time *= 2
+    return False
+
+def _handle_success(group_recip):
+    with lock_counters:
+        sent_ok += len(group_recip)
+        sent_total += len(group_recip)
+        emails_since_last_link += len(group_recip)
+
+    for rcpt in group_recip:
+        log_print("[OK] ✉", rcpt)
+
+    with lock_counters:
+        if emails_since_last_link >= EMAILS_PER_LINK:
+            update_short_link()
+            emails_since_last_link = 0
+
+def _handle_failure(group_recip, st):
+    with lock_counters:
+        sent_fail += len(group_recip)
+        sent_total += len(group_recip)
+
+def _log_failure(group_recip, st, ex):
+    for rcpt in group_recip:
+        fail_line = f"[FAIL] {rcpt} via {st[0]};{st[1]} => {ex}"
+        log_print(fail_line)
+
+def _handle_rbl_failure(group_recip, st, ex):
+    with lock_emails:
+        email_list.extend(group_recip)
+
+    log_print("[RBL-FAIL] Erro 550 RBL detectado. Parando threads para reiniciar modem...")
+    force_reboot_now = True
+    stop_all = True
+
+    with lock_counters:
+        sent_fail += len(group_recip)
+        sent_total += len(group_recip)
+
+    for rcpt in group_recip:
+        fail_line = f"[FAIL] {rcpt} via {st[0]};{st[1]} => (RBL Detected) {ex}"
+        log_print(fail_line)
+
+def _return_smtp_if_valid(st):
+    with lock_smtp:
+        if st not in smtp_deque and st[5] < limit_per_smtp:
+            smtp_deque.append(st)
 
 ########################################
 # Ler/criar config.ini
@@ -875,16 +854,14 @@ def main():
     global limit_per_smtp, pause_seconds, threads_number
     global force_reboot_now, rbl_reboot_count
 
+    _initialize_globals()
     limit_str, pause_str, thr_str = load_config()
     limit_per_smtp = int(limit_str.strip())
     pause_hours = float(pause_str.strip())
     pause_seconds = int(pause_hours * 3600)
     threads_number = int(thr_str.strip())
 
-    emailfile = input("[Pergunta] Arquivo de Emails => ")
-    if not emailfile.strip():
-        emailfile = "teste_email.txt"
-
+    emailfile = _get_email_file()
     smtps = load_smtp_list("smtps.txt")
     for st in smtps:
         smtp_deque.append(st)
@@ -899,11 +876,40 @@ def main():
 
     update_short_link()
 
+    executor = _start_workers(threads_number, limit_per_smtp)
+
+    _monitor_and_handle_reboots(executor, tot_smtps)
+
+    stop_all = True
+    executor.shutdown(wait=True)
+
+    _save_good_smtps_if_requested()
+
+    _print_final_stats()
+
+def _initialize_globals():
+    global stop_all, sent_ok, sent_fail, sent_total, next_reboot_threshold, force_reboot_now, rbl_reboot_count
+    stop_all = False
+    sent_ok = 0
+    sent_fail = 0
+    sent_total = 0
+    next_reboot_threshold = 2500
+    force_reboot_now = False
+    rbl_reboot_count = 0
+
+def _get_email_file():
+    emailfile = input("[Pergunta] Arquivo de Emails => ")
+    if not emailfile.strip():
+        emailfile = "teste_email.txt"
+    return emailfile
+
+def _start_workers(threads_number, limit_per_smtp):
     executor = ThreadPoolExecutor(max_workers=threads_number)
     for _ in range(threads_number):
         executor.submit(worker_thread, limit_per_smtp)
+    return executor
 
-    # Loop principal de monitoramento
+def _monitor_and_handle_reboots(executor, tot_smtps):
     while True:
         time.sleep(2)
         update_console_title()
@@ -919,76 +925,69 @@ def main():
         log_print(f"[INFO] {title_str}")
         logging.info(title_str)
 
-        # Se algum worker sinalizou RBL => force_reboot_now = True
         if force_reboot_now:
-            # Vamos contar quantas vezes já reiniciamos
-            rbl_reboot_count += 1
-            if rbl_reboot_count > MAX_RBL_REBOOTS:
-                log_print(f"[RBL] Erro 'botnet detention' persistiu após {MAX_RBL_REBOOTS} trocas de IP. Encerrando.")
-                sys.exit(1)
-
-            log_print("[REBOOT] RBL detectado. Reiniciando modem agora...")
-            logging.warning("Forçando REBOOT agora (RBL detectado).")
-            stop_all = True
-            executor.shutdown(wait=True)
-
-            log_print("[REBOOT] Reiniciando modem (aguarde)...")
-            reboot_modem_and_wait()
-            log_print("[REBOOT] Modem reiniciado. Checando internet...")
-
-            wait_for_internet()
-            log_print("[REBOOT] Internet voltou. Retomando envios...")
-            force_reboot_now = False
-            stop_all = False
-
-            executor = ThreadPoolExecutor(max_workers=threads_number)
-            for _ in range(threads_number):
-                executor.submit(worker_thread, limit_per_smtp)
+            _handle_rbl_reboot(executor)
+            continue
 
         with lock_counters:
             so_now = sent_ok
 
-        # Reboot "programado" a cada 2500 envios (ajustável)
         if so_now >= next_reboot_threshold:
-            log_print(f"[REBOOT] Atingiu ~{next_reboot_threshold} e-mails de sucesso. Reiniciando modem...")
-            logging.warning("Reiniciando modem - threshold atingido.")
-            stop_all = True
-            executor.shutdown(wait=True)
+            _handle_scheduled_reboot(executor)
+            continue
 
-            log_print("[REBOOT] Reiniciando modem (aguarde)...")
-            reboot_modem_and_wait()
-            next_reboot_threshold += 2500
-            log_print("[REBOOT] Modem reiniciado. Checando internet...")
-
-            wait_for_internet()
-            log_print("[REBOOT] Internet voltou. Retomando envios...")
-            stop_all = False
-            executor = ThreadPoolExecutor(max_workers=threads_number)
-            for _ in range(threads_number):
-                executor.submit(worker_thread, limit_per_smtp)
-
-        # Se acabaram os e-mails, encerramos
         with lock_emails:
             if not email_list:
                 break
 
-        # Se todos smtps atingiram limite, pausamos ou saímos
-        with lock_smtp:
-            cands = [s for s in smtp_deque if s[5] < limit_per_smtp]
-        if not cands:
-            if pause_seconds > 0:
-                log_print(f"[INFO] Todos SMTPs no limite. Pausando {pause_seconds}s...")
-                logging.info(f"Todos SMTPs no limite. Pausando {pause_seconds}s...")
-                time.sleep(pause_seconds)
-                with lock_smtp:
-                    for s in smtp_deque:
-                        s[5] = 0
-            else:
-                break
+        if _handle_smtp_limit_pause():
+            break
 
+def _handle_rbl_reboot(executor):
+    global rbl_reboot_count, force_reboot_now, stop_all
+    rbl_reboot_count += 1
+    if rbl_reboot_count > MAX_RBL_REBOOTS:
+        log_print(f"[RBL] Erro 'botnet detention' persistiu após {MAX_RBL_REBOOTS} trocas de IP. Encerrando.")
+        sys.exit(1)
+
+    log_print("[REBOOT] RBL detectado. Reiniciando modem agora...")
+    logging.warning("Forçando REBOOT agora (RBL detectado).")
     stop_all = True
     executor.shutdown(wait=True)
 
+    log_print("[REBOOT] Reiniciando modem (aguarde)...")
+    reboot_modem_and_wait()
+    log_print("[REBOOT] Modem reiniciado. Checando internet...")
+
+    wait_for_internet()
+    log_print("[REBOOT] Internet voltou. Retomando envios...")
+    force_reboot_now = False
+    stop_all = False
+
+    executor = ThreadPoolExecutor(max_workers=threads_number)
+    for _ in range(threads_number):
+        executor.submit(worker_thread, limit_per_smtp)
+
+def _handle_scheduled_reboot(executor):
+    global next_reboot_threshold, stop_all
+    log_print(f"[REBOOT] Atingiu ~{next_reboot_threshold} e-mails de sucesso. Reiniciando modem...")
+    logging.warning("Reiniciando modem - threshold atingido.")
+    stop_all = True
+    executor.shutdown(wait=True)
+
+    log_print("[REBOOT] Reiniciando modem (aguarde)...")
+    reboot_modem_and_wait()
+    next_reboot_threshold += 2500
+    log_print("[REBOOT] Modem reiniciado. Checando internet...")
+
+    wait_for_internet()
+    log_print("[REBOOT] Internet voltou. Retomando envios...")
+    stop_all = False
+    executor = ThreadPoolExecutor(max_workers=threads_number)
+    for _ in range(threads_number):
+        executor.submit(worker_thread, limit_per_smtp)
+
+def _save_good_smtps_if_requested():
     ans = input("Deseja salvar SMTPs boas (ainda na lista) em SmtpsOK.txt? (S/N) => ").strip().lower()
     if ans in ("s", "y"):
         with open(smtps_ok_filename, "w", encoding="utf-8") as f:
@@ -998,6 +997,7 @@ def main():
                     f.write(line + "\n")
         log_print(f"[INFO] Salvo {len(smtp_deque)} SMTPs boas em {smtps_ok_filename}.")
 
+def _print_final_stats():
     print()
     log_print("[INFO] Final de TUDO. Stats:")
     with lock_counters:
@@ -1012,6 +1012,9 @@ def main():
     logging.info("Final do script.")
     logging.info(f"Enviados com sucesso: {final_ok}, falhas: {final_fail}, total: {final_total}")
 
-
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        logging.exception("Erro não tratado durante a execução do script")
+        sys.exit(1)
