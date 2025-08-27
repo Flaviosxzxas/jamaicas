@@ -45,6 +45,9 @@ import email.mime.text
 # >>> Módulo de Logging <<<
 import logging
 
+# Define a timeout padrão para todas as conexões de socket
+socket.setdefaulttimeout(30)
+
 ########################################
 # >>> EXCEÇÃO PERSONALIZADA PARA TRATAR O 5.7.1 <<<
 ########################################
@@ -1014,4 +1017,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        logging.exception("Erro não tratado durante a execução do script")
+        sys.exit(1)
