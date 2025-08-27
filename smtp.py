@@ -34,7 +34,11 @@ import requests  # <-- Para checar IP público
 init()
 
 # Ajusta o título do console (no Windows)
-ctypes.windll.kernel32.SetConsoleTitleW('[Sender+Socks5+PDF + Reboot Modem RBL]')
+try:
+    ctypes.windll.kernel32.SetConsoleTitleW('[Sender+Socks5+PDF + Reboot Modem RBL]')
+except Exception:
+    # In non-Windows environments this call may fail; ignore errors.
+    pass
 
 # ---------------------------------------------------
 # Configurações / Variáveis globais
@@ -318,60 +322,71 @@ def connect_smtp_with_proxy(serveraddr, serverport, ssl_used, proxy_tuple, timeo
     """
     Conecta ao servidor SMTP usando SOCKS5, envolve em SSL se necessário.
     """
-    p_host, p_port = proxy_tuple
-    sock = socks.socksocket()
-    sock.settimeout(timeout)
-    resolved_ip = socket.gethostbyname(serveraddr)  # resolve DNS
+    try:
+        p_host, p_port = proxy_tuple
+        sock = socks.socksocket()
+        sock.settimeout(timeout)
+        resolved_ip = socket.gethostbyname(serveraddr)  # resolve DNS
 
-    sock.setproxy(
-        proxy_type = socks.PROXY_TYPE_SOCKS5,
-        addr       = p_host,
-        port       = int(p_port),
-        rdns       = False,
-        username   = proxy_user,
-        password   = proxy_pass
-    )
-    sock.connect((resolved_ip, serverport))
+        sock.setproxy(
+            proxy_type = socks.PROXY_TYPE_SOCKS5,
+            addr       = p_host,
+            port       = int(p_port),
+            rdns       = False,
+            username   = proxy_user,
+            password   = proxy_pass
+        )
+        sock.connect((resolved_ip, serverport))
 
-    if ssl_used == 'true':
-        context = ssl.create_default_context()
-        ssl_sock = context.wrap_socket(sock, server_hostname=serveraddr)
-        ssl_sock.settimeout(timeout)
+        if ssl_used == 'true':
+            context = ssl.create_default_context()
+            ssl_sock = context.wrap_socket(sock, server_hostname=serveraddr)
+            ssl_sock.settimeout(timeout)
 
-        server = smtplib.SMTP_SSL(host=None, port=None)
-        server.sock = ssl_sock
-        server.file = server.sock.makefile('rb')
-        server._host = serveraddr
-        server._port = serverport
-        server.connect(serveraddr, serverport)
-        server.ehlo()
-    else:
-        server = smtplib.SMTP(host=None, port=None)
-        server.sock = sock
-        server.file = server.sock.makefile('rb')
-        server._host = serveraddr
-        server._port = serverport
-        server.connect(serveraddr, serverport)
-        server.ehlo()
-        server.starttls()
-        server.ehlo()
-        server.sock.settimeout(timeout)
+            server = smtplib.SMTP_SSL(host=None, port=None)
+            server.sock = ssl_sock
+            server.file = server.sock.makefile('rb')
+            server._host = serveraddr
+            server._port = serverport
+            server.connect(serveraddr, serverport)
+            server.ehlo()
+        else:
+            server = smtplib.SMTP(host=None, port=None)
+            server.sock = sock
+            server.file = server.sock.makefile('rb')
+            server._host = serveraddr
+            server._port = serverport
+            server.connect(serveraddr, serverport)
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.sock.settimeout(timeout)
 
-    return server
+        return server
+    except Exception as e:
+        try:
+            sock.close()
+        except Exception:
+            pass
+        debug_log(f"Erro ao conectar via proxy: {e}")
+        raise
 
 
 def connect_smtp_local(serveraddr, serverport, ssl_used, timeout=60):
     """Conecta ao servidor SMTP sem proxy (direto)."""
-    if ssl_used == 'true':
-        server = smtplib.SMTP_SSL(serveraddr, serverport, timeout=timeout)
-        server.ehlo()
-    else:
-        server = smtplib.SMTP(serveraddr, serverport, timeout=timeout)
-        server.ehlo()
-        server.starttls()
-        server.ehlo()
-    return server
-
+    try:
+        if ssl_used == 'true':
+            server = smtplib.SMTP_SSL(serveraddr, serverport, timeout=timeout)
+            server.ehlo()
+        else:
+            server = smtplib.SMTP(serveraddr, serverport, timeout=timeout)
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+        return server
+    except Exception as e:
+        debug_log(f"Erro ao conectar SMTP local: {e}")
+        raise
 
 def random_senha_numerica():
     length = random.randint(3, 6)
@@ -605,7 +620,7 @@ def send_single_email(recipients, is_sms=False):
                 for rc in recipients:
                     fail_file.write(f'{rc} | Falha-SEM_SMTP\n')
             return
-
+        server = None
         try:
             ch = smtp_line.split(';')
             serveraddr = ch[0]
@@ -614,13 +629,21 @@ def send_single_email(recipients, is_sms=False):
             serverport = int(ch[3])
             ssl_used   = ch[4].lower()
 
-            with open('NegaMir/Name.txt', 'r', encoding='utf-8') as nx:
-                names = nx.read().splitlines()
+            try:
+                with open('NegaMir/Name.txt', 'r', encoding='utf-8') as nx:
+                    names = nx.read().splitlines()
                 Name = random.choice(names) if names else "Teste"
+            except Exception as e:
+                debug_log(f"Falha ao ler Name.txt: {e}")
+                Name = "Teste"
 
-            with open('NegaMir/Subject.txt', 'r', encoding='utf-8') as sx:
-                subs = sx.read().splitlines()
+            try:
+                with open('NegaMir/Subject.txt', 'r', encoding='utf-8') as sx:
+                    subs = sx.read().splitlines()
                 Subject = random.choice(subs) if subs else "Sem Assunto"
+            except Exception as e:
+                debug_log(f"Falha ao ler Subject.txt: {e}")
+                Subject = "Sem Assunto"
 
             r5  = random_nums(6)
             r6  = random_nums(6)
@@ -716,7 +739,6 @@ def send_single_email(recipients, is_sms=False):
 
             server.login(fromaddr, SMTP_PASS)
             server.sendmail(fromaddr, [recipients[0]] + bcc_list, msg.as_string())
-            server.quit()
 
             now = datetime.now().strftime('%H:%M:%S')
             print(la5dhar + '--------------------------------------作品發送者---------------------------------------' + labyadh)
@@ -856,6 +878,13 @@ def send_single_email(recipients, is_sms=False):
                 for rc in recipients:
                     fail_file.write(f'{rc} | Falha-genérica: {str(e)}\n')
             return
+        finally:
+            if server:
+                try:
+                    server.quit()
+                except Exception as e_quit:
+                    debug_log(f"Erro ao encerrar SMTP: {e_quit}")
+
 
         if delay_between_sends > 0:
             time.sleep(delay_between_sends)
