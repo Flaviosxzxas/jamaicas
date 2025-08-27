@@ -19,7 +19,7 @@ import requests
 import smtplib
 import socket
 import subprocess
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 
 # >>> NOVOS IMPORTS PARA REBOOT (Selenium) <<<
 from selenium import webdriver
@@ -28,11 +28,9 @@ from selenium.webdriver.chrome.service import Service
 
 # >>> IMPORTS PARA COLORAMA <<<
 from colorama import Fore, Style, init
-init(autoreset=True)
 
-# >>> IMPORTS para BeautifulSoup e regex <<<
+# >>> IMPORTS para BeautifulSoup <<<
 from bs4 import BeautifulSoup
-import re
 
 # >>> PARA FILA DE SMTP (round-robin) <<<
 from collections import deque
@@ -44,6 +42,8 @@ import email.mime.text
 
 # >>> Módulo de Logging <<<
 import logging
+
+init(autoreset=True)
 
 # Define a timeout padrão para todas as conexões de socket
 socket.setdefaulttimeout(30)
@@ -313,7 +313,6 @@ def gerar_html_com_link_aleatorio():
     corpo = corpo.replace("%name%", chosen_name)
     corpo = corpo.replace("%Name%", chosen_name)
 
-    global current_short_link
     with lock_link:
         base_short = current_short_link
 
@@ -783,10 +782,7 @@ def get_public_ip():
         pass
     return None
 
-is_rebooting = False
-
 def reboot_modem_and_wait():
-    global is_rebooting
     debug_log("Entrando em reboot_modem_and_wait() (modem antigo + checagem de IP).")
     log_print("[RBL] Reiniciando modem para tentar trocar IP (Selenium)...")
 
@@ -873,8 +869,7 @@ def main():
     setup_logging()
     logging.info("=== Início da execução do script... ===")
 
-    global stop_all, sent_ok, sent_fail, sent_total
-    global next_reboot_threshold, smtp_deque
+    global stop_all, next_reboot_threshold
     global limit_per_smtp, pause_seconds, threads_number
     global force_reboot_now, rbl_reboot_count
 
