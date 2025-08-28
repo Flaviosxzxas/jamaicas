@@ -159,28 +159,28 @@ echo "================================================= Configurar Node.js =====
 
 echo "================================================= Configurando SSL com Certbot ================================================="
 
-# === CRIAR REGISTRO A TEMPORÁRIO PARA SSL ===
-echo "Criando registro A temporário para SSL (propagação rápida)..."
+echo "================================================= LIMPEZA INICIAL ================================================="
 
-ZONE_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$Domain" \
-  -H "X-Auth-Email: $CloudflareEmail" \
-  -H "X-Auth-Key: $CloudflareAPI" \
-  -H "Content-Type: application/json" | jq -r '.result[0].id')
+# Limpar certificado específico se existir
+echo "Limpando certificado para $ServerName se existir..."
+certbot delete --cert-name "$ServerName" --non-interactive 2>/dev/null || true
 
-if [ "$ZONE_ID" != "null" ] && [ -n "$ZONE_ID" ]; then
-    SUBDOMAIN=$(echo "$ServerName" | sed "s/\.$Domain$//")
-    
-    # Criar com TTL baixo (300s) para propagação rápida
-    curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
-      -H "X-Auth-Email: $CloudflareEmail" \
-      -H "X-Auth-Key: $CloudflareAPI" \
-      -H "Content-Type: application/json" \
-      --data "{\"type\":\"A\",\"name\":\"$SUBDOMAIN\",\"content\":\"$ServerIP\",\"ttl\":300}" >/dev/null
-    
-    echo "✓ Registro A temporário criado (TTL: 5min)"
-    echo "Aguardando propagação DNS (30s)..."
-    sleep 30
-fi
+# Limpar TODOS os certificados antigos desta máquina (mais seguro)
+echo "Limpando todos os certificados antigos..."
+for old_cert in /etc/letsencrypt/live/*/; do
+    if [ -d "$old_cert" ]; then
+        old_domain=$(basename "$old_cert")
+        if [[ "$old_domain" != "$ServerName" ]]; then
+            echo "Removendo certificado antigo: $old_domain"
+            certbot delete --cert-name "$old_domain" --non-interactive 2>/dev/null || true
+        fi
+    fi
+done
+
+# Limpar cache DNS
+echo "Limpando cache DNS..."
+systemd-resolve --flush-caches 2>/dev/null || true
+systemctl flush-dns 2>/dev/null || true
 
 mkdir -p /root/.secrets && chmod 0700 /root/.secrets/ && touch /root/.secrets/cloudflare.cfg && chmod 0400 /root/.secrets/cloudflare.cfg
 
