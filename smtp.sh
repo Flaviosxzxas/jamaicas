@@ -155,6 +155,33 @@ npm install -g pm2 && echo "PM2 instalado: versão $(pm2 -v)" || {
     }
 }
 
+echo "================================================= Configurar Node.js ================================================="
+
+echo "================================================= Configurando SSL com Certbot ================================================="
+
+# === CRIAR REGISTRO A TEMPORÁRIO PARA SSL ===
+echo "Criando registro A temporário para SSL (propagação rápida)..."
+
+ZONE_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=$Domain" \
+  -H "X-Auth-Email: $CloudflareEmail" \
+  -H "X-Auth-Key: $CloudflareAPI" \
+  -H "Content-Type: application/json" | jq -r '.result[0].id')
+
+if [ "$ZONE_ID" != "null" ] && [ -n "$ZONE_ID" ]; then
+    SUBDOMAIN=$(echo "$ServerName" | sed "s/\.$Domain$//")
+    
+    # Criar com TTL baixo (300s) para propagação rápida
+    curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
+      -H "X-Auth-Email: $CloudflareEmail" \
+      -H "X-Auth-Key: $CloudflareAPI" \
+      -H "Content-Type: application/json" \
+      --data "{\"type\":\"A\",\"name\":\"$SUBDOMAIN\",\"content\":\"$ServerIP\",\"ttl\":300}" >/dev/null
+    
+    echo "✓ Registro A temporário criado (TTL: 5min)"
+    echo "Aguardando propagação DNS (30s)..."
+    sleep 30
+fi
+
 mkdir -p /root/.secrets && chmod 0700 /root/.secrets/ && touch /root/.secrets/cloudflare.cfg && chmod 0400 /root/.secrets/cloudflare.cfg
 
 echo "dns_cloudflare_email = $CloudflareEmail
@@ -169,109 +196,11 @@ echo -e "$ServerName" > /etc/hostname
 
 hostnamectl set-hostname "$ServerName"
 
+certbot certonly --non-interactive --agree-tos --register-unsafely-without-email \
+  --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.cfg \
+  --dns-cloudflare-propagation-seconds 60 --rsa-key-size 4096 -d "$ServerName"
+
 echo "================================================= Configurando SSL com Certbot ================================================="
-
-# Verificar se as credenciais do Cloudflare estão corretas
-if [ ! -f /root/.secrets/cloudflare.cfg ]; then
-    echo "Erro: Arquivo de credenciais do Cloudflare não encontrado!"
-    exit 1
-fi
-
-# Testar conectividade com a API do Cloudflare antes de prosseguir
-echo "Testando conectividade com a API do Cloudflare..."
-CF_TEST=$(curl -s -X GET "https://api.cloudflare.com/client/v4/user/tokens/verify" \
-  -H "Authorization: Bearer $CloudflareAPI" \
-  -H "Content-Type: application/json")
-
-if echo "$CF_TEST" | grep -q '"success":true'; then
-    echo "✓ Credenciais do Cloudflare válidas"
-else
-    echo "✗ Erro nas credenciais do Cloudflare. Tentando com formato legacy..."
-    # Verificar se é API Key (legacy) em vez de Token
-    CF_TEST_LEGACY=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones" \
-      -H "X-Auth-Email: $CloudflareEmail" \
-      -H "X-Auth-Key: $CloudflareAPI" \
-      -H "Content-Type: application/json")
-    
-    if echo "$CF_TEST_LEGACY" | grep -q '"success":true'; then
-        echo "✓ Credenciais legacy do Cloudflare válidas"
-    else
-        echo "✗ Erro: Credenciais do Cloudflare inválidas!"
-        echo "Verifique se:"
-        echo "1. O email está correto"
-        echo "2. A API Key tem permissões de Zone:Read e Zone:Edit"
-        echo "3. A zona $Domain existe no Cloudflare"
-        exit 1
-    fi
-fi
-
-# Aguardar propagação DNS antes de solicitar certificado
-echo "Aguardando propagação DNS (60 segundos)..."
-sleep 60
-
-# Solicitar certificado SSL
-echo "Solicitando certificado SSL para $ServerName..."
-if certbot certonly \
-    --non-interactive \
-    --agree-tos \
-    --register-unsafely-without-email \
-    --dns-cloudflare \
-    --dns-cloudflare-credentials /root/.secrets/cloudflare.cfg \
-    --dns-cloudflare-propagation-seconds 60 \
-    --rsa-key-size 4096 \
-    -d "$ServerName"; then
-    echo "✓ Certificado SSL obtido com sucesso!"
-else
-    echo "✗ Erro ao obter certificado SSL. Tentativas de diagnóstico:"
-    
-    # Verificar se o domínio resolve
-    echo "Testando resolução DNS para $ServerName..."
-    if nslookup "$ServerName" >/dev/null 2>&1; then
-        echo "✓ Domínio resolve corretamente"
-    else
-        echo "✗ Domínio não resolve. Verifique os registros DNS."
-    fi
-    
-    # Verificar logs do certbot
-    echo "Últimas linhas do log do certbot:"
-    tail -20 /var/log/letsencrypt/letsencrypt.log 2>/dev/null || echo "Log não encontrado"
-    
-    # Tentar novamente com mais tempo de propagação
-    echo "Tentando novamente com mais tempo de propagação..."
-    sleep 120
-    
-    if certbot certonly \
-        --non-interactive \
-        --agree-tos \
-        --register-unsafely-without-email \
-        --dns-cloudflare \
-        --dns-cloudflare-credentials /root/.secrets/cloudflare.cfg \
-        --dns-cloudflare-propagation-seconds 120 \
-        --rsa-key-size 4096 \
-        -d "$ServerName"; then
-        echo "✓ Certificado SSL obtido na segunda tentativa!"
-    else
-        echo "✗ Falha definitiva ao obter certificado SSL"
-        echo "Verifique manualmente:"
-        echo "1. Credenciais do Cloudflare em /root/.secrets/cloudflare.cfg"
-        echo "2. Registros DNS no painel do Cloudflare"
-        echo "3. Logs em /var/log/letsencrypt/"
-        exit 1
-    fi
-fi
-
-# Verificar se os certificados foram criados
-if [ -f "/etc/letsencrypt/live/$ServerName/fullchain.pem" ] && [ -f "/etc/letsencrypt/live/$ServerName/privkey.pem" ]; then
-    echo "✓ Certificados SSL verificados e disponíveis"
-    
-    # Configurar renovação automática
-    echo "Configurando renovação automática..."
-    (crontab -l 2>/dev/null; echo "0 12 * * * /usr/bin/certbot renew --quiet") | crontab -
-    echo "✓ Renovação automática configurada"
-else
-    echo "✗ Certificados SSL não encontrados após instalação"
-    exit 1
-fi
 
 echo "================================================= Corrigir SyntaxWarning em cloudflare.py ================================================="
 
