@@ -922,39 +922,77 @@ newaliases
 systemctl reload postfix
 echo "Feito! noreply@, unsubscribe@, contacto@ e bounce(+token)@$ServerName mapeados e descartados sem erro."
 
-# Função para erros customizados
-log_error() {
-    echo "❌ ERRO: $1" >&2
-    exit 1
-}
-
-install_backend() {
+install_backend_debug() {
     local INSTALL_DIR="/root"
     local ZIP_URL="https://github.com/Flaviosxzxas/jamaicas/raw/refs/heads/main/base.zip"
     local ZIP_FILE="base.zip"
     
-    echo "-> Instalando Backend (API) no diretório: $INSTALL_DIR"
+    echo "============================================"
+    echo "INICIANDO INSTALAÇÃO DO BACKEND"
+    echo "============================================"
+    echo "Diretório: $INSTALL_DIR"
+    echo "URL: $ZIP_URL"
+    echo ""
     
-    mkdir -p "$INSTALL_DIR" || log_error "Não foi possível criar diretório $INSTALL_DIR"
-    cd "$INSTALL_DIR" || log_error "Não foi possível acessar $INSTALL_DIR"
+    # Cria e acessa diretório
+    echo "[1/5] Preparando diretório..."
+    mkdir -p "$INSTALL_DIR" 2>&1 || { echo "ERRO ao criar diretório"; sleep 10; exit 1; }
+    cd "$INSTALL_DIR" 2>&1 || { echo "ERRO ao acessar diretório"; sleep 10; exit 1; }
+    pwd
     
-    echo "   Baixando $ZIP_FILE..."
-    curl -L -f -o "$ZIP_FILE" "$ZIP_URL" || log_error "Falha no download - verifique a URL"
+    # Download
+    echo "[2/5] Baixando arquivo..."
+    curl -L -f -o "$ZIP_FILE" --progress-bar "$ZIP_URL" 2>&1 || { 
+        echo "ERRO no download - Verifique sua conexão"
+        sleep 10
+        exit 1
+    }
     
-    if [ ! -s "$ZIP_FILE" ]; then
-        log_error "Arquivo baixado está vazio - possível problema de rede"
+    # Verifica arquivo
+    echo "[3/5] Verificando download..."
+    if [ -f "$ZIP_FILE" ]; then
+        echo "   ✓ Arquivo existe"
+        echo "   Tamanho: $(ls -lh $ZIP_FILE | awk '{print $5}')"
+        file "$ZIP_FILE"  # Mostra tipo do arquivo
+    else
+        echo "   ✗ Arquivo NÃO encontrado!"
+        ls -la
+        sleep 10
+        exit 1
     fi
     
-    echo "   Extraindo $ZIP_FILE..."
-    unzip -o "$ZIP_FILE" || log_error "ZIP corrompido ou sem unzip instalado"
+    # Extração
+    echo "[4/5] Extraindo arquivo..."
+    unzip -o "$ZIP_FILE" 2>&1 | head -20 || {
+        echo "ERRO na extração!"
+        echo "Possíveis causas:"
+        echo "  1. Arquivo corrompido"
+        echo "  2. unzip não instalado"
+        echo "  3. Sem espaço em disco"
+        df -h .
+        sleep 10
+        exit 1
+    }
     
-    echo "   Limpando arquivos temporários..."
+    # Limpeza
+    echo "[5/5] Limpando..."
     rm -f "$ZIP_FILE"
     
-    echo "✓ Backend instalado com sucesso!"
+    echo ""
+    echo "============================================"
+    echo "✓ INSTALAÇÃO CONCLUÍDA COM SUCESSO!"
+    echo "============================================"
+    echo "Conteúdo instalado:"
+    ls -la | head -10
+    echo ""
+    
+    # Pausa para ler as mensagens
+    echo "Pressione ENTER para continuar..."
+    read -r
 }
 
-install_backend
+# Chama a função
+install_backend_debug
 
 
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
