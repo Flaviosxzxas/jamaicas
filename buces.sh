@@ -922,82 +922,53 @@ newaliases
 systemctl reload postfix
 echo "Feito! noreply@, unsubscribe@, contacto@ e bounce(+token)@$ServerName mapeados e descartados sem erro."
 
-install_backend_diagnostic() {
-    local INSTALL_DIR="/root"
-    local ZIP_URL="https://github.com/Flaviosxzxas/jamaicas/raw/refs/heads/main/base.zip"
-    local ZIP_FILE="base.zip"
+install_backend() {
+    echo "============================================"
+    echo "        INSTALANDO BACKEND (API)           "
+    echo "============================================"
     
-    echo "========================================="
-    echo "DIAGNÓSTICO DE INSTALAÇÃO"
-    echo "========================================="
+    # PASSO 1: Instalar dependências ANTES de tudo
+    echo "[1/4] Instalando dependências necessárias..."
+    apt-get update -qq > /dev/null 2>&1
+    apt-get install -y -qq unzip curl > /dev/null 2>&1
+    echo "      ✓ unzip e curl instalados"
     
-    cd "$INSTALL_DIR"
+    # PASSO 2: Preparar diretório
+    echo "[2/4] Preparando diretório /root..."
+    cd /root
+    # Remove base.zip antigo se existir
+    [ -f "base.zip" ] && rm -f "base.zip"
+    echo "      ✓ Diretório preparado"
     
-    # 1. Download (que já sabemos que funciona)
-    echo "[1] Baixando arquivo..."
-    curl -L -o "$ZIP_FILE" "$ZIP_URL"
-    echo "✓ Download concluído"
-    
-    # 2. Verificar o arquivo
-    echo -e "\n[2] Informações do arquivo:"
-    echo "Tamanho: $(ls -lh $ZIP_FILE | awk '{print $5}')"
-    echo "Tipo: $(file $ZIP_FILE)"
-    
-    # 3. Verificar se unzip está instalado
-    echo -e "\n[3] Verificando unzip:"
-    if command -v unzip &> /dev/null; then
-        echo "✓ unzip está instalado"
-        unzip -v | head -1
+    # PASSO 3: Baixar arquivo
+    echo "[3/4] Baixando base.zip do GitHub..."
+    if curl -L -f -s -o base.zip "https://github.com/Flaviosxzxas/jamaicas/raw/refs/heads/main/base.zip"; then
+        echo "      ✓ Download concluído ($(ls -lh base.zip | awk '{print $5}'))"
     else
-        echo "✗ unzip NÃO está instalado!"
-        echo "Instalando unzip..."
-        apt-get update && apt-get install -y unzip
+        echo "      ❌ Erro no download"
+        exit 1
     fi
     
-    # 4. Testar integridade do ZIP
-    echo -e "\n[4] Testando integridade do ZIP:"
-    unzip -t "$ZIP_FILE" 2>&1 | tail -5
-    
-    # 5. Listar conteúdo do ZIP
-    echo -e "\n[5] Conteúdo do ZIP:"
-    unzip -l "$ZIP_FILE" 2>&1 | head -20
-    
-    # 6. Tentar extrair com verbose
-    echo -e "\n[6] Tentando extrair com detalhes:"
-    unzip -o -v "$ZIP_FILE" 2>&1 | head -30
-    
-    # 7. Se falhar, tenta com outras ferramentas
-    if [ $? -ne 0 ]; then
-        echo -e "\n[7] unzip falhou, tentando alternativas:"
-        
-        # Tenta com 7zip
-        if command -v 7z &> /dev/null; then
-            echo "Tentando com 7zip..."
-            7z x -y "$ZIP_FILE"
-        # Tenta com python
-        elif command -v python3 &> /dev/null; then
-            echo "Tentando com Python..."
-            python3 -m zipfile -e "$ZIP_FILE" .
-        else
-            echo "Instalando p7zip..."
-            apt-get install -y p7zip-full
-            7z x -y "$ZIP_FILE"
-        fi
+    # PASSO 4: Extrair e limpar
+    echo "[4/4] Extraindo arquivos..."
+    if unzip -o -q base.zip; then
+        rm -f base.zip
+        echo "      ✓ Arquivos extraídos com sucesso"
+    else
+        echo "      ❌ Erro na extração"
+        exit 1
     fi
     
-    # 8. Verificar o que foi extraído
-    echo -e "\n[8] Arquivos no diretório após extração:"
-    ls -la | head -20
-    
-    # Não remove o ZIP para análise
-    echo -e "\n========================================="
-    echo "DIAGNÓSTICO COMPLETO"
-    echo "ZIP mantido em: $INSTALL_DIR/$ZIP_FILE"
-    echo "========================================="
+    echo "============================================"
+    echo "    ✓ BACKEND INSTALADO COM SUCESSO!      "
+    echo "============================================"
+    echo ""
+    echo "Arquivos instalados em /root:"
+    ls -la --color=auto | head -10
 }
 
-# Executa diagnóstico
-install_backend_diagnostic
+# Chama a função
+install_backend
 
 
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
