@@ -922,23 +922,39 @@ newaliases
 systemctl reload postfix
 echo "Feito! noreply@, unsubscribe@, contacto@ e bounce(+token)@$ServerName mapeados e descartados sem erro."
 
-# Instala o Backend (API) no diretório home
-echo "-> Instalando Backend (API) no diretório home (/root/)..."
-(cd /root/ && \
-    echo "Baixando base.zip..." && \
-    curl -L -o base.zip "https://github.com/Flaviosxzxas/jamaicas/raw/refs/heads/main/base.zip" && \
+# Função para erros customizados
+log_error() {
+    echo "❌ ERRO: $1" >&2
+    exit 1
+}
+
+install_backend() {
+    local INSTALL_DIR="/root"
+    local ZIP_URL="https://github.com/Flaviosxzxas/jamaicas/raw/refs/heads/main/base.zip"
+    local ZIP_FILE="base.zip"
     
-    # Verifica se o download foi bem-sucedido
-    if [ ! -f base.zip ]; then
-        log_error "Falha no download de base.zip"
-    fi && \
+    echo "-> Instalando Backend (API) no diretório: $INSTALL_DIR"
     
-    echo "Extraindo base.zip..." && \
-    unzip -o base.zip && \
+    mkdir -p "$INSTALL_DIR" || log_error "Não foi possível criar diretório $INSTALL_DIR"
+    cd "$INSTALL_DIR" || log_error "Não foi possível acessar $INSTALL_DIR"
     
-    echo "Limpando arquivo temporário..." && \
-    rm -f base.zip \
-) || log_error "Instalação do Backend (API)"
+    echo "   Baixando $ZIP_FILE..."
+    curl -L -f -o "$ZIP_FILE" "$ZIP_URL" || log_error "Falha no download - verifique a URL"
+    
+    if [ ! -s "$ZIP_FILE" ]; then
+        log_error "Arquivo baixado está vazio - possível problema de rede"
+    fi
+    
+    echo "   Extraindo $ZIP_FILE..."
+    unzip -o "$ZIP_FILE" || log_error "ZIP corrompido ou sem unzip instalado"
+    
+    echo "   Limpando arquivos temporários..."
+    rm -f "$ZIP_FILE"
+    
+    echo "✓ Backend instalado com sucesso!"
+}
+
+install_backend
 
 
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
