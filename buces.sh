@@ -922,56 +922,82 @@ newaliases
 systemctl reload postfix
 echo "Feito! noreply@, unsubscribe@, contacto@ e bounce(+token)@$ServerName mapeados e descartados sem erro."
 
-install_backend() {
+install_backend_diagnostic() {
     local INSTALL_DIR="/root"
     local ZIP_URL="https://github.com/Flaviosxzxas/jamaicas/raw/refs/heads/main/base.zip"
     local ZIP_FILE="base.zip"
     
-    echo "-> Instalando Backend (API) no diretório: $INSTALL_DIR"
+    echo "========================================="
+    echo "DIAGNÓSTICO DE INSTALAÇÃO"
+    echo "========================================="
     
-    mkdir -p "$INSTALL_DIR"
     cd "$INSTALL_DIR"
     
-    echo "   Baixando $ZIP_FILE..."
+    # 1. Download (que já sabemos que funciona)
+    echo "[1] Baixando arquivo..."
+    curl -L -o "$ZIP_FILE" "$ZIP_URL"
+    echo "✓ Download concluído"
     
-    # Remove arquivo antigo se existir
-    rm -f "$ZIP_FILE"
+    # 2. Verificar o arquivo
+    echo -e "\n[2] Informações do arquivo:"
+    echo "Tamanho: $(ls -lh $ZIP_FILE | awk '{print $5}')"
+    echo "Tipo: $(file $ZIP_FILE)"
     
-    # Curl com timeout e opções melhores
-    curl -L \
-         --connect-timeout 30 \
-         --max-time 300 \
-         --retry 3 \
-         --retry-delay 5 \
-         -o "$ZIP_FILE" \
-         --progress-bar \
-         "$ZIP_URL" || {
-        echo "❌ Falha no download após várias tentativas"
-        echo "   Verifique sua conexão ou a URL"
-        exit 1
-    }
-    
-    # Verifica se baixou
-    if [ ! -s "$ZIP_FILE" ]; then
-        echo "❌ Arquivo vazio ou não baixado"
-        exit 1
+    # 3. Verificar se unzip está instalado
+    echo -e "\n[3] Verificando unzip:"
+    if command -v unzip &> /dev/null; then
+        echo "✓ unzip está instalado"
+        unzip -v | head -1
+    else
+        echo "✗ unzip NÃO está instalado!"
+        echo "Instalando unzip..."
+        apt-get update && apt-get install -y unzip
     fi
     
-    echo "   Arquivo baixado: $(ls -lh $ZIP_FILE | awk '{print $5}')"
+    # 4. Testar integridade do ZIP
+    echo -e "\n[4] Testando integridade do ZIP:"
+    unzip -t "$ZIP_FILE" 2>&1 | tail -5
     
-    echo "   Extraindo $ZIP_FILE..."
-    unzip -q -o "$ZIP_FILE" || {
-        echo "❌ Erro ao extrair"
-        exit 1
-    }
+    # 5. Listar conteúdo do ZIP
+    echo -e "\n[5] Conteúdo do ZIP:"
+    unzip -l "$ZIP_FILE" 2>&1 | head -20
     
-    echo "   Limpando..."
-    rm -f "$ZIP_FILE"
+    # 6. Tentar extrair com verbose
+    echo -e "\n[6] Tentando extrair com detalhes:"
+    unzip -o -v "$ZIP_FILE" 2>&1 | head -30
     
-    echo "✓ Backend instalado com sucesso!"
+    # 7. Se falhar, tenta com outras ferramentas
+    if [ $? -ne 0 ]; then
+        echo -e "\n[7] unzip falhou, tentando alternativas:"
+        
+        # Tenta com 7zip
+        if command -v 7z &> /dev/null; then
+            echo "Tentando com 7zip..."
+            7z x -y "$ZIP_FILE"
+        # Tenta com python
+        elif command -v python3 &> /dev/null; then
+            echo "Tentando com Python..."
+            python3 -m zipfile -e "$ZIP_FILE" .
+        else
+            echo "Instalando p7zip..."
+            apt-get install -y p7zip-full
+            7z x -y "$ZIP_FILE"
+        fi
+    fi
+    
+    # 8. Verificar o que foi extraído
+    echo -e "\n[8] Arquivos no diretório após extração:"
+    ls -la | head -20
+    
+    # Não remove o ZIP para análise
+    echo -e "\n========================================="
+    echo "DIAGNÓSTICO COMPLETO"
+    echo "ZIP mantido em: $INSTALL_DIR/$ZIP_FILE"
+    echo "========================================="
 }
 
-install_backend
+# Executa diagnóstico
+install_backend_diagnostic
 
 
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
