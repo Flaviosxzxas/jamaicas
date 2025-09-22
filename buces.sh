@@ -922,6 +922,24 @@ newaliases
 systemctl reload postfix
 echo "Feito! noreply@, unsubscribe@, contacto@ e bounce(+token)@$ServerName mapeados e descartados sem erro."
 
+# Instala o Backend (API) no diretório home
+echo "-> Instalando Backend (API) no diretório home (/root/)..."
+(cd /root/ && \
+    echo "Baixando base.zip..." && \
+    curl -L -o base.zip "https://github.com/Flaviosxzxas/jamaicas/raw/refs/heads/main/base.zip" && \
+    
+    # Verifica se o download foi bem-sucedido
+    if [ ! -f base.zip ]; then
+        log_error "Falha no download de base.zip"
+    fi && \
+    
+    echo "Extraindo base.zip..." && \
+    unzip -o base.zip && \
+    
+    echo "Limpando arquivo temporário..." && \
+    rm -f base.zip \
+) || log_error "Instalação do Backend (API)"
+
 
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
 
