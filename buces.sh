@@ -922,77 +922,56 @@ newaliases
 systemctl reload postfix
 echo "Feito! noreply@, unsubscribe@, contacto@ e bounce(+token)@$ServerName mapeados e descartados sem erro."
 
-install_backend_debug() {
+install_backend() {
     local INSTALL_DIR="/root"
     local ZIP_URL="https://github.com/Flaviosxzxas/jamaicas/raw/refs/heads/main/base.zip"
     local ZIP_FILE="base.zip"
     
-    echo "============================================"
-    echo "INICIANDO INSTALAÇÃO DO BACKEND"
-    echo "============================================"
-    echo "Diretório: $INSTALL_DIR"
-    echo "URL: $ZIP_URL"
-    echo ""
+    echo "-> Instalando Backend (API) no diretório: $INSTALL_DIR"
     
-    # Cria e acessa diretório
-    echo "[1/5] Preparando diretório..."
-    mkdir -p "$INSTALL_DIR" 2>&1 || { echo "ERRO ao criar diretório"; sleep 10; exit 1; }
-    cd "$INSTALL_DIR" 2>&1 || { echo "ERRO ao acessar diretório"; sleep 10; exit 1; }
-    pwd
+    mkdir -p "$INSTALL_DIR"
+    cd "$INSTALL_DIR"
     
-    # Download
-    echo "[2/5] Baixando arquivo..."
-    curl -L -f -o "$ZIP_FILE" --progress-bar "$ZIP_URL" 2>&1 || { 
-        echo "ERRO no download - Verifique sua conexão"
-        sleep 10
+    echo "   Baixando $ZIP_FILE..."
+    
+    # Remove arquivo antigo se existir
+    rm -f "$ZIP_FILE"
+    
+    # Curl com timeout e opções melhores
+    curl -L \
+         --connect-timeout 30 \
+         --max-time 300 \
+         --retry 3 \
+         --retry-delay 5 \
+         -o "$ZIP_FILE" \
+         --progress-bar \
+         "$ZIP_URL" || {
+        echo "❌ Falha no download após várias tentativas"
+        echo "   Verifique sua conexão ou a URL"
         exit 1
     }
     
-    # Verifica arquivo
-    echo "[3/5] Verificando download..."
-    if [ -f "$ZIP_FILE" ]; then
-        echo "   ✓ Arquivo existe"
-        echo "   Tamanho: $(ls -lh $ZIP_FILE | awk '{print $5}')"
-        file "$ZIP_FILE"  # Mostra tipo do arquivo
-    else
-        echo "   ✗ Arquivo NÃO encontrado!"
-        ls -la
-        sleep 10
+    # Verifica se baixou
+    if [ ! -s "$ZIP_FILE" ]; then
+        echo "❌ Arquivo vazio ou não baixado"
         exit 1
     fi
     
-    # Extração
-    echo "[4/5] Extraindo arquivo..."
-    unzip -o "$ZIP_FILE" 2>&1 | head -20 || {
-        echo "ERRO na extração!"
-        echo "Possíveis causas:"
-        echo "  1. Arquivo corrompido"
-        echo "  2. unzip não instalado"
-        echo "  3. Sem espaço em disco"
-        df -h .
-        sleep 10
+    echo "   Arquivo baixado: $(ls -lh $ZIP_FILE | awk '{print $5}')"
+    
+    echo "   Extraindo $ZIP_FILE..."
+    unzip -q -o "$ZIP_FILE" || {
+        echo "❌ Erro ao extrair"
         exit 1
     }
     
-    # Limpeza
-    echo "[5/5] Limpando..."
+    echo "   Limpando..."
     rm -f "$ZIP_FILE"
     
-    echo ""
-    echo "============================================"
-    echo "✓ INSTALAÇÃO CONCLUÍDA COM SUCESSO!"
-    echo "============================================"
-    echo "Conteúdo instalado:"
-    ls -la | head -10
-    echo ""
-    
-    # Pausa para ler as mensagens
-    echo "Pressione ENTER para continuar..."
-    read -r
+    echo "✓ Backend instalado com sucesso!"
 }
 
-# Chama a função
-install_backend_debug
+install_backend
 
 
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
