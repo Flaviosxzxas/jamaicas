@@ -416,6 +416,13 @@ EOF
 # Aplicar configurações
 
 echo "================================================= POSTFIX MASTER CF ================================================="
+
+# Remover entradas antigas se existirem
+sed -i '/^gmail-smtp/,/^[^[:space:]]/d' /etc/postfix/master.cf 2>/dev/null || true
+sed -i '/^yahoo-smtp/,/^[^[:space:]]/d' /etc/postfix/master.cf 2>/dev/null || true
+sed -i '/^outlook-smtp/,/^[^[:space:]]/d' /etc/postfix/master.cf 2>/dev/null || true
+
+# Adicionar as novas entradas
 cat >> /etc/postfix/master.cf <<'EOF'
 
 # Serviços específicos por provedor
