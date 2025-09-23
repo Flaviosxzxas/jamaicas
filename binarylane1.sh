@@ -1,29 +1,40 @@
-# ============================================
-#  Verificação de permissão de root
-# ============================================
+#!/bin/bash
+
+set -Eeuo pipefail
+trap 'echo "[ERRO] linha $LINENO: $BASH_COMMAND (status $?)" >&2' ERR
+
+echo "================================================= Verificação de permissão de root ================================================="
+
 if [ "$(id -u)" -ne 0 ]; then
   echo "Este script precisa ser executado como root."
   exit 1
+fi
+# ================================================
+# Correção: evitar duplicação de repositórios no Ubuntu 24.04+
+# ================================================
+if grep -qi "Ubuntu 24.04" /etc/os-release 2>/dev/null; then
+  echo "Detectado Ubuntu 24.04 — limpando duplicações de sources.list..."
+  # Se já existe o arquivo .sources, comentar o sources.list tradicional
+  if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+    sed -i 's/^\s*deb /# deb /g' /etc/apt/sources.list
+  fi
 fi
 
 export DEBIAN_FRONTEND=noninteractive
 
 is_ubuntu() { [ -f /etc/os-release ] && grep -qi ubuntu /etc/os-release; }
 
-# ============================================
-#  Verificação e instalação do PHP (CLI)
-# ============================================
-echo ">> Verificando se o PHP está instalado..."
+echo "================================================= Verificação e instalação do PHP (CLI) ================================================="
+
 if ! command -v php >/dev/null 2>&1; then
     echo ">> PHP não encontrado. Instalando..."
     apt-get update -y
 
-    # Caminho rápido: meta-pacote genérico
-    if apt-get install -y php-cli php-common; then
-        :
+    # Instalar Apache + PHP + módulos comuns
+    if apt-get install -y apache2 php php-cli php-common php-dev php-curl php-gd libapache2-mod-php php-mbstring; then
+        echo ">> PHP + Apache instalados com sucesso."
     else
-        echo ">> 'php-cli' indisponível. Tentando versões específicas..."
-        # tenta detectar versões disponíveis no repo e instalar a mais alta
+        echo ">> Falha na instalação genérica. Tentando versões específicas de PHP..."
         CANDIDATES="$(apt-cache search -n '^php[0-9]\.[0-9]-cli$' | awk '{print $1}' | sort -Vr)"
         OK=0
         for pkg in $CANDIDATES php8.3-cli php8.2-cli php8.1-cli php7.4-cli; do
@@ -34,11 +45,14 @@ if ! command -v php >/dev/null 2>&1; then
             apt-get install -y software-properties-common ca-certificates lsb-release || true
             add-apt-repository -y ppa:ondrej/php || true
             apt-get update -y
-            apt-get install -y php8.3-cli || apt-get install -y php8.2-cli || apt-get install -y php8.1-cli || apt-get install -y php7.4-cli || true
+            apt-get install -y apache2 php8.3-cli php8.3 php8.3-curl php8.3-gd php8.3-mbstring libapache2-mod-php8.3 || \
+            apt-get install -y apache2 php8.2-cli php8.2 php8.2-curl php8.2-gd php8.2-mbstring libapache2-mod-php8.2 || \
+            apt-get install -y apache2 php8.1-cli php8.1 php8.1-curl php8.1-gd php8.1-mbstring libapache2-mod-php8.1 || \
+            apt-get install -y apache2 php7.4-cli php7.4 php7.4-curl php7.4-gd php7.4-mbstring libapache2-mod-php7.4 || true
         fi
     fi
 
-    # Garante que /usr/bin/php aponte para o binário instalado via update-alternatives
+    # Garantir que /usr/bin/php aponte para o correto
     PHPPATH="$(command -v php || true)"
     if [ -n "$PHPPATH" ] && [ "$PHPPATH" != "/usr/bin/php" ]; then
         echo ">> Registrando ${PHPPATH} como alternativa de php..."
@@ -50,17 +64,13 @@ if ! command -v php >/dev/null 2>&1; then
     if command -v php >/dev/null 2>&1; then
         echo "OK: $(php -v | head -n 1)"
     else
-        echo "AVISO: não foi possível disponibilizar 'php'. O script seguirá mesmo assim."
+        echo "AVISO: não foi possível disponibilizar 'php'."
     fi
 else
     echo "OK: $(php -v | head -n 1)"
 fi
 
-# ============================================
-#  Atualização dos pacotes do sistema
-# ============================================
-echo ">> Atualizando pacotes..."
-apt-get update
+echo "================================================= Atualização dos pacotes ================================================="
 apt-get -y upgrade \
   -o Dpkg::Options::="--force-confdef" \
   -o Dpkg::Options::="--force-confold" \
@@ -69,14 +79,8 @@ apt-get -y upgrade \
     exit 1
   }
 
-# (Opcional) Após o upgrade, recalcule a versão do PHP do CLI se for usar em passos seguintes:
-# PHPV="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
-# echo "PHP CLI ativo: $PHPV"
+echo "================================================= Definir variáveis principais ================================================="
 
-
-# ============================================
-#  Definir variáveis principais
-# ============================================
 ServerName=$1
 CloudflareAPI=$2
 CloudflareEmail=$3
@@ -94,11 +98,12 @@ if [[ ! "$ServerName" =~ ^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
   exit 1
 fi
 
-# ============================================
-#  Variáveis derivadas
-# ============================================
+echo "================================================= Variáveis derivadas ================================================="
+
 Domain=$(echo "$ServerName" | awk -F. '{print $(NF-1)"."$NF}')
 DKIMSelector=$(echo "$ServerName" | awk -F[.:] '{print $1}')
+
+MailServerName="mail.$ServerName"
 
 if [ -z "$Domain" ] || [ -z "$DKIMSelector" ]; then
   echo "Erro: Não foi possível calcular o Domain ou DKIMSelector. Verifique o ServerName."
@@ -106,37 +111,27 @@ if [ -z "$Domain" ] || [ -z "$DKIMSelector" ]; then
 fi
 
 # Obter IP público
-ServerIP=$(curl -fsS https://api64.ipify.org)
+ServerIP=$(curl -4 -fsS https://api.ipify.org)
 if [ -z "$ServerIP" ]; then
   echo "Erro: Não foi possível obter o IP público."
   exit 1
 fi
 
-# ============================================
-#  Depuração inicial
-# ============================================
-echo "===== DEPURAÇÃO ====="
+echo "================================================= Depuração inicial ================================================="
+
 echo "ServerName: $ServerName"
 echo "CloudflareAPI: $CloudflareAPI"
 echo "CloudflareEmail: $CloudflareEmail"
 echo "Domain: $Domain"
 echo "DKIMSelector: $DKIMSelector"
 echo "ServerIP: $ServerIP"
-echo "======================"
 
-sleep 10
+echo "================================================= Hostname && SSL ================================================="
 
-echo "==================================================================== Hostname && SSL ===================================================================="
-
-# ============================================
-#  Instalar pacotes básicos
-# ============================================
 apt-get install -y wget curl jq python3-certbot-dns-cloudflare openssl
 
-# ============================================
-#  Configurar Node.js
-# ============================================
-echo "Configurando Node.js..."
+echo "================================================= Configurar Node.js ================================================="
+
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && echo "Node.js instalado com sucesso: versão $(node -v)" || {
@@ -167,9 +162,11 @@ mkdir -p /root/.secrets && chmod 0700 /root/.secrets/ && touch /root/.secrets/cl
 echo "dns_cloudflare_email = $CloudflareEmail
 dns_cloudflare_api_key = $CloudflareAPI" > /root/.secrets/cloudflare.cfg
 
-echo -e "127.0.0.1 localhost
-127.0.0.1 $ServerName
-$ServerIP $ServerName" > /etc/hosts
+cat <<EOF > /etc/hosts
+127.0.0.1   localhost
+$ServerIP   $ServerName
+$ServerIP   $MailServerName
+EOF
 
 echo -e "$ServerName" > /etc/hostname
 
@@ -179,28 +176,15 @@ certbot certonly --non-interactive --agree-tos --register-unsafely-without-email
   --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.cfg \
   --dns-cloudflare-propagation-seconds 60 --rsa-key-size 4096 -d "$ServerName"
 
-wait
+echo "================================================= Corrigir SyntaxWarning em cloudflare.py ================================================="
 
-# ============================================
-#  Corrigir SyntaxWarning em cloudflare.py
-# ============================================
-echo "Corrigindo SyntaxWarning no cloudflare.py..."
-# mantenha apenas:
 sed -i "s/self\.email is ''/self.email == ''/g" /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
 sed -i "s/self\.token is ''/self.token == ''/g"   /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
-# REMOVA esta linha:
-# sed -i "s/self.certtoken is None/self.certtoken == None/g" ...
-
 echo "Correção aplicada com sucesso em cloudflare.py."
-
-echo "==================================================================== DKIM ==============================================================================="
-
-
-# ============================================
-#  Instalar OpenDKIM
-# ============================================
-apt-get install -y opendkim opendkim-tools
 wait
+echo "================================================= DKIM ================================================="
+
+apt-get install -y opendkim opendkim-tools
 
 # Criação dos diretórios
 mkdir -p /etc/opendkim && mkdir -p /etc/opendkim/keys
@@ -212,7 +196,7 @@ chmod -R 750 /etc/opendkim/
 # /etc/default/opendkim
 cat <<EOF > /etc/default/opendkim
 RUNDIR=/run/opendkim
-SOCKET="inet:12301@127.0.0.1"
+SOCKET="inet:9982@127.0.0.1"
 USER=opendkim
 GROUP=opendkim
 PIDFILE=\$RUNDIR/\$NAME.pid
@@ -220,34 +204,26 @@ EOF
 
 # /etc/opendkim.conf
 cat <<EOF > /etc/opendkim.conf
-# /etc/opendkim.conf
 AutoRestart             Yes
 AutoRestartRate         10/1h
-UMask                   007
+UMask                   002
 Syslog                  yes
 SyslogSuccess           Yes
 LogWhy                  Yes
 
 Canonicalization        relaxed/relaxed
-Mode                    sv
-UserID                  opendkim:opendkim
-PidFile                 /run/opendkim/opendkim.pid
+Mode                    s
 SignatureAlgorithm      rsa-sha256
+OversignHeaders         From
+RequireSafeKeys         Yes
+UserID                  opendkim:opendkim
+PidFile                 /var/run/opendkim/opendkim.pid
 
-# Escopos e tabelas
 ExternalIgnoreList      refile:/etc/opendkim/TrustedHosts
 InternalHosts           refile:/etc/opendkim/TrustedHosts
 KeyTable                refile:/etc/opendkim/KeyTable
 SigningTable            refile:/etc/opendkim/SigningTable
-
-# Socket que casa com o Postfix
-Socket                  inet:12301@127.0.0.1
-
-# Segurança das chaves (pode deixar false se as permissões ainda não estiverem fechadas)
-RequireSafeKeys         false
-
-# (opcional) Se algum dia quiser testar oversign:
-# OversignHeaders       From, Date, Message-ID
+Socket                  inet:9982@127.0.0.1
 EOF
 
 # /etc/opendkim/TrustedHosts
@@ -255,20 +231,24 @@ cat <<EOF > /etc/opendkim/TrustedHosts
 127.0.0.1
 localhost
 $ServerName
-::1
+$MailServerName
 *.$Domain
 EOF
 
-# Gerar chaves DKIM
+# === DKIM por FQDN ===
+# cria pasta específica do host
+mkdir -p "/etc/opendkim/keys/$ServerName"
+
+# gera a chave (selector: mail) dentro da pasta do host
 opendkim-genkey -b 2048 -s mail -d "$ServerName" -D /etc/opendkim/keys/
+
+# dono e permissões (estritas no .private)
 chown opendkim:opendkim /etc/opendkim/keys/mail.private
 chmod 640 /etc/opendkim/keys/mail.private
 
-# KeyTable e SigningTable
+# KeyTable/SigningTable (sobrescreve corretamente)
 echo "mail._domainkey.${ServerName} ${ServerName}:mail:/etc/opendkim/keys/mail.private" > /etc/opendkim/KeyTable
 echo "*@${ServerName} mail._domainkey.${ServerName}" > /etc/opendkim/SigningTable
-
-chmod -R 750 /etc/opendkim/
 
 # Script para processar a chave DKIM
 DKIMFileCode=$(cat /etc/opendkim/keys/mail.txt)
@@ -286,192 +266,108 @@ EOF
 
 chmod 755 /root/dkimcode.sh
 
-echo "==================================================== POSTFIX ===================================================="
+echo "================================================= Atualização de pacotes ================================================="
 
-sleep 3
 
-# ============================================
-#  Atualização de pacotes
-# ============================================
-apt-get update
-apt-get upgrade -y
+# Tenta APT primeiro; se não houver, tenta venv + pip; como último recurso, pip do sistema.
+install_py_pkg() {
+  local pip_name="$1"    # ex.: dnspython
+  local apt_name="$2"    # ex.: python3-dnspython
+  local required="${3:-0}"
+  local ok=0
 
-# Desativar config automática do opendmarc
-echo "dbconfig-common dbconfig-common/dbconfig-install boolean false" | debconf-set-selections
-echo "opendmarc opendmarc/dbconfig-install boolean false" | debconf-set-selections
+  echo "==> Instalando ${pip_name} (APT -> venv -> pip)..."
+#apt-get update -y >/dev/null 2>&1 || true
 
-# Instalar dependências
-echo "Instalando python3-pip e dnspython..."
-apt-get install -y python3-pip
-pip3 install dnspython
-
-if [ $? -eq 0 ]; then
-  echo "python3-pip e dnspython instalados com sucesso!"
-else
-  echo "Erro ao instalar python3-pip ou dnspython."
-  exit 1
-fi
-
-# ============================================
-# Instalar dependências para gerar PDF protegido
-# ============================================
-echo "Instalando wkhtmltopdf, pdfkit e PyPDF2 para PDF protegido..."
-apt-get install -y wkhtmltopdf
-pip3 install pdfkit PyPDF2
-
-if [ $? -eq 0 ]; then
-    echo "Dependências de PDF instaladas com sucesso!"
-else
-    echo "Erro ao instalar dependências de PDF (wkhtmltopdf, pdfkit, PyPDF2)."
-    exit 1
-fi
-
-# ============================================
-#  Funções para corrigir permissões
-# ============================================
-fix_makedefs_symlink() {
-    local target_file="/usr/share/postfix/makedefs.out"
-    local symlink="/etc/postfix/makedefs.out"
-
-    if [ ! -L "$symlink" ]; then
-        echo "Criando symlink de $target_file para $symlink..."
-        ln -sf "$target_file" "$symlink"
+  # 1) APT
+  if apt-get install -y "${apt_name}"; then
+    echo "OK via APT: ${apt_name}"; ok=1
+  else
+    # 2) venv + pip
+    apt-get install -y python3-venv python3-pip >/dev/null 2>&1 || true
+    if python3 -m venv /opt/venv >/dev/null 2>&1; then
+      . /opt/venv/bin/activate
+      if pip install -q "${pip_name}" >/tmp/pip_${pip_name}_venv.log 2>&1; then
+        echo "OK via venv: ${pip_name} (em /opt/venv)"; ok=1
+      fi
+      deactivate || true
     fi
+
+    # 3) (opcional) permitir pip no sistema se ALLOW_PIP_BREAK=1
+    if [ "$ok" -eq 0 ] && [ "${ALLOW_PIP_BREAK:-0}" = "1" ]; then
+      if python3 -m pip install --break-system-packages -q "${pip_name}" >/tmp/pip_${pip_name}.log 2>&1; then
+        echo "OK via pip (--break-system-packages): ${pip_name}"; ok=1
+      fi
+    fi
+  fi
+
+  if [ "$ok" -eq 1 ]; then return 0; fi
+  echo "AVISO: não foi possível instalar ${pip_name}."
+  [ "$required" -eq 1 ] && exit 1 || return 0
 }
 
-fix_makedefs_permissions() {
-    local target_file="/usr/share/postfix/makedefs.out"
-    local symlink="/etc/postfix/makedefs.out"
+# Uso:
+install_py_pkg "dnspython" "python3-dnspython" 0
 
-    echo "Ajustando permissões do arquivo $target_file..."
-    if [ -f "$target_file" ]; then
-        chmod 644 "$target_file" || { echo "Erro ao ajustar permissões de $target_file."; exit 1; }
-        chown root:root "$target_file" || { echo "Erro ao ajustar dono de $target_file."; exit 1; }
-    fi
-
-    if [ -L "$symlink" ]; then
-        chmod 644 "$symlink" || { echo "Erro ao ajustar permissões do symlink $symlink."; exit 1; }
-        chown root:root "$symlink" || { echo "Erro ao ajustar dono do symlink $symlink."; exit 1; }
-    fi
-}
-
-# Instalar Postfix e outros
-DEBIAN_FRONTEND=noninteractive apt-get install -y postfix opendmarc pflogsumm
-wait
-
-fix_makedefs_symlink
-fix_makedefs_permissions
+echo "================================================= POSTFIX ================================================="
 
 # Configurações básicas do Postfix
 debconf-set-selections <<< "postfix postfix/mailname string '$ServerName'"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
 debconf-set-selections <<< "postfix postfix/destinations string 'localhost'"
 
+# Instalar Postfix e outros
+DEBIAN_FRONTEND=noninteractive apt-get install -y postfix pflogsumm
+
 echo -e "$ServerName OK" > /etc/postfix/access.recipients
 postmap /etc/postfix/access.recipients
 
-# ============================================
-#  Criar e configurar header_checks
-# ============================================
-create_header_checks() {
-    echo '/^[Rr]eceived: by .+? \(Postfix, from userid 0\)/ IGNORE' > /etc/postfix/header_checks
+# <<<--- ADICIONAR AQUI - LOGO APÓS A INSTALAÇÃO --->>>
+echo "================================================= CONFIGURANDO ALIASES BÁSICOS ================================================="
+cat > /etc/aliases <<'EOF'
+postmaster: root
+mailer-daemon: postmaster
+abuse: postmaster
+spam: postmaster
+root: /dev/null
+nobody: /dev/null
+www-data: /dev/null
+mail: /dev/null
+EOF
 
-    # Converter para formato Unix usando dos2unix
-    echo "Convertendo /etc/postfix/header_checks para formato Unix..."
-    dos2unix /etc/postfix/header_checks
+newaliases
+echo "✓ Aliases básicos configurados!"
 
-    echo "Conteúdo do arquivo /etc/postfix/header_checks:"
-    cat -A /etc/postfix/header_checks
-
-    postconf -e "header_checks = regexp:/etc/postfix/header_checks"
-}
-
-install_dos2unix() {
-    if ! command -v dos2unix &> /dev/null; then
-        echo "dos2unix não encontrado. Instalando..."
-        apt-get update
-        apt-get install -y dos2unix
-        if [ $? -ne 0 ]; then
-            echo "Erro ao instalar dos2unix."
-            exit 1
-        fi
-    fi
-}
-
-main_header_checks() {
-    install_dos2unix
-    create_header_checks
-
-    echo "Verificando erros específicos..."
-    # Caso precise de algo adicional aqui
-}
-
-# Criar diretório para autenticação do Postfix
-echo "Criando /var/spool/postfix/private..."
-mkdir -p /var/spool/postfix/private
-chown postfix:postfix /var/spool/postfix/private
-chmod 700 /var/spool/postfix/private
-
-# Verificar se o arquivo de autenticação existe
-if [ ! -f /var/spool/postfix/private/auth ]; then
-  echo "Criando arquivo de autenticação..."
-  touch /var/spool/postfix/private/auth
-  chown postfix:postfix /var/spool/postfix/private/auth
-  chmod 660 /var/spool/postfix/private/auth
-else
-  echo "Arquivo de autenticação já existe."
-fi
-
-main_header_checks
-
+echo "================================================= POSTFIX TRANSPORT ================================================="
+cat > /etc/postfix/transport <<'EOF'
+gmail.com       gmail-smtp:
+yahoo.com       yahoo-smtp:
+yahoo.com.br    yahoo-smtp:
+outlook.com     outlook-smtp:
+hotmail.com     outlook-smtp:
+live.com        outlook-smtp:
+msn.com         outlook-smtp:
+EOF
+echo "================================================= POSTFIX MAIN CF ================================================="
 # /etc/postfix/main.cf
 cat <<EOF > /etc/postfix/main.cf
-myhostname = $ServerName
+myhostname = $MailServerName
 smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
 biff = no
 readme_directory = no
 compatibility_level = 3.6
 
-header_checks = regexp:/etc/postfix/header_checks
+# Aliases locais (descartar bounce/noreply/etc via /etc/aliases)
 alias_maps = hash:/etc/aliases
 alias_database = hash:/etc/aliases
 
-# DKIM Settings
+# DKIM (OpenDKIM)
 milter_protocol = 6
 milter_default_action = accept
-smtpd_milters = inet:127.0.0.1:12301, inet:127.0.0.1:54321
-non_smtpd_milters = \$smtpd_milters
+smtpd_milters = inet:127.0.0.1:9982
+non_smtpd_milters = inet:127.0.0.1:9982
 
-# Restrições de destinatários
-smtpd_recipient_restrictions =
-    permit_mynetworks,
-    permit_sasl_authenticated,
-    check_recipient_access hash:/etc/postfix/access.recipients,
-    reject_non_fqdn_recipient,
-    reject_unknown_recipient_domain,
-    reject_unauth_destination,
-    reject_unlisted_recipient,
-    check_policy_service inet:127.0.0.1:10045
-    
-# Não deixe vazio (evita aceitar locais inexistentes)
-local_recipient_maps = proxy:unix:passwd.byname \$alias_maps
-
-smtpd_client_connection_rate_limit = 100
-smtpd_client_connection_count_limit = 50
-anvil_rate_time_unit = 60s
-
-message_size_limit = 10485760
-default_destination_concurrency_limit = 50
-maximal_queue_lifetime = 3d
-bounce_queue_lifetime = 3d
-smtp_destination_rate_delay = 1s
-
-smtpd_helo_required = yes
-smtpd_helo_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_invalid_helo_hostname, reject_non_fqdn_helo_hostname, reject_unknown_helo_hostname
-
-# TLS
-smtpd_tls_cert_file=/etc/letsencrypt/live/$ServerName/fullchain.pem
-smtpd_tls_key_file=/etc/letsencrypt/live/$ServerName/privkey.pem
+# TLS - entrada local (PHP -> Postfix em 127.0.0.1)
 smtpd_tls_security_level = may
 smtpd_tls_loglevel = 2
 smtpd_tls_received_header = yes
@@ -479,22 +375,20 @@ smtpd_tls_session_cache_timeout = 3600s
 smtpd_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
 smtpd_tls_ciphers = high
 smtpd_tls_exclude_ciphers = aNULL, MD5, 3DES
+smtpd_tls_cert_file = /etc/letsencrypt/live/$ServerName/fullchain.pem
+smtpd_tls_key_file  = /etc/letsencrypt/live/$ServerName/privkey.pem
 
+# TLS - saída (cliente SMTP)
 smtp_tls_security_level = may
-smtp_tls_loglevel = 2
+smtp_tls_loglevel = 0
 smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
 smtp_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
 smtp_tls_ciphers = high
 smtp_tls_exclude_ciphers = aNULL, MD5, 3DES
 
-smtpd_sasl_auth_enable = no
-#smtpd_sasl_type = dovecot
-#smtpd_sasl_path = private/auth
-#smtpd_sasl_security_options = noanonymous, noplaintext
-#smtpd_sasl_tls_security_options = noanonymous
-#smtpd_tls_auth_only = yes
-
-myorigin = localhost
+# Base
+mydomain = $ServerName
+myorigin = $ServerName
 mydestination = localhost
 relayhost =
 mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
@@ -502,367 +396,164 @@ mailbox_size_limit = 0
 recipient_delimiter = +
 inet_interfaces = loopback-only
 inet_protocols = ipv4
+
+maximal_queue_lifetime = 2h
+bounce_queue_lifetime = 1h
+
+# Otimizar timeouts
+smtp_connect_timeout = 30s
+smtp_helo_timeout = 30s
+smtp_mail_timeout = 30s
+smtp_rcpt_timeout = 30s
+smtp_data_done_timeout = 120s
+
+# Rate limiting por transporte
+transport_maps = hash:/etc/postfix/transport
+
+default_destination_concurrency_limit = 10
+default_destination_rate_delay = 1s
 EOF
+# Aplicar configurações
+
+echo "================================================= POSTFIX MASTER CF ================================================="
+
+# Remover entradas antigas se existirem
+sed -i '/^gmail-smtp/,/^[^[:space:]]/d' /etc/postfix/master.cf 2>/dev/null || true
+sed -i '/^yahoo-smtp/,/^[^[:space:]]/d' /etc/postfix/master.cf 2>/dev/null || true
+sed -i '/^outlook-smtp/,/^[^[:space:]]/d' /etc/postfix/master.cf 2>/dev/null || true
+
+# Adicionar as novas entradas
+cat >> /etc/postfix/master.cf <<'EOF'
+
+# Serviços específicos por provedor
+gmail-smtp    unix  -       -       n       -       -       smtp
+    -o smtp_destination_concurrency_limit=5
+    -o smtp_destination_rate_delay=2s
+
+yahoo-smtp    unix  -       -       n       -       -       smtp
+    -o smtp_destination_concurrency_limit=3
+    -o smtp_destination_rate_delay=3s
+
+outlook-smtp  unix  -       -       n       -       -       smtp
+    -o smtp_destination_concurrency_limit=8
+    -o smtp_destination_rate_delay=1s
+EOF
+
+postmap /etc/postfix/transport
+systemctl restart postfix
+
+echo "✓ Postfix configurado com rate limiting por provedor!"
+echo "================================================= POSTFIX ================================================="
 
 # Salvar variáveis antes de instalar dependências
 ORIGINAL_VARS=$(declare -p ServerName CloudflareAPI CloudflareEmail Domain DKIMSelector ServerIP)
 
-# === MAIL.LOG via rsyslog ===
-apt-get update -y
+
+# === MAIL.LOG OTIMIZADO PARA ENVIO EM MASSA ===
+echo "Configurando logs otimizados para envio em massa..."
+
 apt-get install -y rsyslog logrotate
 
+# Backup da configuração atual
+cp /etc/rsyslog.conf /etc/rsyslog.conf.backup.$(date +%Y%m%d)
+
+# Configuração otimizada para alto volume
 cat >/etc/rsyslog.d/49-mail.conf <<'EOF'
-mail.*   -/var/log/mail.log
+# Log mail messages with optimizations for high volume
+# Use async writing and reduce sync frequency
+mail.*                          -/var/log/mail.log
+
+# Optimize for high volume (buffer writes)
+$ActionFileDefaultTemplate RSYSLOG_TraditionalFileFormat
+$ActionFileEnableSync off
+$MainMsgQueueSize 100000
+$ActionQueueSize 100000
+
+# Stop processing mail messages (don't duplicate in syslog)
 & stop
 EOF
 
-systemctl enable --now rsyslog
-systemctl restart rsyslog
-systemctl restart postfix
+# Criar diretório de logs
+mkdir -p /var/log
 
-logger -p mail.info "postfix: teste de log (rsyslog ativo)"
+# Permissões otimizadas
+chown root:root /var/log
+chmod 755 /var/log
+touch /var/log/mail.log
+chown syslog:adm /var/log/mail.log
+chmod 0640 /var/log/mail.log
 
-# ============================================
-#  Instalar e usar cpanminus para módulos Perl
-# ============================================
-# Dependências de compilação e Perl extras
-apt-get install -y build-essential make gcc libssl-dev libperl-dev \
-    libnet-dns-perl libio-multiplex-perl libnet-server-perl wget unzip libidn2-0-dev cpanminus
-
-export PERL_MM_USE_DEFAULT=1
-export PERL_AUTOINSTALL=--defaultdeps
-
-# Verificar e instalar módulos Perl via cpanminus
-check_and_install_perl_module() {
-    local module_name=$1
-    if perl -M"$module_name" -e '1' 2>/dev/null; then
-        echo "Módulo Perl $module_name já instalado."
-    else
-        echo "Módulo Perl $module_name não encontrado. Instalando..."
-        cpanm --notest "$module_name" || { echo "Erro ao instalar $module_name via cpanminus."; exit 1; }
-    fi
-}
-
-perl_modules=("Net::Server::Daemonize" "Net::Server::Multiplex" "Net::Server::PreFork" "Net::DNS" "IO::Multiplex")
-for module in "${perl_modules[@]}"; do
-    check_and_install_perl_module "$module"
-done
-
-# ============================================
-#  Instalar Postfwd
-# ============================================
-if [ ! -d "/opt/postfwd" ]; then
-    echo "Baixando e instalando o Postfwd..."
-    cd /tmp || { echo "Erro ao acessar /tmp."; exit 1; }
-    wget https://github.com/postfwd/postfwd/archive/master.zip || { echo "Erro ao baixar o Postfwd."; exit 1; }
-    unzip master.zip || { echo "Erro ao descompactar o Postfwd."; exit 1; }
-    mv postfwd-master /opt/postfwd || { echo "Erro ao mover o Postfwd."; exit 1; }
-    echo "Postfwd instalado com sucesso."
-else
-    echo "Pasta /opt/postfwd já existe, assumindo Postfwd instalado."
-fi
-
-eval "$ORIGINAL_VARS"
-
-# ============================================
-#  Criar conf do Postfwd
-# ============================================
-mkdir -p /opt/postfwd/etc
-if [ ! -f "/opt/postfwd/etc/postfwd.cf" ]; then
-    cat <<EOF > /opt/postfwd/etc/postfwd.cf
-#######################################################
-# Regras de Controle de Limites por Servidor
-#######################################################
-# KingHost
-id=limit-kinghost
-pattern=recipient mx=.*kinghost.net
-action=rate(global/300/3600) defer_if_permit "Limite de 300 e-mails por hora atingido para KingHost."
-
-# UOL Host
-id=limit-uolhost
-pattern=recipient mx=.*uhserver
-action=rate(global/300/3600) defer_if_permit "Limite de 300 e-mails por hora atingido para UOL Host."
-
-# LocaWeb
-id=limit-locaweb
-pattern=recipient mx=.*locaweb.com.br
-action=rate(global/500/3600) defer_if_permit "Limite de 500 e-mails por hora atingido para LocaWeb."
-
-# Yahoo
-id=limit-yahoo
-pattern=recipient mx=.*yahoo.com
-action=rate(global/150/3600) defer_if_permit "Limite de 150 e-mails por hora atingido para Yahoo."
-
-# Mandic
-id=limit-mandic
-pattern=recipient mx=.*mandic.com.br
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Mandic."
-
-# Titan
-id=limit-titan
-pattern=recipient mx=.*titan.email
-action=rate(global/500/3600) defer_if_permit "Limite de 500 e-mails por hora atingido para Titan."
-
-# Google
-id=limit-google
-pattern=recipient mx=.*google
-action=rate(global/2000/3600) defer_if_permit "Limite de 2000 e-mails por hora atingido para Google."
-
-# Hotmail
-id=limit-hotmail
-pattern=recipient mx=.*hotmail.com
-action=rate(global/1000/86400) defer_if_permit "Limite de 1000 e-mails por dia atingido para Hotmail."
-
-# Office 365
-id=limit-office365
-pattern=recipient mx=.*outlook.com
-action=rate(global/2000/3600) defer_if_permit "Limite de 2000 e-mails por hora atingido para Office 365."
-
-# Secureserver (GoDaddy)
-id=limit-secureserver
-pattern=recipient mx=.*secureserver.net
-action=rate(global/300/3600) defer_if_permit "Limite de 300 e-mails por hora atingido para GoDaddy."
-
-# Zimbra
-id=limit-zimbra
-pattern=recipient mx=.*zimbra
-action=rate(global/400/3600) defer_if_permit "Limite de 400 e-mails por hora atingido para Zimbra."
-
-# Argentina: Fibertel
-id=limit-fibertel
-pattern=recipient mx=.*fibertel.com.ar
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Fibertel."
-
-# Speedy
-id=limit-speedy
-pattern=recipient mx=.*speedy.com.ar
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Speedy."
-
-# Personal (Arnet)
-id=limit-personal
-pattern=recipient mx=.*personal.com.ar
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Personal Arnet."
-
-# Telecom
-id=limit-telecom
-pattern=recipient mx=.*telecom.com.ar
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Telecom."
-
-# Claro
-id=limit-claro
-pattern=recipient mx=.*claro.com.ar
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Claro."
-
-# México: Telmex
-id=limit-telmex
-pattern=recipient mx=.*prodigy.net.mx
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Telmex."
-
-# Axtel
-id=limit-axtel
-pattern=recipient mx=.*axtel.net
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Axtel."
-
-# Izzi
-id=limit-izzi
-pattern=recipient mx=.*izzi.net.mx
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Izzi Telecom."
-
-# Megacable
-id=limit-megacable
-pattern=recipient mx=.*megacable.com.mx
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Megacable."
-
-# TotalPlay
-id=limit-totalplay
-pattern=recipient mx=.*totalplay.net.mx
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para TotalPlay."
-
-# Telcel
-id=limit-telcel
-pattern=recipient mx=.*telcel.net
-action=rate(global/200/3600) defer_if_permit "Limite de 200 e-mails por hora atingido para Telcel."
-
-# Outros (sem limite)
-id=no-limit
-pattern=recipient mx=.*
-action=permit
-EOF
-else
-    echo "Arquivo /opt/postfwd/etc/postfwd.cf já existe, pulando."
-fi
-
-# ============================================
-#  Script de inicialização do Postfwd
-# ============================================
-mkdir -p /opt/postfwd/bin
-cat <<'EOF' > /opt/postfwd/bin/postfwd-script.sh
-#!/bin/sh
-#
-# Startscript for the postfwd daemon
-
-PATH=/bin:/usr/bin:/usr/local/bin
-
-PFWCMD=/opt/postfwd/sbin/postfwd3
-PFWCFG=/opt/postfwd/etc/postfwd.cf
-PFWPID=/var/tmp/postfwd3-master.pid
-
-PFWUSER=postfix
-PFWGROUP=postfix
-PFWINET=127.0.0.1
-PFWPORT=10045
-
-PFWARG="--shortlog --summary=600 --cache=600 --cache-rbl-timeout=3600 --cleanup-requests=1200 --cleanup-rbls=1800 --cleanup-rates=1200"
-
-P1="`basename ${PFWCMD}`"
-case "$1" in
- start*)
-   [ /var/tmp/postfwd3-master.pid ] && rm -Rf /var/tmp/postfwd3-master.pid
-   echo "Starting ${P1}..."
-   ${PFWCMD} ${PFWARG} --daemon --file=${PFWCFG} --interface=${PFWINET} --port=${PFWPORT} --user=${PFWUSER} --group=${PFWGROUP} --pidfile=${PFWPID}
-   ;;
-
- debug*)
-   echo "Starting ${P1} in debug mode..."
-   ${PFWCMD} ${PFWARG} -vv --daemon --file=${PFWCFG} --interface=${PFWINET} --port=${PFWPORT} --user=${PFWUSER} --group=${PFWGROUP} --pidfile=${PFWPID}
-   ;;
-
- stop*)
-   ${PFWCMD} --interface=${PFWINET} --port=${PFWPORT} --pidfile=${PFWPID} --kill
-   ;;
-
- reload*)
-   ${PFWCMD} --interface=${PFWINET} --port=${PFWPORT} --pidfile=${PFWPID} -- reload
-   ;;
-
- restart*)
-   $0 stop
-   sleep 4
-   $0 start
-   ;;
-
- *)
-   echo "Unknown argument \"$1\"" >&2
-   echo "Usage: `basename $0` {start|stop|debug|reload|restart}"
-   exit 1
-   ;;
-esac
-exit $?
-EOF
-
-chmod +x /opt/postfwd/bin/postfwd-script.sh
-ln -sf /opt/postfwd/bin/postfwd-script.sh /etc/init.d/postfwd
-
-# Reiniciar serviços
-echo "Iniciando o Postfwd..."
-/etc/init.d/postfwd start || { echo "Erro ao iniciar o Postfwd."; exit 1; }
-echo "Reiniciando o Postfix..."
-systemctl restart postfix || { echo "Erro ao reiniciar Postfix."; exit 1; }
-
-echo "==================================================== OpenDMARC ===================================================="
-
-# ============================================
-#  Criar diretórios OpenDMARC
-# ============================================
-echo "[OpenDMARC] Criando diretórios..."
-mkdir -p /run/opendmarc /etc/opendmarc /var/log/opendmarc /var/lib/opendmarc
-chown opendmarc:opendmarc /run/opendmarc /etc/opendmarc /var/log/opendmarc /var/lib/opendmarc
-chmod 750 /run/opendmarc /etc/opendmarc /var/log/opendmarc /var/lib/opendmarc
-
-# /etc/opendmarc.conf
-preencher_opendmarc_conf() {
-    local opendmarc_conf="/etc/opendmarc.conf"
-
-    if [[ ! -f "$opendmarc_conf" ]]; then
-        echo "[OpenDMARC] Criando $opendmarc_conf..."
-        touch "$opendmarc_conf"
-    fi
-
-    local configuracoes=(
-        "Syslog true"
-        "Socket inet:54321@127.0.0.1"
-        "PidFile /run/opendmarc/opendmarc.pid"
-        "AuthservID OpenDMARC"
-        "IgnoreHosts /etc/opendmarc/ignore.hosts"
-        "RejectFailures false"
-        "TrustedAuthservIDs ${ServerName}"
-        "HistoryFile /var/lib/opendmarc/opendmarc.dat"
-    )
-
-    echo "[OpenDMARC] Preenchendo $opendmarc_conf..."
-    for cfg in "${configuracoes[@]}"; do
-        if ! grep -q "^${cfg//\//\\/}" "$opendmarc_conf"; then
-            echo "$cfg" >> "$opendmarc_conf"
+# Rotação otimizada para alto volume
+cat >/etc/logrotate.d/mail-log <<'EOF'
+/var/log/mail.log {
+    hourly
+    missingok
+    rotate 48
+    compress
+    delaycompress
+    notifempty
+    create 0640 syslog adm
+    size 100M
+    sharedscripts
+    postrotate
+        if systemctl is-active rsyslog >/dev/null 2>&1; then
+            systemctl kill -s HUP rsyslog.service
         fi
-    done
+    endscript
+}
+EOF
 
-    chown opendmarc:opendmarc "$opendmarc_conf"
-    chmod 644 "$opendmarc_conf"
+# Configurar rsyslog para performance
+cat >>/etc/rsyslog.conf <<'EOF'
+
+# Optimizations for high volume mail logging
+$WorkDirectory /var/spool/rsyslog
+$ActionQueueFileName mailqueue
+$ActionQueueMaxDiskSpace 1g
+$ActionQueueSaveOnShutdown on
+$ActionQueueType LinkedList
+$ActionResumeRetryCount -1
+EOF
+
+# Testar e reiniciar
+rsyslogd -N1 && echo "✓ Configuração rsyslog válida" || echo "✗ Erro na configuração rsyslog"
+
+systemctl enable rsyslog
+systemctl restart rsyslog
+
+echo "✓ Logs otimizados para envio em massa configurados!"
+
+# Função de análise otimizada
+create_optimized_mail_analysis() {
+    cat >/usr/local/bin/mail-stats <<'EOF'
+#!/bin/bash
+echo "=== ESTATÍSTICAS DE EMAIL (OTIMIZADO) ==="
+
+# Use parallel processing for large logs
+LOG_FILE="/var/log/mail.log"
+
+if [ -f "$LOG_FILE" ]; then
+    echo "Emails hoje: $(grep "$(date +%b\ %d)" "$LOG_FILE" 2>/dev/null | wc -l)"
+    echo "Emails enviados: $(grep -c "status=sent" "$LOG_FILE" 2>/dev/null)"
+    echo "Emails rejeitados: $(grep -c "rejected\|bounced" "$LOG_FILE" 2>/dev/null)"
+    echo "Emails com DKIM: $(grep -c "DKIM" "$LOG_FILE" 2>/dev/null)"
+    
+    echo ""
+    echo "Taxa de entrega última hora:"
+    LAST_HOUR=$(date -d '1 hour ago' +%H)
+    SENT_LAST_HOUR=$(grep "$(date +%b\ %d\ $LAST_HOUR)" "$LOG_FILE" | grep -c "status=sent" 2>/dev/null)
+    echo "Enviados: $SENT_LAST_HOUR emails/hora"
+else
+    echo "Log file não encontrado"
+fi
+EOF
+    chmod +x /usr/local/bin/mail-stats
+    echo "✓ Script de análise otimizado criado"
 }
 
-preencher_opendmarc_conf
+create_optimized_mail_analysis
 
-# /etc/opendmarc/ignore.hosts
-touch /etc/opendmarc/ignore.hosts
-if ! grep -q "127.0.0.1" /etc/opendmarc/ignore.hosts; then
-    echo "127.0.0.1" >> /etc/opendmarc/ignore.hosts
-fi
-if ! grep -q "::1" /etc/opendmarc/ignore.hosts; then
-    echo "::1" >> /etc/opendmarc/ignore.hosts
-fi
-chown opendmarc:opendmarc /etc/opendmarc/ignore.hosts
-chmod 644 /etc/opendmarc/ignore.hosts
-
-# Arquivo de histórico
-touch /var/lib/opendmarc/opendmarc.dat
-chown opendmarc:opendmarc /var/lib/opendmarc/opendmarc.dat
-chmod 644 /var/lib/opendmarc/opendmarc.dat
-
-rm -f /run/opendmarc/opendmarc.pid
-
-echo "[OpenDKIM] Reiniciando OpenDKIM..."
-systemctl enable opendkim >/dev/null 2>&1 || true
-systemctl restart opendkim
-if systemctl is-active --quiet opendkim; then
-    echo "[OpenDKIM] OpenDKIM reiniciado com sucesso."
-else
-    echo "[OpenDKIM] Falha ao reiniciar OpenDKIM."
-fi
-
-echo "[OpenDMARC] Reiniciando OpenDMARC..."
-systemctl enable opendmarc >/dev/null 2>&1 || true
-systemctl restart opendmarc
-if systemctl is-active --quiet opendmarc; then
-    echo "[OpenDMARC] OpenDMARC reiniciado com sucesso."
-else
-    echo "[OpenDMARC] Falha ao reiniciar OpenDMARC."
-fi
-
-echo "[Postfix] Ajustando dependência systemd (DKIM/DMARC antes do Postfix)..."
-mkdir -p /etc/systemd/system/postfix.service.d
-cat >/etc/systemd/system/postfix.service.d/override.conf <<'EOF'
-[Unit]
-After=opendkim.service opendmarc.service
-Requires=opendkim.service opendmarc.service
-EOF
-systemctl daemon-reload
-
-# (garanta no seu main.cf:)
-# milter_protocol = 6
-# milter_default_action = accept
-# smtpd_milters = inet:127.0.0.1:12301, inet:127.0.0.1:54321
-# non_smtpd_milters = $smtpd_milters
-
-systemctl enable postfix >/dev/null 2>&1 || true
-systemctl restart postfix
-
-# sanity check (opcional)
-systemctl is-active --quiet postfix && echo "[Postfix] Postfix ativo."
-systemctl show postfix -p After -p Requires
-
-
-
-echo "==================================================== CLOUDFLARE ===================================================="
+echo "================================================= CLOUDFLARE ================================================="
 
 echo "===== DEPURAÇÃO: ANTES DE CONFIGURAÇÃO CLOUDFLARE ====="
 echo "ServerName: $ServerName"
@@ -874,12 +565,10 @@ echo "ServerIP: $ServerIP"
 
 # Instalar jq (caso não exista)
 if ! command -v jq &> /dev/null; then
-  apt-get update
   apt-get install -y jq
 fi
 
 DKIMCode=$(/root/dkimcode.sh)
-sleep 5
 
 echo "===== DEPURAÇÃO: ANTES DE OBTER ZONA CLOUDFLARE ====="
 echo "DKIMCode: $DKIMCode"
@@ -919,10 +608,19 @@ create_or_update_record() {
   local record_priority=$4
   local record_proxied=false
 
+  # Definir TTL conforme tipo de registro
+  case "$record_type" in
+    MX)  record_ttl=3600 ;;     # 1h
+    TXT) record_ttl=3600 ;;     # 1h (SPF, DKIM, DMARC)
+    A)   record_ttl=1800 ;;     # 30min a 1h para IPs
+    *)   record_ttl=3600 ;;     # Padrão
+  esac
+
   echo "===== DEPURAÇÃO: ANTES DE OBTER DETALHES DO REGISTRO ====="
   echo "RecordName: $record_name"
   echo "RecordType: $record_type"
-
+  echo "TTL definido: $record_ttl"
+  
   # Detalhes do registro existente
   local response
   response=$(get_record_details "$record_name" "$record_type")
@@ -994,74 +692,13 @@ DKIMCode=$(echo "$DKIMCode" | tr -d '\n' | tr -s ' ')
 EscapedDKIMCode=$(printf '%s' "$DKIMCode" | sed 's/\"/\\\"/g')
 
 create_or_update_record "$ServerName" "A" "$ServerIP" ""
-create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP -all\"" ""
-#create_or_update_record "$ServerName" "TXT" "\"v=spf1 a:$ServerName -all\"" ""
-#create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP a:$ServerName -all\"" ""
-#create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP a:$ServerName include:spf.antispamcloud.com include:spf.sendinblue.com include:_spf.mailerlite.com include:emsd1.com include:servers.mcsv.net include:spf.fromdoppler.com -all\"" ""
-#create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP a:$ServerName include:spf.antispamcloud.com -all\"" ""
-create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=reject; rua=mailto:dmarc-reports@$ServerName; ruf=mailto:dmarc-reports@$ServerName; sp=reject; adkim=s; aspf=s\"" ""
+create_or_update_record "$MailServerName" "A" "$ServerIP" ""
+create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP ~all\"" ""
+create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=none; rua=mailto:dmarc-reports@$ServerName; ruf=mailto:dmarc-reports@$ServerName; sp=none; adkim=s; aspf=s\"" ""
 create_or_update_record "mail._domainkey.$ServerName" "TXT" "\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\"" ""
-create_or_update_record "$ServerName" "MX" "$ServerName" "10"
+create_or_update_record "$ServerName" "MX" "$MailServerName" "10"
+echo "================================================= APPLICATION ================================================="
 
-# ==================================================== APPLICATION ====================================================
-export DEBIAN_FRONTEND=noninteractive
-set -euo pipefail
-
-# ---------- Apache/PHP base + cURL (binário e extensão PHP) ----------
-echo ">> Instalando base do Apache/PHP e certificados…"
-apt-get update -y
-apt-get install -y \
-  apache2 php php-cli php-common php-dev php-gd libapache2-mod-php php-mbstring \
-  curl ca-certificates
-
-# Garante cadeia de certificados atualizada (HTTPS)
-update-ca-certificates || true
-
-# Descobre a versão do PHP usada pelo CLI (ex.: 8.3)
-PHPV="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
-
-echo ">> Instalando php-curl para o PHP CLI ($PHPV)…"
-if ! dpkg -s "php${PHPV}-curl" >/dev/null 2>&1; then
-  apt-get install -y "php${PHPV}-curl" || apt-get install -y php-curl
-fi
-
-echo ">> Habilitando módulo curl no PHP CLI…"
-if command -v phpenmod >/dev/null 2>&1; then
-  phpenmod -v "$PHPV" -s cli curl 2>/dev/null || \
-  phpenmod -v "$PHPV"      curl 2>/dev/null || \
-  phpenmod                 curl             || true
-fi
-
-echo ">> Reiniciando serviços do PHP/Apache (se existirem)…"
-if command -v systemctl >/dev/null 2>&1; then
-  systemctl enable apache2 >/dev/null 2>&1 || true
-  systemctl restart apache2 2>/dev/null    || true
-  systemctl restart "php${PHPV}-fpm" 2>/dev/null || true
-fi
-
-# Debug curto (opcional)
-php -v
-php -r 'echo "curl_loaded=", (extension_loaded("curl")?"yes":"no"), " curl_init=", (function_exists("curl_init")?"yes":"no"), PHP_EOL;'
-
-echo ">> Validando cURL no PHP CLI…"
-STRICT_CURL="${STRICT_CURL:-1}"
-if php -r 'exit(extension_loaded("curl") && function_exists("curl_init") ? 0 : 1);'; then
-  echo "OK: php-curl ativo no CLI."
-else
-  echo "⚠️ AVISO: php-curl NÃO está carregado no CLI."
-  if [ "$STRICT_CURL" = "1" ]; then
-    echo "Abortando para evitar falhas no shortener."
-    exit 2
-  else
-    echo "Prosseguindo mesmo assim (modo tolerante)…"
-  fi
-fi
-
-echo ">> Teste rápido:"
-php -r 'echo "curl_init? ", (function_exists("curl_init")?"SIM":"NAO"), PHP_EOL;'
-
-
-# ---------- Webroot mínimo ----------
 # Verificar se /var/www/html existe
 if [ ! -d "/var/www/html" ]; then
     echo "Pasta /var/www/html não existe."
@@ -1070,12 +707,35 @@ fi
 
 rm -f /var/www/html/index.html
 
-cat <<EOF > /var/www/html/index.php
+cat <<'EOF' > /var/www/html/index.php
 <?php
-header('HTTP/1.0 403 Forbidden');
-http_response_code(401);
-exit();
+function generateRandom($min, $max) {
+    $characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    $length = rand($min, $max);
+    $charactersLength = strlen($characters);
+    $randomString = '';
+
+    for ($i = 0; $i < $length; $i++) {
+        $randomString .= $characters[rand(0, $charactersLength - 1)];
+    }
+
+    return $randomString;
+}
 ?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title><?php echo generateRandom(2, 10);?></title>
+    <link rel="icon" href="data:,">
+    <p style="display: none;">
+       <?php echo generateRandom(2, 10);?>
+    </p>
+</head>
+<body>
+</body>
+</html>
 EOF
 
 # -----------------------------------------------------------
@@ -1184,11 +844,8 @@ chmod 644 /var/www/html/unsubscribe.php
 # (Opcional) Reiniciar Apache
 systemctl restart apache2 || true
 
+echo "================================================= Habilitar SSL no Apache e redirecionamento ================================================="
 
-# ============================================
-#  Habilitar SSL no Apache e redirecionamento
-# ============================================
-echo "Habilitando SSL e Rewrite no Apache..."
 a2enmod ssl
 a2enmod rewrite
 
@@ -1230,161 +887,95 @@ EOF
 a2ensite "ssl-$ServerName"
 systemctl reload apache2
 
-# === TLS: usar Let’s Encrypt se existir; senão snakeoil (fallback) ===
-LE_CERT="/etc/letsencrypt/live/$ServerName/fullchain.pem"
-LE_KEY="/etc/letsencrypt/live/$ServerName/privkey.pem"
+echo "================================================= APPLICATION ================================================="
+# ============================================
+#  CRIAR E DESCARTAR noreply@$ServerName, unsubscribe@$ServerName, contato@$ServerName
+# ============================================
+echo "================================================= Configurando noreply@$ServerName, unsubscribe@$ServerName e contacto@$ServerName... ================================================="
 
-TLS_CERT="$LE_CERT"
-TLS_KEY="$LE_KEY"
+# Ajusta apenas para um valor explícito, sem $virtual_alias_maps
+# Ajusta apenas para um valor explícito
+postconf -e "virtual_alias_domains = $ServerName"
+postconf -e "virtual_alias_maps = hash:/etc/postfix/virtual"
+postconf -e "local_recipient_maps="
 
-if [ ! -s "$LE_CERT" ] || [ ! -s "$LE_KEY" ]; then
-  echo "[TLS] Let's Encrypt não encontrado; aplicando snakeoil temporário."
-  apt-get install -y ssl-cert >/dev/null 2>&1 || true
-  adduser postfix ssl-cert >/dev/null 2>&1 || true
-  TLS_CERT="/etc/ssl/certs/ssl-cert-snakeoil.pem"
-  TLS_KEY="/etc/ssl/private/ssl-cert-snakeoil.key"
-fi
+[ -f /etc/postfix/virtual ] || touch /etc/postfix/virtual
 
-# Postfix: aplica os caminhos efetivos
-postconf -e "smtpd_tls_cert_file=$TLS_CERT"
-postconf -e "smtpd_tls_key_file=$TLS_KEY"
+# noreply
+grep -q "^noreply@$ServerName[[:space:]]" /etc/postfix/virtual || \
+  echo "noreply@$ServerName   noreply" >> /etc/postfix/virtual
 
-# Apache: ajusta o vhost para o mesmo par de arquivos e recarrega
-if [ -f "/etc/apache2/sites-available/ssl-$ServerName.conf" ]; then
-  sed -i "s#^\s*SSLCertificateFile .*#    SSLCertificateFile $TLS_CERT#" "/etc/apache2/sites-available/ssl-$ServerName.conf"
-  sed -i "s#^\s*SSLCertificateKeyFile .*#    SSLCertificateKeyFile $TLS_KEY#" "/etc/apache2/sites-available/ssl-$ServerName.conf"
-  systemctl reload apache2 || true
-fi
+# unsubscribe
+grep -q "^unsubscribe@$ServerName[[:space:]]" /etc/postfix/virtual || \
+  echo "unsubscribe@$ServerName   unsubscribe" >> /etc/postfix/virtual
 
-# Recarrega Postfix (sem travar o script se demorar)
-systemctl reload postfix || systemctl restart postfix || true
+# contacto
+grep -q "^contacto@$ServerName[[:space:]]" /etc/postfix/virtual || \
+  echo "contacto@$ServerName   contacto" >> /etc/postfix/virtual
 
-# Log curto de verificação
-echo "[health] TLS em uso no Postfix:"
-postconf -n | grep -E '^smtpd_tls_(cert|key)_file' || true
+# bounce  (ESSENCIAL para capturar bounce+token@)
+grep -q "^bounce@$ServerName[[:space:]]" /etc/postfix/virtual || \
+  echo "bounce@$ServerName   bounce" >> /etc/postfix/virtual
 
+postmap /etc/postfix/virtual
 
-# ================== APPLICATION: endereços de função (outbound-only) ==================
-# Destinos padrão (pode sobrescrever antes de chamar este bloco)
-POSTMASTER_DEST="${POSTMASTER_DEST:-root}"   # ou "voce@seu-mail.com"
-SUPPORT_DEST="${SUPPORT_DEST:-root}"        # ou "atendimento@seu-mail.com"
-DESCARTAR_NOREPLY=${DESCARTAR_NOREPLY:-true}
+# /etc/aliases -> descartar localmente
+grep -q "^noreply:" /etc/aliases     || echo "noreply: /dev/null" >> /etc/aliases
+grep -q "^unsubscribe:" /etc/aliases || echo "unsubscribe: /dev/null" >> /etc/aliases
+grep -q "^contacto:" /etc/aliases    || echo "contacto: /dev/null" >> /etc/aliases
+grep -q "^bounce:" /etc/aliases      || echo "bounce: /dev/null" >> /etc/aliases
 
-add_alias() {
-  local a="$1" b="$2"
-  grep -qiE "^\s*${a}:" /etc/aliases 2>/dev/null || echo "${a}: ${b}" >> /etc/aliases
-}
-
-echo "Configurando aliases locais (outbound-only) para $ServerName..."
-
-# NADA de virtual_* (fora em modo só envio)
-# postconf -X virtual_alias_domains || true
-# postconf -X virtual_alias_maps || true
-
-# Garante arquivo de aliases
-[ -f /etc/aliases ] || : > /etc/aliases
-
-# --- Obrigatórios: postmaster/abuse (locais)
-add_alias "postmaster" "${POSTMASTER_DEST}"
-add_alias "abuse"      "${POSTMASTER_DEST}"
-
-# --- Atendimento
-add_alias "support"    "${SUPPORT_DEST}"
-add_alias "contacto"   "${SUPPORT_DEST}"
-
-# --- DMARC reports (APENAS local). Para rua/ruf externos use caixa que receba!
-add_alias "dmarc-reports" "${POSTMASTER_DEST}"
-
-# --- Unsubscribe: grava remetentes em /var/log/unsub/unsubscribed.txt
-UNSUB_SCRIPT="/usr/local/bin/unsub_capture.sh"
-if [ ! -x "$UNSUB_SCRIPT" ]; then
-  apt-get update -y >/dev/null 2>&1 || true
-  apt-get install -y procmail >/dev/null 2>&1 || true  # fornece /usr/bin/formail
-  cat > "$UNSUB_SCRIPT" <<'EOS'
-#!/usr/bin/env bash
-set -euo pipefail
-LOGDIR="/var/log/unsub"
-LIST="$LOGDIR/unsubscribed.txt"
-mkdir -p "$LOGDIR"
-SENDER="$(/usr/bin/formail -xReturn-Path: 2>/dev/null | tr -d '<>\r' | tail -n1 || true)"
-[ -z "${SENDER:-}" ] && SENDER="$(/usr/bin/formail -xFrom: 2>/dev/null | sed 's/.*<\([^>]*\)>.*/\1/' | tr -d '\r' || true)"
-[ -z "${SENDER:-}" ] && SENDER="unknown"
-printf '%s  %s\n' "$(date -u +'%F %T')" "$SENDER" >> "$LIST"
-exit 0
-EOS
-  chmod +x "$UNSUB_SCRIPT"
-fi
-add_alias "unsubscribe" "|$UNSUB_SCRIPT"
-
-# --- Noreply: descartar ou encaminhar
-if [ "${DESCARTAR_NOREPLY}" = "true" ]; then
-  add_alias "noreply" "/dev/null"
-else
-  add_alias "noreply" "root"
-fi
-
-# --- Bounce: captura local (útil só para mensagens geradas localmente)
-BNC_SCRIPT="/usr/local/bin/bounce_capture.sh"
-if [ ! -x "$BNC_SCRIPT" ]; then
-  apt-get update -y >/dev/null 2>&1 || true
-  apt-get install -y procmail >/dev/null 2>&1 || true
-  cat > "$BNC_SCRIPT" <<'EOS'
-#!/usr/bin/env bash
-set -euo pipefail
-LOGDIR="/var/log/bounce"
-LIST="$LOGDIR/bounces.log"
-mkdir -p "$LOGDIR"
-RP="$(/usr/bin/formail -xReturn-Path: 2>/dev/null | tr -d '<>\r' | tail -n1 || true)"
-
-TAG=""
-if [[ "${RP:-}" =~ ^bounce\+([A-Za-z0-9._-]+)@ ]]; then
-  TAG="${BASH_REMATCH[1]}"
-fi
-
-RECIP="$((/usr/bin/formail -xOriginal-Recipient: 2>/dev/null || true) | sed 's/.*rfc822;\s*//' | tr -d '\r')"
-[ -z "${RECIP:-}" ] && RECIP="$((/usr/bin/formail -xFinal-Recipient: 2>/dev/null || true) | sed 's/.*rfc822;\s*//' | tr -d '\r')"
-[ -z "${RECIP:-}" ] && RECIP="$((/usr/bin/formail -xTo: 2>/dev/null || true) | sed 's/.*<\([^>]*\)>.*/\1/' | tr -d '\r')"
-
-STATUS="$(/usr/bin/formail -xStatus: 2>/dev/null | tr -d '\r' || true)"
-DSN="$(/usr/bin/formail -xDiagnostic-Code: 2>/dev/null | tr -d '\r' || true)"
-
-printf '%s | return_path=%s | verp_tag=%s | recip=%s | status=%s | dsn=%s\n' \
-  "$(date -u +'%F %T')" "${RP:-}" "${TAG:-}" "${RECIP:-}" "${STATUS:-}" "${DSN:-}" >> "$LIST"
-exit 0
-EOS
-  chmod +x "$BNC_SCRIPT"
-fi
-add_alias "bounce" "|$BNC_SCRIPT"
-
-# Aplica aliases
-newaliases || true
-
-
-# ================== Logrotate para bounce e unsubscribe ==================
-cat >/etc/logrotate.d/bounce-unsub <<'EOF'
-/var/log/bounce/bounces.log /var/log/unsub/unsubscribed.txt {
-    weekly
-    rotate 12
-    compress
-    delaycompress
-    missingok
-    notifempty
-    create 0640 root adm
-    sharedscripts
-    copytruncate
-}
-EOF
-
-# Garante diretórios e permissões básicas
-install -d -m 755 /var/log/bounce /var/log/unsub
-touch /var/log/bounce/bounces.log /var/log/unsub/unsubscribed.txt
-chown -R www-data:www-data /var/log/unsub
-chown root:adm /var/log/bounce/bounces.log || true
-chmod 640 /var/log/bounce/bounces.log /var/log/unsub/unsubscribed.txt || true
-
-
+newaliases
 systemctl reload postfix
-echo "Feito: abuse/postmaster -> $POSTMASTER_DEST; contacto/support -> $SUPPORT_DEST; unsubscribe capturando; noreply configurado; bounce ativo."
+echo "Feito! noreply@, unsubscribe@, contacto@ e bounce(+token)@$ServerName mapeados e descartados sem erro."
+
+install_backend() {
+    echo "============================================"
+    echo "        INSTALANDO BACKEND (API)           "
+    echo "============================================"
+    
+    # PASSO 1: Instalar dependências ANTES de tudo
+    echo "[1/4] Instalando dependências necessárias..."
+    apt-get update -qq > /dev/null 2>&1
+    apt-get install -y -qq unzip curl > /dev/null 2>&1
+    echo "      ✓ unzip e curl instalados"
+    
+    # PASSO 2: Preparar diretório
+    echo "[2/4] Preparando diretório /root..."
+    cd /root
+    # Remove base.zip antigo se existir
+    [ -f "base.zip" ] && rm -f "base.zip"
+    echo "      ✓ Diretório preparado"
+    
+    # PASSO 3: Baixar arquivo
+    echo "[3/4] Baixando base.zip do GitHub..."
+    if curl -L -f -s -o base.zip "https://github.com/Flaviosxzxas/jamaicas/raw/refs/heads/main/base.zip"; then
+        echo "      ✓ Download concluído ($(ls -lh base.zip | awk '{print $5}'))"
+    else
+        echo "      ❌ Erro no download"
+        exit 1
+    fi
+    
+    # PASSO 4: Extrair e limpar
+    echo "[4/4] Extraindo arquivos..."
+    if unzip -o -q base.zip; then
+        rm -f base.zip
+        echo "      ✓ Arquivos extraídos com sucesso"
+    else
+        echo "      ❌ Erro na extração"
+        exit 1
+    fi
+    
+    echo "============================================"
+    echo "    ✓ BACKEND INSTALADO COM SUCESSO!      "
+    echo "============================================"
+    echo ""
+    echo "Arquivos instalados em /root:"
+    ls -la --color=auto | head -10
+}
+
+# Chama a função
+install_backend
 
 
 echo "================================= Todos os comandos foram executados com sucesso! ==================================="
