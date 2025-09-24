@@ -334,22 +334,15 @@ install_py_pkg() {
 # Uso:
 install_py_pkg "dnspython" "python3-dnspython" 0
 
-echo "================================================= POSTFIX ================================================="
+echo "================================================= POSTFIX OTIMIZADO ================================================="
 
-# Configurações básicas do Postfix
+# Configurações básicas
 debconf-set-selections <<< "postfix postfix/mailname string '$ServerName'"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
-debconf-set-selections <<< "postfix postfix/destinations string 'localhost'"
+DEBIAN_FRONTEND=noninteractive apt-get install -y postfix pflogsumm sasl2-bin libsasl2-modules
 
-# Instalar Postfix e outros
-# Instalar Postfix e outros
-DEBIAN_FRONTEND=noninteractive apt-get install -y postfix pflogsumm dovecot-core
-
-echo -e "$ServerName OK" > /etc/postfix/access.recipients
-postmap /etc/postfix/access.recipients
-
-echo "================================================= CONFIGURANDO ALIASES BÁSICOS ================================================="
-cat > /etc/aliases <<'EOF'
+# Criar aliases básicos
+cat > /etc/aliases <<EOF
 postmaster: root
 mailer-daemon: postmaster
 abuse: postmaster
@@ -359,211 +352,143 @@ nobody: /dev/null
 www-data: /dev/null
 mail: /dev/null
 EOF
-
 newaliases
-echo "✓ Aliases básicos configurados!"
 
-# <<<--- CRIAR USUÁRIO VIRTUAL PRIMEIRO --->>>
-echo "================================================= CONFIGURANDO USUÁRIO VIRTUAL ================================================="
-# Verificar se o usuário vmail já existe
-if ! id "vmail" &>/dev/null; then
-    useradd -r -u 150 -g mail -d /var/mail/virtual -s /sbin/nologin -c "Virtual Mail User" vmail
-    echo "✓ Usuário vmail criado"
-else
-    echo "✓ Usuário vmail já existe, pulando criação..."
-fi
-
-# Garantir que o diretório existe e tem permissões corretas
-mkdir -p /var/mail/virtual
-chown -R vmail:mail /var/mail/virtual
-chmod 755 /var/mail/virtual
-
-# <<<--- CONFIGURAR DOVECOT ANTES DO POSTFIX --->>>
-echo "================================================= CONFIGURANDO DOVECOT ================================================="
-cat > /etc/dovecot/conf.d/10-master.conf <<'EOF'
-service auth {
-  unix_listener /var/spool/postfix/private/auth {
-    mode = 0666
-    user = postfix
-    group = postfix
-  }
-}
-EOF
-
-cat > /etc/dovecot/conf.d/10-auth.conf <<'EOF'
-auth_mechanisms = plain login
-passdb {
-  driver = passwd-file
-  args = username_format=%u /etc/dovecot/users
-}
-userdb {
-  driver = static
-  args = uid=150 gid=8 home=/var/mail/virtual/%u
-}
-EOF
-
-# Criar arquivo de usuários
-cat > /etc/dovecot/users <<EOF
-admin@$ServerName:{PLAIN}dwwzyd
-user1@$ServerName:{PLAIN}dwwzyd
-user2@$ServerName:{PLAIN}dwwzyd
-EOF
-
-chmod 640 /etc/dovecot/users
-chown root:dovecot /etc/dovecot/users
-
-echo "================================================= POSTFIX TRANSPORT ================================================="
-cat > /etc/postfix/transport <<'EOF'
-gmail.com       gmail-smtp:
-yahoo.com       yahoo-smtp:
-yahoo.com.br    yahoo-smtp:
-outlook.com     outlook-smtp:
-hotmail.com     outlook-smtp:
-live.com        outlook-smtp:
-msn.com         outlook-smtp:
-EOF
-
-# <<<--- MAIN.CF (seu código atual está perfeito) --->>>
-echo "================================================= POSTFIX MAIN CF ================================================="
+# Main.cf - Configuração principal
 cat <<EOF > /etc/postfix/main.cf
+# Identificação
 myhostname = $ServerName
-smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
-biff = no
-readme_directory = no
-compatibility_level = 3.6
+mydomain = $Domain
+myorigin = \$mydomain
+smtpd_banner = \$myhostname ESMTP
 
-# Aliases locais (descartar bounce/noreply/etc via /etc/aliases)
-alias_maps = hash:/etc/aliases
-alias_database = hash:/etc/aliases
-
-# DKIM (OpenDKIM)
+# DKIM
 milter_protocol = 6
 milter_default_action = accept
 smtpd_milters = inet:127.0.0.1:9982
 non_smtpd_milters = inet:127.0.0.1:9982
 
-# SASL Authentication
+# SASL - Autenticação
+smtpd_sasl_type = cyrus
+smtpd_sasl_path = smtpd
 smtpd_sasl_auth_enable = yes
-smtpd_sasl_type = dovecot
-smtpd_sasl_path = private/auth
 smtpd_sasl_security_options = noanonymous
+smtpd_sasl_local_domain = \$myhostname
+broken_sasl_auth_clients = yes
 
-# Security restrictions
+# Segurança
+smtpd_relay_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination
 smtpd_recipient_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination
-smtpd_relay_restrictions = permit_mynetworks, permit_sasl_authenticated, defer_unauth_destination
 
-# TLS - entrada local (PHP -> Postfix em 127.0.0.1)
+# TLS/SSL
 smtpd_tls_security_level = may
-smtpd_tls_loglevel = 2
-smtpd_tls_received_header = yes
-smtpd_tls_session_cache_timeout = 3600s
-smtpd_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
-smtpd_tls_ciphers = high
-smtpd_tls_exclude_ciphers = aNULL, MD5, 3DES
 smtpd_tls_cert_file = /etc/letsencrypt/live/$ServerName/fullchain.pem
-smtpd_tls_key_file  = /etc/letsencrypt/live/$ServerName/privkey.pem
-
-# TLS - saída (cliente SMTP)
-smtp_tcp_port = 25
+smtpd_tls_key_file = /etc/letsencrypt/live/$ServerName/privkey.pem
+smtpd_tls_auth_only = no
 smtp_tls_security_level = may
-smtp_tls_loglevel = 1
-smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
-smtp_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
-smtp_tls_ciphers = high
-smtp_tls_exclude_ciphers = aNULL, MD5, 3DES
 
-# Base
-myorigin = localhost
-mydestination = localhost
-relayhost =
-mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
-mailbox_size_limit = 0
-recipient_delimiter = +
+# Network
 inet_interfaces = all
 inet_protocols = ipv4
+mynetworks = 127.0.0.0/8
+mydestination = localhost
 
+# Performance
+message_size_limit = 52428800
+mailbox_size_limit = 0
 maximal_queue_lifetime = 2h
 bounce_queue_lifetime = 1h
-
-# Otimizar timeouts
 smtp_connect_timeout = 30s
-smtp_helo_timeout = 30s
-smtp_mail_timeout = 30s
-smtp_rcpt_timeout = 30s
 smtp_data_done_timeout = 120s
 
-# Rate limiting por transporte
+# Transport maps
 transport_maps = hash:/etc/postfix/transport
-
-default_destination_concurrency_limit = 10
+default_destination_concurrency_limit = 20
 default_destination_rate_delay = 1s
 EOF
 
-echo "================================================= CONFIGURANDO PORTA 587 GLOBAL ================================================="
-
-echo "✓ Porta 587 configurada globalmente!"
-
-# <<<--- MASTER.CF (seu código atual está perfeito) --->>>
-echo "================================================= POSTFIX MASTER CF ================================================="
-
-# Configurar porta 587 primeiro
-if ! grep -q "587.*inet.*smtpd" /etc/postfix/master.cf; then
-    cat >> /etc/postfix/master.cf <<'EOF'
-# Serviço para a porta 587 (autenticação)
-587       inet  n       -       y       -       -       smtpd
-  -o smtpd_tls_security_level=encrypt
-  -o smtpd_sasl_auth_enable=yes
-  -o smtpd_tls_auth_only=yes
-  -o smtpd_client_restrictions=permit_sasl_authenticated,reject
+# Transport map para rate limiting
+cat > /etc/postfix/transport <<EOF
+gmail.com       gmail-smtp:
+yahoo.com       yahoo-smtp:
+outlook.com     outlook-smtp:
+hotmail.com     outlook-smtp:
 EOF
-    echo "✓ Porta 587 configurada"
-else
-    echo "✓ Porta 587 já configurada"
-fi
+postmap /etc/postfix/transport
 
-# Verificar se a entrada para smtp na porta 25 já existe
-if ! grep -q "^smtp.*inet.*smtpd" /etc/postfix/master.cf; then
-    cat >> /etc/postfix/master.cf <<'EOF'
-# Serviço para a porta 25 (relay entre servidores)
+# Master.cf - Serviços
+cat > /etc/postfix/master.cf <<'EOF'
+# Porta 25 - SMTP
 smtp      inet  n       -       y       -       -       smtpd
-  -o smtpd_tls_security_level=may
-  -o smtpd_sasl_auth_enable=no
-  -o smtpd_tls_auth_only=no
-EOF
-    echo "✓ Porta 25 configurada"
-else
-    echo "✓ Porta 25 já configurada"
-fi
 
-# Serviços específicos por provedor
-if ! grep -q "gmail-smtp    unix  -       -       n       -       -       smtp" /etc/postfix/master.cf; then
-    cat >> /etc/postfix/master.cf <<'EOF'
-# Serviços específicos por provedor
+# Porta 587 - Submission com auth
+submission inet n       -       y       -       -       smtpd
+  -o smtpd_tls_security_level=may
+  -o smtpd_sasl_auth_enable=yes
+  -o smtpd_tls_auth_only=no
+  -o smtpd_client_restrictions=permit_sasl_authenticated,reject
+
+# Serviços internos (padrão)
+pickup    unix  n       -       y       60      1       pickup
+cleanup   unix  n       -       y       -       0       cleanup
+qmgr      unix  n       -       n       300     1       qmgr
+tlsmgr    unix  -       -       y       1000?   1       tlsmgr
+rewrite   unix  -       -       y       -       -       trivial-rewrite
+bounce    unix  -       -       y       -       0       bounce
+defer     unix  -       -       y       -       0       bounce
+trace     unix  -       -       y       -       0       bounce
+verify    unix  -       -       y       -       1       verify
+flush     unix  n       -       y       1000?   0       flush
+proxymap  unix  -       -       n       -       -       proxymap
+smtp      unix  -       -       y       -       -       smtp
+relay     unix  -       -       y       -       -       smtp
+showq     unix  n       -       y       -       -       showq
+error     unix  -       -       y       -       -       error
+retry     unix  -       -       y       -       -       error
+discard   unix  -       -       y       -       -       discard
+local     unix  -       n       n       -       -       local
+virtual   unix  -       n       n       -       -       virtual
+lmtp      unix  -       -       y       -       -       lmtp
+anvil     unix  -       -       y       -       1       anvil
+scache    unix  -       -       y       -       1       scache
+
+# Transportes específicos
 gmail-smtp    unix  -       -       n       -       -       smtp
-    -o smtp_destination_concurrency_limit=5
-    -o smtp_destination_rate_delay=2s
+  -o smtp_destination_concurrency_limit=5
+  -o smtp_destination_rate_delay=2s
 
 yahoo-smtp    unix  -       -       n       -       -       smtp
-    -o smtp_destination_concurrency_limit=3
-    -o smtp_destination_rate_delay=3s
+  -o smtp_destination_concurrency_limit=3
+  -o smtp_destination_rate_delay=3s
 
 outlook-smtp  unix  -       -       n       -       -       smtp
-    -o smtp_destination_concurrency_limit=8
-    -o smtp_destination_rate_delay=1s
+  -o smtp_destination_concurrency_limit=8
+  -o smtp_destination_rate_delay=1s
 EOF
-else
-    echo "As entradas para serviços específicos já existem no master.cf."
-fi
 
+# Configurar SASL
+cat > /etc/postfix/sasl/smtpd.conf <<EOF
+pwcheck_method: auxprop
+auxprop_plugin: sasldb
+mech_list: plain login
+EOF
 
-# <<<--- INICIAR SERVIÇOS --->>>
-echo "================================================= INICIANDO SERVIÇOS ================================================="
-systemctl enable dovecot
-systemctl restart dovecot
-postmap /etc/postfix/transport
+# Criar usuários SMTP
+echo "dwwzyd" | saslpasswd2 -c -u $ServerName admin -p
+echo "dwwzyd" | saslpasswd2 -c -u $ServerName user1 -p
+echo "dwwzyd" | saslpasswd2 -c -u $ServerName user2 -p
+
+# Permissões
+chown postfix:postfix /etc/sasldb2
+chmod 640 /etc/sasldb2
+adduser postfix sasl
+
+# Reiniciar serviços
+systemctl restart saslauthd
+systemctl restart opendkim
 systemctl restart postfix
 
-echo "✓ Servidor SMTP configurado com autenticação!"
+echo "✓ Postfix configurado com sucesso!"
 echo "================================================= POSTFIX ================================================="
 
 # Salvar variáveis antes de instalar dependências
@@ -812,8 +737,8 @@ echo "  -- Configurando registros DNS Cloudflare..."
 DKIMCode=$(echo "$DKIMCode" | tr -d '\n' | tr -s ' ')
 EscapedDKIMCode=$(printf '%s' "$DKIMCode" | sed 's/\"/\\\"/g')
 
-create_or_update_record "$DKIMSelector" "A" "$ServerIP" ""
-create_or_update_record "$ServerName" "TXT" "\"v=spf1 mx a ip4:$ServerIP ~all\"" ""
+create_or_update_record "$ServerName" "A" "$ServerIP" ""
+create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP ~all\"" ""
 create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=none; rua=mailto:admin@$ServerName; ruf=mailto:admin@$ServerName; adkim=r; aspf=r\"" ""
 create_or_update_record "mail._domainkey.$ServerName" "TXT" "\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\"" ""
 create_or_update_record "$ServerName" "MX" "$ServerName" "10"
