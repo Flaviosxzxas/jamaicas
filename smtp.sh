@@ -473,14 +473,6 @@ auxprop_plugin: sasldb
 mech_list: plain login
 EOF
 
-# Configurar SASL
-mkdir -p /etc/postfix/sasl
-cat > /etc/postfix/sasl/smtpd.conf <<EOF
-pwcheck_method: auxprop
-auxprop_plugin: sasldb
-mech_list: plain login
-EOF
-
 # Criar usuários SMTP (CORREÇÃO AQUI)
 saslpasswd2 -c -u $ServerName admin <<< "dwwzyd"
 saslpasswd2 -c -u $ServerName user1 <<< "dwwzyd"
