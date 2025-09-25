@@ -467,6 +467,7 @@ outlook-smtp  unix  -       -       n       -       -       smtp
 EOF
 
 # Configurar SASL
+mkdir -p /etc/postfix/sasl
 cat > /etc/postfix/sasl/smtpd.conf <<EOF
 pwcheck_method: auxprop
 auxprop_plugin: sasldb
