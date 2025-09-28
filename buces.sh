@@ -187,11 +187,13 @@ echo "================================================= DKIM ===================
 apt-get install -y opendkim opendkim-tools
 
 # Criação dos diretórios
-mkdir -p /etc/opendkim && mkdir -p /etc/opendkim/keys
+mkdir -p /etc/opendkim
+mkdir -p /etc/opendkim/keys
 
-# Permissões e propriedade
+# Permissões e propriedade inicial
 chown -R opendkim:opendkim /etc/opendkim/
-chmod -R 750 /etc/opendkim/
+chmod 750 /etc/opendkim/
+chmod 750 /etc/opendkim/keys/
 
 # /etc/default/opendkim
 cat <<EOF > /etc/default/opendkim
@@ -235,20 +237,32 @@ $MailServerName
 *.$Domain
 EOF
 
-# === DKIM por FQDN ===
-# cria pasta específica do host
-mkdir -p "/etc/opendkim/keys/$ServerName"
+# Gerar chave DKIM
+cd /etc/opendkim/keys/
+opendkim-genkey -b 2048 -s mail -d "$ServerName"
 
-# gera a chave (selector: mail) dentro da pasta do host
-opendkim-genkey -b 2048 -s mail -d "$ServerName" -D /etc/opendkim/keys/
+# Verificar se os arquivos foram criados
+if [ ! -f mail.private ] || [ ! -f mail.txt ]; then
+    echo "ERRO: Falha ao gerar chaves DKIM!"
+    exit 1
+fi
 
-# dono e permissões (estritas no .private)
-chown opendkim:opendkim /etc/opendkim/keys/mail.private
-chmod 640 /etc/opendkim/keys/mail.private
-
-# KeyTable/SigningTable (sobrescreve corretamente)
+# Configurar KeyTable e SigningTable
 echo "mail._domainkey.${ServerName} ${ServerName}:mail:/etc/opendkim/keys/mail.private" > /etc/opendkim/KeyTable
 echo "*@${ServerName} mail._domainkey.${ServerName}" > /etc/opendkim/SigningTable
+
+# Ajustar permissões finais
+chown opendkim:opendkim /etc/opendkim/keys/mail.private
+chmod 600 /etc/opendkim/keys/mail.private
+chown opendkim:opendkim /etc/opendkim/keys/mail.txt
+chmod 644 /etc/opendkim/keys/mail.txt
+chmod 644 /etc/opendkim/KeyTable
+chmod 644 /etc/opendkim/SigningTable
+chown opendkim:opendkim /etc/opendkim/KeyTable
+chown opendkim:opendkim /etc/opendkim/SigningTable
+chmod 644 /etc/opendkim/TrustedHosts
+
+echo "✓ DKIM configurado com sucesso!"
 
 # Script para processar a chave DKIM
 DKIMFileCode=$(cat /etc/opendkim/keys/mail.txt)
