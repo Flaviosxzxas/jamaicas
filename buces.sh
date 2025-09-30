@@ -909,7 +909,6 @@ echo "================================================= APPLICATION ============
 # ============================================
 echo "================================================= Configurando noreply@$ServerName, unsubscribe@$ServerName e contacto@$ServerName... ================================================="
 
-# Ajusta apenas para um valor explícito, sem $virtual_alias_maps
 # Ajusta apenas para um valor explícito
 postconf -e "virtual_alias_domains = $ServerName"
 postconf -e "virtual_alias_maps = hash:/etc/postfix/virtual"
@@ -917,21 +916,41 @@ postconf -e "local_recipient_maps="
 
 [ -f /etc/postfix/virtual ] || touch /etc/postfix/virtual
 
-# noreply
+# Adicionar mapeamentos base (se não existirem)
 grep -q "^noreply@$ServerName[[:space:]]" /etc/postfix/virtual || \
   echo "noreply@$ServerName   noreply" >> /etc/postfix/virtual
 
-# unsubscribe
 grep -q "^unsubscribe@$ServerName[[:space:]]" /etc/postfix/virtual || \
   echo "unsubscribe@$ServerName   unsubscribe" >> /etc/postfix/virtual
 
-# contacto
 grep -q "^contacto@$ServerName[[:space:]]" /etc/postfix/virtual || \
   echo "contacto@$ServerName   contacto" >> /etc/postfix/virtual
 
-# bounce  (ESSENCIAL para capturar bounce+token@)
 grep -q "^bounce@$ServerName[[:space:]]" /etc/postfix/virtual || \
   echo "bounce@$ServerName   bounce" >> /etc/postfix/virtual
+
+# Adicionar wildcards para VERP (+ no final do endereço)
+echo "Configurando suporte a VERP (recipient_delimiter +)..."
+
+if ! grep -q "^contacto+.*@$ServerName" /etc/postfix/virtual; then
+    sed -i "/^contacto@$ServerName/i contacto+*@$ServerName   contacto" /etc/postfix/virtual
+    echo "✓ Adicionado: contacto+*@$ServerName -> contacto"
+fi
+
+if ! grep -q "^bounce+.*@$ServerName" /etc/postfix/virtual; then
+    sed -i "/^bounce@$ServerName/i bounce+*@$ServerName   bounce" /etc/postfix/virtual
+    echo "✓ Adicionado: bounce+*@$ServerName -> bounce"
+fi
+
+if ! grep -q "^noreply+.*@$ServerName" /etc/postfix/virtual; then
+    sed -i "/^noreply@$ServerName/i noreply+*@$ServerName   noreply" /etc/postfix/virtual
+    echo "✓ Adicionado: noreply+*@$ServerName -> noreply"
+fi
+
+if ! grep -q "^unsubscribe+.*@$ServerName" /etc/postfix/virtual; then
+    sed -i "/^unsubscribe@$ServerName/i unsubscribe+*@$ServerName   unsubscribe" /etc/postfix/virtual
+    echo "✓ Adicionado: unsubscribe+*@$ServerName -> unsubscribe"
+fi
 
 postmap /etc/postfix/virtual
 
