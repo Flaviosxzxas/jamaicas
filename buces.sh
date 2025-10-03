@@ -955,6 +955,9 @@ grep -q "^contacto@$ServerName[[:space:]]" /etc/postfix/virtual || \
 grep -q "^bounce@$ServerName[[:space:]]" /etc/postfix/virtual || \
   echo "bounce@$ServerName   bounce" >> /etc/postfix/virtual
 
+# Remover wildcards antigos se existirem (prevenção)
+sed -i '/+.*@/d' /etc/postfix/virtual 2>/dev/null || true
+
 echo "✓ VERP configurado via recipient_delimiter no main.cf"
 
 postmap /etc/postfix/virtual
