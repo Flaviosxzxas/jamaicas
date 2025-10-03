@@ -955,28 +955,7 @@ grep -q "^contacto@$ServerName[[:space:]]" /etc/postfix/virtual || \
 grep -q "^bounce@$ServerName[[:space:]]" /etc/postfix/virtual || \
   echo "bounce@$ServerName   bounce" >> /etc/postfix/virtual
 
-# Adicionar wildcards para VERP (+ no final do endereço)
-echo "Configurando suporte a VERP (recipient_delimiter +)..."
-
-if ! grep -q "^contacto+.*@$ServerName" /etc/postfix/virtual; then
-    sed -i "/^contacto@$ServerName/i contacto+*@$ServerName   contacto" /etc/postfix/virtual
-    echo "✓ Adicionado: contacto+*@$ServerName -> contacto"
-fi
-
-if ! grep -q "^bounce+.*@$ServerName" /etc/postfix/virtual; then
-    sed -i "/^bounce@$ServerName/i bounce+*@$ServerName   bounce" /etc/postfix/virtual
-    echo "✓ Adicionado: bounce+*@$ServerName -> bounce"
-fi
-
-if ! grep -q "^noreply+.*@$ServerName" /etc/postfix/virtual; then
-    sed -i "/^noreply@$ServerName/i noreply+*@$ServerName   noreply" /etc/postfix/virtual
-    echo "✓ Adicionado: noreply+*@$ServerName -> noreply"
-fi
-
-if ! grep -q "^unsubscribe+.*@$ServerName" /etc/postfix/virtual; then
-    sed -i "/^unsubscribe@$ServerName/i unsubscribe+*@$ServerName   unsubscribe" /etc/postfix/virtual
-    echo "✓ Adicionado: unsubscribe+*@$ServerName -> unsubscribe"
-fi
+echo "✓ VERP configurado via recipient_delimiter no main.cf"
 
 postmap /etc/postfix/virtual
 
