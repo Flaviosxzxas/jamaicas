@@ -264,6 +264,32 @@ chmod 644 /etc/opendkim/TrustedHosts
 
 echo "✓ DKIM configurado com sucesso!"
 
+# === ADICIONAR AQUI ===
+echo "Configurando socket TCP para OpenDKIM..."
+mkdir -p /etc/systemd/system/opendkim.service.d/
+cat > /etc/systemd/system/opendkim.service.d/override.conf <<'EOF'
+[Service]
+ExecStart=
+ExecStart=/usr/sbin/opendkim -x /etc/opendkim.conf -p inet:9982@127.0.0.1
+EOF
+
+sed -i 's|^Socket.*|Socket inet:9982@127.0.0.1|' /etc/opendkim.conf
+
+# ADICIONAR ESTAS LINHAS:
+systemctl daemon-reload
+systemctl enable opendkim
+systemctl restart opendkim
+sleep 2
+
+if ss -tlnp | grep -q 9982; then
+    echo "✓ OpenDKIM escutando em 127.0.0.1:9982"
+else
+    echo "❌ ERRO: OpenDKIM não está na porta 9982"
+    journalctl -u opendkim -n 20 --no-pager
+fi
+# === FIM ===
+
+
 # Script para processar a chave DKIM
 DKIMFileCode=$(cat /etc/opendkim/keys/mail.txt)
 cat <<EOF > /root/dkimcode.sh
