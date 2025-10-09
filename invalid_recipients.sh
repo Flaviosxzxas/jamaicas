@@ -1,6 +1,3 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
 cat >/usr/local/bin/classify-bounces <<'EOF'
 #!/bin/bash
 set -euo pipefail
@@ -32,3 +29,4 @@ EOF
 chmod +x /usr/local/bin/classify-bounces
 printf 'www-data ALL=(root) NOPASSWD: /usr/local/bin/classify-bounces\n' >/etc/sudoers.d/classify-bounces
 chmod 0440 /etc/sudoers.d/classify-bounces
+# === FIM CLASSIFY-BOUNCES ===
