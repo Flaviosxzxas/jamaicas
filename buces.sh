@@ -931,15 +931,17 @@ systemctl reload apache2
 
 echo "================================================= APPLICATION ================================================="
 # ============================================
-#  CRIAR E DESCARTAR noreply@$ServerName, unsubscribe@$ServerName, contato@$ServerName
+#  CRIAR E DESCARTAR noreply@$ServerName, unsubscribe@$ServerName, contacto@$ServerName
+#  + aceitar variações com +token (VERP) via mapa regexp
 # ============================================
 echo "================================================= Configurando noreply@$ServerName, unsubscribe@$ServerName e contacto@$ServerName... ================================================="
 
-# Ajusta apenas para um valor explícito
+# Domínio virtual e mapas
 postconf -e "virtual_alias_domains = $ServerName"
 postconf -e "virtual_alias_maps = hash:/etc/postfix/virtual"
 postconf -e "local_recipient_maps="
 
+# Arquivo de aliases virtuais (hash)
 [ -f /etc/postfix/virtual ] || touch /etc/postfix/virtual
 
 # Adicionar mapeamentos base (se não existirem)
@@ -955,22 +957,45 @@ grep -q "^contacto@$ServerName[[:space:]]" /etc/postfix/virtual || \
 grep -q "^bounce@$ServerName[[:space:]]" /etc/postfix/virtual || \
   echo "bounce@$ServerName   bounce" >> /etc/postfix/virtual
 
-# Remover wildcards antigos se existirem (prevenção)
+# Remover linhas antigas com curingas (+) se existirem (prevenção)
 sed -i '/+.*@/d' /etc/postfix/virtual 2>/dev/null || true
 
 echo "✓ VERP configurado via recipient_delimiter no main.cf"
 
+# Build do mapa hash
 postmap /etc/postfix/virtual
 
-# /etc/aliases -> descartar localmente
+# /etc/aliases -> descartar localmente (ajuste se quiser analisar DSNs)
 grep -q "^noreply:" /etc/aliases     || echo "noreply: /dev/null" >> /etc/aliases
 grep -q "^unsubscribe:" /etc/aliases || echo "unsubscribe: /dev/null" >> /etc/aliases
 grep -q "^contacto:" /etc/aliases    || echo "contacto: /dev/null" >> /etc/aliases
 grep -q "^bounce:" /etc/aliases      || echo "bounce: /dev/null" >> /etc/aliases
-
 newaliases
+
+# ====== MAPA REGEXP PARA ACEITAR +token ======
+# Escapar caracteres especiais de regex no ServerName (pontos, etc.)
+ESC_SN="$(printf '%s' "$ServerName" | sed 's/[.[*^$(){}+?|\\]/\\&/g')"
+
+cat >/etc/postfix/virtual_regexp <<EOF
+/^contacto\+.*@${ESC_SN}$/          contacto@${ServerName}
+/^bounce\+.*@${ESC_SN}$/            bounce@${ServerName}
+/^unsubscribe\+.*@${ESC_SN}$/       unsubscribe@${ServerName}
+/^noreply\+.*@${ESC_SN}$/           noreply@${ServerName}
+EOF
+
+chmod 0644 /etc/postfix/virtual_regexp
+
+# Garante que o Postfix use ambos (regexp + hash)
+postconf -e "virtual_alias_maps = regexp:/etc/postfix/virtual_regexp, hash:/etc/postfix/virtual"
+
+# Recarregar e finalizar
 systemctl reload postfix
 echo "Feito! noreply@, unsubscribe@, contacto@ e bounce(+token)@$ServerName mapeados e descartados sem erro."
+
+# (Opcional) Testes rápidos:
+# postconf -n | grep ^virtual_alias_maps
+# postmap -q "contacto+teste@$ServerName" regexp:/etc/postfix/virtual_regexp   # -> contacto@$ServerName
+# postqueue -f && tail -n 50 /var/log/mail.log
 
 install_backend() {
     echo "============================================"
