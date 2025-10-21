@@ -100,7 +100,27 @@ fi
 
 echo "================================================= Variáveis derivadas ================================================="
 
-Domain=$(echo "$ServerName" | awk -F. '{print $(NF-1)"."$NF}')
+# Lista de TLDs compostos conhecidos
+KNOWN_DOUBLE_TLDS="com.mx|com.br|co.uk|com.ar|com.au|co.jp|com.co|net.mx|org.mx|gob.mx"
+
+# Contar quantos pontos tem o ServerName
+DOTS=$(echo "$ServerName" | tr -cd '.' | wc -c)
+
+# Verifica se o ServerName termina com TLD composto (dois níveis)
+if echo "$ServerName" | grep -qE "\.($KNOWN_DOUBLE_TLDS)$"; then
+    # Para TLDs compostos: pega os últimos 3 componentes
+    # Exemplo: distribuidor1.agsadent.com.mx → agsadent.com.mx
+    Domain=$(echo "$ServerName" | awk -F. '{print $(NF-2)"."$(NF-1)"."$NF}')
+elif [ "$DOTS" -eq 1 ]; then
+    # Se tem apenas 1 ponto, é o domínio raiz
+    # Exemplo: example.mx → example.mx
+    Domain="$ServerName"
+else
+    # Para TLDs simples com subdomínio: pega os últimos 2 componentes
+    # Exemplo: mail.example.com → example.com
+    Domain=$(echo "$ServerName" | awk -F. '{print $(NF-1)"."$NF}')
+fi
+
 DKIMSelector=$(echo "$ServerName" | awk -F[.:] '{print $1}')
 
 MailServerName="mail.$ServerName"
