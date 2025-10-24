@@ -398,16 +398,6 @@ EOF
 newaliases
 echo "✓ Aliases básicos configurados!"
 
-echo "================================================= POSTFIX TRANSPORT ================================================="
-cat > /etc/postfix/transport <<'EOF'
-gmail.com       gmail-smtp:
-yahoo.com       yahoo-smtp:
-yahoo.com.br    yahoo-smtp:
-outlook.com     outlook-smtp:
-hotmail.com     outlook-smtp:
-live.com        outlook-smtp:
-msn.com         outlook-smtp:
-EOF
 echo "================================================= POSTFIX MAIN CF ================================================="
 # /etc/postfix/main.cf
 cat <<EOF > /etc/postfix/main.cf
@@ -477,9 +467,6 @@ smtp_data_init_timeout = 120s
 smtp_data_xfer_timeout = 600s
 smtp_data_done_timeout = 600s
 
-# Rate limiting por transporte
-transport_maps = hash:/etc/postfix/transport
-
 default_destination_concurrency_limit = 10
 default_destination_rate_delay = 1s
 default_destination_recipient_limit = 50
@@ -488,29 +475,6 @@ EOF
 
 echo "================================================= POSTFIX MASTER CF ================================================="
 
-# Remover entradas antigas se existirem
-sed -i '/^gmail-smtp/,/^[^[:space:]]/d' /etc/postfix/master.cf 2>/dev/null || true
-sed -i '/^yahoo-smtp/,/^[^[:space:]]/d' /etc/postfix/master.cf 2>/dev/null || true
-sed -i '/^outlook-smtp/,/^[^[:space:]]/d' /etc/postfix/master.cf 2>/dev/null || true
-
-# Adicionar as novas entradas
-cat >> /etc/postfix/master.cf <<'EOF'
-
-# Serviços específicos por provedor
-gmail-smtp    unix  -       -       n       -       -       smtp
-    -o smtp_destination_concurrency_limit=5
-    -o smtp_destination_rate_delay=2s
-
-yahoo-smtp    unix  -       -       n       -       -       smtp
-    -o smtp_destination_concurrency_limit=3
-    -o smtp_destination_rate_delay=3s
-
-outlook-smtp  unix  -       -       n       -       -       smtp
-    -o smtp_destination_concurrency_limit=8
-    -o smtp_destination_rate_delay=1s
-EOF
-
-postmap /etc/postfix/transport
 systemctl restart postfix
 
 echo "✓ Postfix configurado com rate limiting por provedor!"
