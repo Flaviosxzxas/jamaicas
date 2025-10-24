@@ -451,7 +451,7 @@ smtp_tls_exclude_ciphers = aNULL, MD5, 3DES
 # Base
 mydomain = $ServerName
 myorigin = $ServerName
-mydestination = localhost
+mydestination = localhost, localhost.localdomain
 relayhost =
 mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
 mailbox_size_limit = 0
@@ -459,21 +459,30 @@ recipient_delimiter = +
 inet_interfaces = loopback-only
 inet_protocols = ipv4
 
-maximal_queue_lifetime = 2h
-bounce_queue_lifetime = 1h
+# ===== CORREÇÃO: Prevenir loop de bounces =====
+# Configuração de domínios virtuais
+virtual_alias_domains = $ServerName
+virtual_mailbox_domains = 
+local_recipient_maps = 
+
+maximal_queue_lifetime = 5d
+bounce_queue_lifetime = 5d
 
 # Otimizar timeouts
-smtp_connect_timeout = 30s
-smtp_helo_timeout = 30s
-smtp_mail_timeout = 30s
-smtp_rcpt_timeout = 30s
-smtp_data_done_timeout = 120s
+smtp_connect_timeout = 120s
+smtp_helo_timeout = 120s
+smtp_mail_timeout = 120s
+smtp_rcpt_timeout = 120s
+smtp_data_init_timeout = 120s
+smtp_data_xfer_timeout = 600s
+smtp_data_done_timeout = 600s
 
 # Rate limiting por transporte
 transport_maps = hash:/etc/postfix/transport
 
 default_destination_concurrency_limit = 10
 default_destination_rate_delay = 1s
+default_destination_recipient_limit = 50
 EOF
 # Aplicar configurações
 
@@ -992,9 +1001,7 @@ echo "================================================= APPLICATION ============
 echo "================================================= Configurando noreply@$ServerName, unsubscribe@$ServerName e contacto@$ServerName... ================================================="
 
 # Domínio virtual e mapas
-postconf -e "virtual_alias_domains = $ServerName"
 postconf -e "virtual_alias_maps = hash:/etc/postfix/virtual"
-postconf -e "local_recipient_maps="
 
 # Arquivo de aliases virtuais (hash)
 [ -f /etc/postfix/virtual ] || touch /etc/postfix/virtual
