@@ -1000,9 +1000,6 @@ echo "================================================= APPLICATION ============
 # ============================================
 echo "================================================= Configurando noreply@$ServerName, unsubscribe@$ServerName e contacto@$ServerName... ================================================="
 
-# Domínio virtual e mapas
-postconf -e "virtual_alias_maps = hash:/etc/postfix/virtual"
-
 # Arquivo de aliases virtuais (hash)
 [ -f /etc/postfix/virtual ] || touch /etc/postfix/virtual
 
@@ -1048,7 +1045,7 @@ EOF
 chmod 0644 /etc/postfix/virtual_regexp
 
 # Garante que o Postfix use ambos (regexp + hash)
-postconf -e "virtual_alias_maps = regexp:/etc/postfix/virtual_regexp, hash:/etc/postfix/virtual"
+postconf -e "virtual_alias_maps = regexp:/etc/postfix/virtual_regexp,hash:/etc/postfix/virtual"
 
 # Recarregar e finalizar
 systemctl reload postfix
