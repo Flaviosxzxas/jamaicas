@@ -467,9 +467,15 @@ smtp_data_init_timeout = 120s
 smtp_data_xfer_timeout = 600s
 smtp_data_done_timeout = 600s
 
+# SMTP (prioridade)
+smtp_destination_concurrency_limit = 10
+smtp_destination_rate_delay = 3s
+smtp_destination_recipient_limit = 20
+
+# Default (fallback)
 default_destination_concurrency_limit = 10
-default_destination_rate_delay = 1s
-default_destination_recipient_limit = 50
+default_destination_rate_delay = 3s
+default_destination_recipient_limit = 20
 EOF
 # Aplicar configurações
 
