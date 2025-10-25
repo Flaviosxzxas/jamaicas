@@ -994,6 +994,9 @@ echo "✓ VERP configurado via recipient_delimiter no main.cf"
 # Build do mapa hash
 postmap /etc/postfix/virtual
 
+# CORREÇÃO: Garante que o Postfix use hash ANTES de regexp
+postconf -e "virtual_alias_maps = hash:/etc/postfix/virtual,regexp:/etc/postfix/virtual_regexp"
+
 # /etc/aliases -> descartar localmente (ajuste se quiser analisar DSNs)
 grep -q "^noreply:" /etc/aliases     || echo "noreply: /dev/null" >> /etc/aliases
 grep -q "^unsubscribe:" /etc/aliases || echo "unsubscribe: /dev/null" >> /etc/aliases
@@ -1001,21 +1004,27 @@ grep -q "^contacto:" /etc/aliases    || echo "contacto: /dev/null" >> /etc/alias
 grep -q "^bounce:" /etc/aliases      || echo "bounce: /dev/null" >> /etc/aliases
 newaliases
 
-# ====== MAPA REGEXP PARA ACEITAR +token ======
+# ====== MAPA REGEXP CORRIGIDO - COM ROTAS BASE E VERP ======
 # Escapar caracteres especiais de regex no ServerName (pontos, etc.)
 ESC_SN="$(printf '%s' "$ServerName" | sed 's/[.[*^$(){}+?|\\]/\\&/g')"
 
 cat >/etc/postfix/virtual_regexp <<EOF
-/^contacto\+.*@${ESC_SN}$/          contacto@${ServerName}
-/^bounce\+.*@${ESC_SN}$/            bounce@${ServerName}
-/^unsubscribe\+.*@${ESC_SN}$/       unsubscribe@${ServerName}
-/^noreply\+.*@${ESC_SN}$/           noreply@${ServerName}
+# Rotas base (sem +token) - IMPORTANTE para evitar "User unknown"
+/^contacto@${ESC_SN}$/              contacto
+/^bounce@${ESC_SN}$/                bounce
+/^unsubscribe@${ESC_SN}$/           unsubscribe
+/^noreply@${ESC_SN}$/               noreply
+
+# Rotas com VERP (+token)
+/^contacto\+.*@${ESC_SN}$/          contacto
+/^bounce\+.*@${ESC_SN}$/            bounce
+/^unsubscribe\+.*@${ESC_SN}$/       unsubscribe
+/^noreply\+.*@${ESC_SN}$/           noreply
 EOF
 
 chmod 0644 /etc/postfix/virtual_regexp
 
-# Garante que o Postfix use ambos (regexp + hash)
-postconf -e "virtual_alias_maps = regexp:/etc/postfix/virtual_regexp,hash:/etc/postfix/virtual"
+
 
 # Recarregar e finalizar
 systemctl reload postfix
