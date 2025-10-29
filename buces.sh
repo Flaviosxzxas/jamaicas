@@ -384,22 +384,33 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y postfix pflogsumm
 echo -e "$ServerName OK" > /etc/postfix/access.recipients
 postmap /etc/postfix/access.recipients
 
-# <<<--- ADICIONAR AQUI - LOGO APÓS A INSTALAÇÃO --->>>
 echo "================================================= CONFIGURANDO ALIASES BÁSICOS ================================================="
+
+# ════════════════════════════════════════════════════════════════
+# Aliases do SISTEMA (não confundir com virtual aliases)
+# Estes são para usuários locais do sistema
+# ════════════════════════════════════════════════════════════════
 cat > /etc/aliases <<'EOF'
+# Aliases de sistema padrão
 postmaster: root
 mailer-daemon: postmaster
 abuse: postmaster
 spam: postmaster
+
+# Descartar bounces do sistema
 root: /dev/null
 nobody: /dev/null
 www-data: /dev/null
 mail: /dev/null
+daemon: /dev/null
+bin: /dev/null
+sys: /dev/null
 EOF
 
 newaliases
-echo "✓ Aliases básicos configurados!"
 
+echo "✓ Aliases do sistema configurados!"
+echo "✓ Bounces do sistema serão descartados em /dev/null"
 echo "================================================= POSTFIX MAIN CF ================================================="
 # /etc/postfix/main.cf
 cat <<EOF > /etc/postfix/main.cf
@@ -984,72 +995,69 @@ EOF
 a2ensite "ssl-$ServerName"
 systemctl reload apache2
 
-echo "================================================= APPLICATION ================================================="
-# ============================================
-#  CRIAR E DESCARTAR noreply@$ServerName, unsubscribe@$ServerName, contacto@$ServerName
-#  + aceitar variações com +token (VERP) via mapa regexp
-# ============================================
-echo "================================================= Configurando noreply@$ServerName, unsubscribe@$ServerName e contacto@$ServerName... ================================================="
+echo "================================================= Configurando aliases virtuais (noreply, contacto, bounce, unsubscribe) ================================================="
 
-# Arquivo de aliases virtuais (hash)
-[ -f /etc/postfix/virtual ] || touch /etc/postfix/virtual
+# ════════════════════════════════════════════════════════════════
+# CORREÇÃO CRÍTICA: Mapear diretamente para /dev/null
+# ════════════════════════════════════════════════════════════════
 
-# Adicionar mapeamentos base (se não existirem)
-grep -q "^noreply@$ServerName[[:space:]]" /etc/postfix/virtual || \
-  echo "noreply@$ServerName   noreply" >> /etc/postfix/virtual
-
-grep -q "^unsubscribe@$ServerName[[:space:]]" /etc/postfix/virtual || \
-  echo "unsubscribe@$ServerName   unsubscribe" >> /etc/postfix/virtual
-
-grep -q "^contacto@$ServerName[[:space:]]" /etc/postfix/virtual || \
-  echo "contacto@$ServerName   contacto" >> /etc/postfix/virtual
-
-grep -q "^bounce@$ServerName[[:space:]]" /etc/postfix/virtual || \
-  echo "bounce@$ServerName   bounce" >> /etc/postfix/virtual
-
-# Remover linhas antigas com curingas (+) se existirem (prevenção)
-sed -i '/+.*@/d' /etc/postfix/virtual 2>/dev/null || true
-
-echo "✓ VERP configurado via recipient_delimiter no main.cf"
+# Criar arquivo virtual com descarte direto
+cat > /etc/postfix/virtual <<EOF
+noreply@$ServerName       /dev/null
+unsubscribe@$ServerName   /dev/null
+contacto@$ServerName      /dev/null
+bounce@$ServerName        /dev/null
+EOF
 
 # Build do mapa hash
 postmap /etc/postfix/virtual
 
-# CORREÇÃO: Garante que o Postfix use hash ANTES de regexp
-postconf -e "virtual_alias_maps = hash:/etc/postfix/virtual,regexp:/etc/postfix/virtual_regexp"
-
-# /etc/aliases -> descartar localmente (ajuste se quiser analisar DSNs)
-grep -q "^noreply:" /etc/aliases     || echo "noreply: /dev/null" >> /etc/aliases
-grep -q "^unsubscribe:" /etc/aliases || echo "unsubscribe: /dev/null" >> /etc/aliases
-grep -q "^contacto:" /etc/aliases    || echo "contacto: /dev/null" >> /etc/aliases
-grep -q "^bounce:" /etc/aliases      || echo "bounce: /dev/null" >> /etc/aliases
-newaliases
-
-# ====== MAPA REGEXP CORRIGIDO - COM ROTAS BASE E VERP ======
-# Escapar caracteres especiais de regex no ServerName (pontos, etc.)
+# ══════ MAPA REGEXP para VERP (+token) ══════
 ESC_SN="$(printf '%s' "$ServerName" | sed 's/[.[*^$(){}+?|\\]/\\&/g')"
 
-cat >/etc/postfix/virtual_regexp <<EOF
-# Rotas base (sem +token) - IMPORTANTE para evitar "User unknown"
-/^contacto@${ESC_SN}$/              contacto
-/^bounce@${ESC_SN}$/                bounce
-/^unsubscribe@${ESC_SN}$/           unsubscribe
-/^noreply@${ESC_SN}$/               noreply
+cat > /etc/postfix/virtual_regexp <<EOF
+# Rotas base (sem +token)
+/^contacto@${ESC_SN}\$/              /dev/null
+/^bounce@${ESC_SN}\$/                /dev/null
+/^unsubscribe@${ESC_SN}\$/           /dev/null
+/^noreply@${ESC_SN}\$/               /dev/null
 
-# Rotas com VERP (+token)
-/^contacto\+.*@${ESC_SN}$/          contacto
-/^bounce\+.*@${ESC_SN}$/            bounce
-/^unsubscribe\+.*@${ESC_SN}$/       unsubscribe
-/^noreply\+.*@${ESC_SN}$/           noreply
+# Rotas com VERP (+token)  
+/^contacto\+.*@${ESC_SN}\$/          /dev/null
+/^bounce\+.*@${ESC_SN}\$/            /dev/null
+/^unsubscribe\+.*@${ESC_SN}\$/       /dev/null
+/^noreply\+.*@${ESC_SN}\$/           /dev/null
 EOF
 
 chmod 0644 /etc/postfix/virtual_regexp
 
+# Configurar Postfix
+postconf -e "virtual_alias_maps = hash:/etc/postfix/virtual, regexp:/etc/postfix/virtual_regexp"
 
+# Aliases do sistema (manter para outros usuários)
+cat > /etc/aliases <<'EOF'
+postmaster: root
+mailer-daemon: postmaster
+abuse: postmaster
+spam: postmaster  
+root: /dev/null
+nobody: /dev/null
+www-data: /dev/null
+mail: /dev/null
+EOF
 
-# Recarregar e finalizar
+newaliases
+
+# Recarregar Postfix
 systemctl reload postfix
-echo "Feito! noreply@, unsubscribe@, contacto@ e bounce(+token)@$ServerName mapeados e descartados sem erro."
+
+echo "✓ Aliases virtuais configurados com descarte direto para /dev/null"
+echo "✓ VERP (+token) configurado via regexp"
+
+# Testes de validação
+echo "Testando configuração..."
+postmap -q "contacto@$ServerName" hash:/etc/postfix/virtual && echo "  ✓ Hash OK" || echo "  ❌ Hash FALHOU"
+postmap -q "contacto+test@$ServerName" regexp:/etc/postfix/virtual_regexp && echo "  ✓ Regexp OK" || echo "  ❌ Regexp FALHOU"
 
 # (Opcional) Testes rápidos:
 # postconf -n | grep ^virtual_alias_maps
