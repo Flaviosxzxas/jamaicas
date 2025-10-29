@@ -434,11 +434,25 @@ smtpd_tls_key_file  = /etc/letsencrypt/live/$ServerName/privkey.pem
 
 # TLS - saída (cliente SMTP)
 smtp_tls_security_level = may
-smtp_tls_loglevel = 0
+smtp_tls_loglevel = 1
 smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
 smtp_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
+smtp_tls_mandatory_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
 smtp_tls_ciphers = high
-smtp_tls_exclude_ciphers = aNULL, MD5, 3DES
+smtp_tls_mandatory_ciphers = high
+smtp_tls_exclude_ciphers = aNULL, MD5, DES, 3DES, RC4
+smtp_tls_session_cache_database = btree:\${data_directory}/smtp_scache
+smtp_tls_note_starttls_offer = yes
+
+# ═══════════════════════════════════════════════════════
+# OTIMIZAÇÃO PARA NOTA A - Ciphers Fortes + Forward Secrecy
+# ═══════════════════════════════════════════════════════
+smtpd_tls_mandatory_ciphers = high
+smtpd_tls_mandatory_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
+smtpd_tls_mandatory_exclude_ciphers = aNULL, MD5, DES, 3DES, RC4, EXPORT
+smtp_tls_mandatory_exclude_ciphers = aNULL, MD5, DES, 3DES, RC4, EXPORT
+tls_preempt_cipherlist = yes
+# ═══════════════════════════════════════════════════════
 
 # Base
 mydomain = $ServerName
@@ -479,13 +493,13 @@ default_destination_concurrency_limit = 10
 default_destination_rate_delay = 3s
 default_destination_recipient_limit = 20
 EOF
-# Aplicar configurações
 
+# Aplicar configurações
 echo "================================================= POSTFIX MASTER CF ================================================="
 
 systemctl restart postfix
 
-echo "✓ Postfix configurado com rate limiting por provedor!"
+echo "✓ Postfix configurado com rate limiting e SSL Nota A!"
 echo "================================================= POSTFIX ================================================="
 
 # Salvar variáveis antes de instalar dependências
@@ -926,13 +940,14 @@ echo "================================================= Habilitar SSL no Apache 
 
 a2enmod ssl
 a2enmod rewrite
+a2enmod headers  # ← ADICIONAR esta linha
 
 # Cria o VirtualHost para forçar HTTPS
 cat <<EOF > "/etc/apache2/sites-available/ssl-$ServerName.conf"
 <VirtualHost *:80>
     ServerName $ServerName
     DocumentRoot /var/www/html
-
+    
     # Redireciona todo HTTP para HTTPS
     RewriteEngine On
     RewriteCond %{SERVER_NAME} =$ServerName
@@ -943,16 +958,20 @@ cat <<EOF > "/etc/apache2/sites-available/ssl-$ServerName.conf"
 <VirtualHost *:443>
     ServerName $ServerName
     DocumentRoot /var/www/html
-
+    
     SSLEngine on
-
     SSLCertificateFile /etc/letsencrypt/live/$ServerName/fullchain.pem
     SSLCertificateKeyFile /etc/letsencrypt/live/$ServerName/privkey.pem
-    # Opcional: aproveita config SSL da Let's Encrypt
-    # Se existir /etc/letsencrypt/options-ssl-apache.conf
-    # descomente a linha abaixo:
-    #Include /etc/letsencrypt/options-ssl-apache.conf
-
+    
+    # ═══════════════════════════════════════════════════════
+    # CONFIGURAÇÃO PARA NOTA A - Ciphers Fortes + HSTS
+    # ═══════════════════════════════════════════════════════
+    SSLProtocol             all -SSLv2 -SSLv3 -TLSv1 -TLSv1.1
+    SSLCipherSuite          ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384
+    SSLHonorCipherOrder     on
+    Header always set Strict-Transport-Security "max-age=63072000"
+    # ═══════════════════════════════════════════════════════
+    
     <Directory /var/www/html>
        AllowOverride All
        Require all granted
