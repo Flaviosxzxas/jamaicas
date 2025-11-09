@@ -1089,20 +1089,20 @@ a2ensite "ssl-$ServerName"
 systemctl reload apache2
 
 echo "================================================= Configurando aliases virtuais (noreply, contacto, bounce, unsubscribe) ================================================="
+echo "================================================= Configurando aliases virtuais (noreply, contacto, bounce, unsubscribe) ================================================="
 
 # ════════════════════════════════════════════════════════════════
-# CORREÇÃO CRÍTICA: Mapear diretamente para /dev/null
+# CORREÇÃO: Usar devnull: como transporte, não como destinatário
 # ════════════════════════════════════════════════════════════════
 
-# Criar arquivo virtual com descarte direto
+# Criar arquivo virtual com descarte via transporte devnull
 cat > /etc/postfix/virtual <<EOF
-noreply@$ServerName       /dev/null
-unsubscribe@$ServerName   /dev/null
-contacto@$ServerName      /dev/null
-bounce@$ServerName        /dev/null
+noreply@$ServerName       devnull:
+unsubscribe@$ServerName   devnull:
+contacto@$ServerName      devnull:
+bounce@$ServerName        devnull:
 EOF
 
-# Build do mapa hash
 postmap /etc/postfix/virtual
 
 # ══════ MAPA REGEXP para VERP (+token) ══════
@@ -1110,33 +1110,48 @@ ESC_SN="$(printf '%s' "$ServerName" | sed 's/[.[*^$(){}+?|\\]/\\&/g')"
 
 cat > /etc/postfix/virtual_regexp <<EOF
 # Rotas base (sem +token)
-/^contacto@${ESC_SN}\$/              /dev/null
-/^bounce@${ESC_SN}\$/                /dev/null
-/^unsubscribe@${ESC_SN}\$/           /dev/null
-/^noreply@${ESC_SN}\$/               /dev/null
+/^contacto@${ESC_SN}\$/              devnull:
+/^bounce@${ESC_SN}\$/                devnull:
+/^unsubscribe@${ESC_SN}\$/           devnull:
+/^noreply@${ESC_SN}\$/               devnull:
 
 # Rotas com VERP (+token)  
-/^contacto\+.*@${ESC_SN}\$/          /dev/null
-/^bounce\+.*@${ESC_SN}\$/            /dev/null
-/^unsubscribe\+.*@${ESC_SN}\$/       /dev/null
-/^noreply\+.*@${ESC_SN}\$/           /dev/null
+/^contacto\+.*@${ESC_SN}\$/          devnull:
+/^bounce\+.*@${ESC_SN}\$/            devnull:
+/^unsubscribe\+.*@${ESC_SN}\$/       devnull:
+/^noreply\+.*@${ESC_SN}\$/           devnull:
 EOF
 
 chmod 0644 /etc/postfix/virtual_regexp
 
-# Configurar Postfix
+# ══════ CONFIGURAR TRANSPORTE devnull: NO MASTER.CF ══════
+cat >> /etc/postfix/master.cf <<'MASTER_EOF'
+
+# Transporte para descartar emails silenciosamente
+devnull   unix  -       n       n       -       -       discard
+MASTER_EOF
+
+# Configurar virtual_alias_maps
 postconf -e "virtual_alias_maps = hash:/etc/postfix/virtual, regexp:/etc/postfix/virtual_regexp"
 
-# Aliases do sistema (manter para outros usuários)
+# ════════════════════════════════════════════════════════════════
+# Aliases do SISTEMA (usuários locais - MANTER!)
+# ════════════════════════════════════════════════════════════════
 cat > /etc/aliases <<'EOF'
+# Aliases administrativos
 postmaster: root
 mailer-daemon: postmaster
 abuse: postmaster
-spam: postmaster  
+spam: postmaster
+
+# Descartar bounces de usuários do sistema
 root: /dev/null
 nobody: /dev/null
 www-data: /dev/null
 mail: /dev/null
+daemon: /dev/null
+bin: /dev/null
+sys: /dev/null
 EOF
 
 newaliases
@@ -1144,10 +1159,12 @@ newaliases
 # Recarregar Postfix
 systemctl reload postfix
 
-echo "✓ Aliases virtuais configurados com descarte direto para /dev/null"
+echo "✓ Aliases virtuais configurados com transporte devnull:"
 echo "✓ VERP (+token) configurado via regexp"
+echo "✓ Aliases do sistema mantidos para usuários locais"
 
 # Testes de validação
+echo ""
 echo "Testando configuração..."
 postmap -q "contacto@$ServerName" hash:/etc/postfix/virtual && echo "  ✓ Hash OK" || echo "  ❌ Hash FALHOU"
 postmap -q "contacto+test@$ServerName" regexp:/etc/postfix/virtual_regexp && echo "  ✓ Regexp OK" || echo "  ❌ Regexp FALHOU"
