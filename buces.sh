@@ -202,7 +202,7 @@ echo "================================================= Corrigir SyntaxWarning e
 
 sed -i "s/self\.email is ''/self.email == ''/g" /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
 sed -i "s/self\.token is ''/self.token == ''/g"   /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
-echo "Correção aplicada com sucesso em cloudflare.py."
+echo " aplicada com sucesso em cloudflare.py."
 wait
 echo "================================================= DKIM ================================================="
 
@@ -476,7 +476,7 @@ recipient_delimiter = +
 inet_interfaces = loopback-only
 inet_protocols = ipv4
 
-# ===== CORREÇÃO: Prevenir loop de bounces =====
+# ===== : Prevenir loop de bounces =====
 # Configuração de domínios virtuais
 virtual_alias_domains = $ServerName
 virtual_mailbox_domains = 
@@ -1092,15 +1092,15 @@ echo "================================================= Configurando aliases vir
 echo "================================================= Configurando aliases virtuais (noreply, contacto, bounce, unsubscribe) ================================================="
 
 # ════════════════════════════════════════════════════════════════
-# CORREÇÃO: Usar devnull: como transporte, não como destinatário
+# CORREÇÃO: Usar discard: (transporte nativo do Postfix)
 # ════════════════════════════════════════════════════════════════
 
-# Criar arquivo virtual com descarte via transporte devnull
+# Criar arquivo virtual com descarte via transporte discard:
 cat > /etc/postfix/virtual <<EOF
-noreply@$ServerName       devnull:
-unsubscribe@$ServerName   devnull:
-contacto@$ServerName      devnull:
-bounce@$ServerName        devnull:
+noreply@$ServerName       discard:
+unsubscribe@$ServerName   discard:
+contacto@$ServerName      discard:
+bounce@$ServerName        discard:
 EOF
 
 postmap /etc/postfix/virtual
@@ -1110,26 +1110,22 @@ ESC_SN="$(printf '%s' "$ServerName" | sed 's/[.[*^$(){}+?|\\]/\\&/g')"
 
 cat > /etc/postfix/virtual_regexp <<EOF
 # Rotas base (sem +token)
-/^contacto@${ESC_SN}\$/              devnull:
-/^bounce@${ESC_SN}\$/                devnull:
-/^unsubscribe@${ESC_SN}\$/           devnull:
-/^noreply@${ESC_SN}\$/               devnull:
+/^contacto@${ESC_SN}\$/              discard:
+/^bounce@${ESC_SN}\$/                discard:
+/^unsubscribe@${ESC_SN}\$/           discard:
+/^noreply@${ESC_SN}\$/               discard:
 
 # Rotas com VERP (+token)  
-/^contacto\+.*@${ESC_SN}\$/          devnull:
-/^bounce\+.*@${ESC_SN}\$/            devnull:
-/^unsubscribe\+.*@${ESC_SN}\$/       devnull:
-/^noreply\+.*@${ESC_SN}\$/           devnull:
+/^contacto\+.*@${ESC_SN}\$/          discard:
+/^bounce\+.*@${ESC_SN}\$/            discard:
+/^unsubscribe\+.*@${ESC_SN}\$/       discard:
+/^noreply\+.*@${ESC_SN}\$/           discard:
 EOF
 
 chmod 0644 /etc/postfix/virtual_regexp
 
-# ══════ CONFIGURAR TRANSPORTE devnull: NO MASTER.CF ══════
-cat >> /etc/postfix/master.cf <<'MASTER_EOF'
-
-# Transporte para descartar emails silenciosamente
-devnull   unix  -       n       n       -       -       discard
-MASTER_EOF
+# ══════ NÃO É NECESSÁRIO ADICIONAR NADA NO MASTER.CF ══════
+# O transporte discard: é nativo do Postfix (já existe)
 
 # Configurar virtual_alias_maps
 postconf -e "virtual_alias_maps = hash:/etc/postfix/virtual, regexp:/etc/postfix/virtual_regexp"
