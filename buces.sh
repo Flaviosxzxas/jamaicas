@@ -368,6 +368,37 @@ install_py_pkg() {
   [ "$required" -eq 1 ] && exit 1 || return 0
 }
 
+# ════════════════════════════════════════════════════════════════
+# INSTALAÇÃO DE DEPENDÊNCIAS PARA PDF (wkhtmltopdf + bibliotecas)
+# ════════════════════════════════════════════════════════════════
+echo "================================================= Instalando dependências PDF ================================================="
+
+# Instalar wkhtmltopdf (necessário para pdfkit)
+echo ">> Instalando wkhtmltopdf..."
+apt-get install -y wkhtmltopdf || {
+    echo "AVISO: Falha ao instalar wkhtmltopdf via apt. Tentando métodos alternativos..."
+    # Fallback: tentar instalar via wget se apt falhar
+    wget -q https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6-1/wkhtmltox_0.12.6-1.focal_amd64.deb -O /tmp/wkhtmltox.deb
+    dpkg -i /tmp/wkhtmltox.deb || apt-get install -f -y
+    rm -f /tmp/wkhtmltox.deb
+}
+
+# Instalar bibliotecas Python para PDF
+echo ">> Instalando pdfkit e PyPDF2..."
+pip3 install --upgrade --break-system-packages pdfkit PyPDF2 || {
+    echo "AVISO: Falha na instalação via pip3. Tentando com python3 -m pip..."
+    python3 -m pip install --upgrade --break-system-packages pdfkit PyPDF2 || true
+}
+
+if command -v wkhtmltopdf >/dev/null 2>&1; then
+    echo "OK: wkhtmltopdf instalado - $(wkhtmltopdf --version | head -n 1)"
+else
+    echo "AVISO: wkhtmltopdf não está disponível."
+fi
+
+echo "✓ Dependências PDF configuradas!"
+# ════════════════════════════════════════════════════════════════
+
 # Uso:
 install_py_pkg "dnspython" "python3-dnspython" 0
 
