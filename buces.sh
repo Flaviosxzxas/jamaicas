@@ -453,6 +453,9 @@ biff = no
 readme_directory = no
 compatibility_level = 3.6
 
+# ===== DESABILITAR SMTPUTF8 (corrige erro 5.6.7) =====
+smtputf8_enable = no
+
 # Aliases locais (descartar bounce/noreply/etc via /etc/aliases)
 alias_maps = hash:/etc/aliases
 alias_database = hash:/etc/aliases
