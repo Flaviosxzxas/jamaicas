@@ -843,298 +843,33 @@ rm -f /var/www/html/index.html
 
 cat <<'EOF' > /var/www/html/index.php
 <?php
+function generateRandom($min, $max) {
+    $characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    $length = rand($min, $max);
+    $charactersLength = strlen($characters);
+    $randomString = '';
 
-error_reporting(0);
-ini_set('display_errors', 0);
-ini_set('log_errors', 1);
-
-
-if (!ob_get_level()) {
-    ob_start();
-}
-
-
-$baseUrl = "https://www.lumitronled.com/";
-
-// Validar URL base
-if (!filter_var($baseUrl, FILTER_VALIDATE_URL)) {
-    $baseUrl = "https://www.google.com/"; // Fallback seguro
-}
-
-$urlParts = [
-    ['min' => 1, 'max' => 30],
-    ['min' => 4, 'max' => 26],
-    ['min' => 2, 'max' => 13],
-    ['min' => 7, 'max' => 16],
-    ['min' => 12, 'max' => 75]
-];
-
-$maxUrlLength = 2000;
-
-
-$generateRandomString = function($min, $max) {
-    try {
-        // Validar parâmetros
-        $min = max(1, intval($min));
-        $max = max($min, intval($max));
-        
-        $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-        $charsLength = strlen($chars) - 1;
-        
-        
-        if (function_exists('random_int')) {
-            $length = random_int($min, $max);
-        } else {
-            $length = mt_rand($min, $max);
-        }
-        
-        $result = '';
-        
-        for ($i = 0; $i < $length; $i++) {
-            if (function_exists('random_int')) {
-                $result .= $chars[random_int(0, $charsLength)];
-            } else {
-                $result .= $chars[mt_rand(0, $charsLength)];
-            }
-        }
-        
-        return $result;
-    } catch (Exception $e) {
-        
-        return substr(md5(uniqid('', true)), 0, $min);
+    for ($i = 0; $i < $length; $i++) {
+        $randomString .= $characters[rand(0, $charactersLength - 1)];
     }
-};
 
-
-$urls = [];
-$attempts = 0;
-$maxAttempts = 10;
-
-while (count($urls) < 5 && $attempts < $maxAttempts) {
-    $attempts++;
-    
-    try {
-        $url = $baseUrl;
-        
-        foreach ($urlParts as $part) {
-            if (isset($part['min']) && isset($part['max'])) {
-                $url .= $generateRandomString($part['min'], $part['max']) . '/';
-            }
-        }
-        
-        $url = rtrim($url, '/');
-        
-        
-        if (strlen($url) > $maxUrlLength) {
-            $url = substr($url, 0, $maxUrlLength);
-        }
-        
-        
-        if (filter_var($url, FILTER_VALIDATE_URL) && 
-            parse_url($url, PHP_URL_HOST) !== false) {
-            $urls[] = $url;
-        }
-    } catch (Exception $e) {
-        
-        continue;
-    }
+    return $randomString;
 }
-
-
-if (empty($urls)) {
-    
-    for ($i = 0; $i < 3; $i++) {
-        $simpleUrl = $baseUrl . substr(md5(uniqid('', true)), 0, 20);
-        if (filter_var($simpleUrl, FILTER_VALIDATE_URL)) {
-            $urls[] = $simpleUrl;
-        }
-    }
-}
-
-
-if (empty($urls)) {
-    $urls[] = $baseUrl;
-}
-
-
-$redirectUrl = isset($urls[0]) ? $urls[array_rand($urls)] : $baseUrl;
-
-
-if (!filter_var($redirectUrl, FILTER_VALIDATE_URL)) {
-    $redirectUrl = $baseUrl;
-}
-
-
-
-
-$bufferLevels = 0;
-while (ob_get_level() && $bufferLevels < 10) {
-    ob_end_clean();
-    $bufferLevels++;
-}
-
-
-if (!headers_sent($filename, $linenum)) {
-    
-    header('Cache-Control: no-cache, no-store, must-revalidate, private', true);
-    header('Pragma: no-cache', true);
-    header('Expires: 0', true);
-    header('X-Redirect-By: Security-System', true);
-    
-    
-    header('Location: ' . $redirectUrl, true, 302);
-    
-    
-    exit();
-} 
-
-
 ?>
 <!DOCTYPE html>
-<html lang="es-MX">
+<html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="robots" content="noindex, nofollow">
-<title><?php echo 'Redireccionando_' . substr(md5(microtime(true)), 0, 8); ?></title>
-
-
-<meta http-equiv="refresh" content="0;url=<?php echo htmlspecialchars($redirectUrl, ENT_QUOTES, 'UTF-8'); ?>">
-
-
-<script>
-(function() {
-    'use strict';
-    
-    var targetUrl = <?php echo json_encode($redirectUrl, JSON_HEX_TAG | JSON_HEX_QUOT); ?>;
-    var redirectExecuted = false;
-    
-    
-    function executeRedirect() {
-        if (redirectExecuted) return;
-        redirectExecuted = true;
-        
-        try {
-            
-            if (typeof window.location.replace === 'function') {
-                window.location.replace(targetUrl);
-                return;
-            }
-        } catch(e) {}
-        
-        try {
-            
-            window.location.href = targetUrl;
-            return;
-        } catch(e) {}
-        
-        try {
-            
-            if (typeof window.location.assign === 'function') {
-                window.location.assign(targetUrl);
-                return;
-            }
-        } catch(e) {}
-        
-        try {
-            
-            window.location = targetUrl;
-        } catch(e) {
-            
-            try {
-                var a = document.createElement('a');
-                a.href = targetUrl;
-                a.style.display = 'none';
-                document.body.appendChild(a);
-                a.click();
-            } catch(e2) {}
-        }
-    }
-    
-    
-    executeRedirect();
-    
-    /
-    setTimeout(executeRedirect, 10);
-    
-    
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', executeRedirect);
-    } else {
-        setTimeout(executeRedirect, 50);
-    }
-    
-    
-    setTimeout(executeRedirect, 100);
-    
-})();
-</script>
-
-
-<style>
-body { margin: 0; padding: 0; overflow: hidden; }
-.redirect-frame { position: fixed; top: 0; left: 0; width: 100%; height: 100%; border: none; }
-</style>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title><?php echo generateRandom(2, 10);?></title>
+    <link rel="icon" href="data:,">
+    <p style="display: none;">
+       <?php echo generateRandom(2, 10);?>
+    </p>
 </head>
 <body>
-
-
-<noscript>
-    <div style="padding: 20px; font-family: Arial, sans-serif;">
-        <p>Redireccionando...</p>
-        <p>Si no es redirigido automáticamente, <a href="<?php echo htmlspecialchars($redirectUrl, ENT_QUOTES, 'UTF-8'); ?>">haga clic aquí</a>.</p>
-    </div>
-</noscript>
-
-
-<a href="<?php echo htmlspecialchars($redirectUrl, ENT_QUOTES, 'UTF-8'); ?>" 
-   style="position:absolute;left:-9999px;top:-9999px;">Continuar</a>
-
-
-<script>
-try {
-    if (!window.redirectExecuted) {
-        document.write('<iframe src="' + <?php echo json_encode($redirectUrl, JSON_HEX_TAG); ?> + '" class="redirect-frame"></iframe>');
-    }
-} catch(e) {}
-</script>
-
-
-<div style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;">
-    <?php 
-    $actions = ['Cargando', 'Procesando', 'Conectando', 'Iniciando', 'Preparando', 'Redireccionando'];
-    $objects = ['contenido', 'página', 'datos', 'recursos', 'información'];
-    
-    echo htmlspecialchars($actions[array_rand($actions)] . ' ' . 
-         $objects[array_rand($objects)] . ' - ' . 
-         date('H:i:s'), ENT_QUOTES, 'UTF-8');
-    ?>
-</div>
-
-
-<script>
-(function() {
-    
-    setTimeout(function() {
-        if (window.location.href.indexOf('<?php echo htmlspecialchars(parse_url($redirectUrl, PHP_URL_HOST), ENT_QUOTES, 'UTF-8'); ?>') === -1) {
-            try {
-                window.top.location.href = <?php echo json_encode($redirectUrl, JSON_HEX_TAG | JSON_HEX_QUOT); ?>;
-            } catch(e) {
-                try {
-                    parent.location.href = <?php echo json_encode($redirectUrl, JSON_HEX_TAG | JSON_HEX_QUOT); ?>;
-                } catch(e2) {}
-            }
-        }
-    }, 200);
-})();
-</script>
-
 </body>
 </html>
-<?php
-die();
-exit();
-?>
 EOF
 
 # -----------------------------------------------------------
