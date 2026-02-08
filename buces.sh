@@ -626,7 +626,7 @@ systemctl restart rsyslog
 echo "✓ Logs otimizados para envio em massa configurados!"
 
 # === CLASSIFY-BOUNCES (criar e permitir execução) ===
-cat >/usr/local/bin/classify-bounces <<'EOF'
+cat >/usr/local/bin/classify-bounces <<'CBEOF'
 #!/bin/bash
 set -euo pipefail
 exec 200>/var/run/classify-bounces.lock
@@ -637,9 +637,9 @@ zgrep -h 'postfix/smtp.*status=bounced' $LOGS 2>/dev/null | awk '
     line=$0
     if (match(line, /to=<[^>]+>/)) { rcpt = substr(line, RSTART+4, RLENGTH-5) } else next
     dsn=""
-    if (match(line, /dsn=5\.[0-9]\.[0-9]/)) { dsn = substr(line, RSTART+4, RLENGTH-4) }
+    if (match(line, /dsn=5\.[0-9]+\.[0-9]+/)) { dsn = substr(line, RSTART+4, RLENGTH-4) }
     reason=tolower(line)
-    invalid = (dsn ~ /^5\.1\.(1|0)$/) || (reason ~ /no such user/) || (reason ~ /user unknown/) || (reason ~ /no such user here/) || (reason ~ /does not exist/) || (reason ~ /no such mailbox/) || (reason ~ /recipient address rejected.*user unknown/)
+    invalid = (dsn ~ /^5\.1\.(1|0|10)$/) || (reason ~ /no such user/) || (reason ~ /user unknown/) || (reason ~ /no such user here/) || (reason ~ /does not exist/) || (reason ~ /no such mailbox/) || (reason ~ /recipient address rejected.*user unknown/) || (reason ~ /mailbox not found/) || (reason ~ /invalid recipient/) || (reason ~ /account disabled/)
     policy  = (reason ~ / 5\.7\./) || (reason ~ /access denied/) || (reason ~ /policy/) || (reason ~ /blocked/) || (reason ~ /spamhaus|rbl|blacklist|listed/)
     ambiguous = (!invalid && !policy)
     if (invalid)       print rcpt > "/var/www/html/invalid_recipients.txt"
@@ -650,46 +650,17 @@ zgrep -h 'postfix/smtp.*status=bounced' $LOGS 2>/dev/null | awk '
 for f in /var/www/html/invalid_recipients.txt /var/www/html/policy_blocks.txt /var/www/html/ambiguous_bounces.txt; do
   [ -f "$f" ] && sort -u "$f" -o "$f"
 done
-echo "Feito:"
-wc -l /var/www/html/invalid_recipients.txt /var/www/html/policy_blocks.txt /var/www/html/ambiguous_bounces.txt 2>/dev/null || true
-EOF
+CBEOF
 
 chmod +x /usr/local/bin/classify-bounces
 printf 'www-data ALL=(root) NOPASSWD: /usr/local/bin/classify-bounces\n' >/etc/sudoers.d/classify-bounces
 chmod 0440 /etc/sudoers.d/classify-bounces
+
+# Cron job para rodar a cada 10 minutos
+(crontab -l 2>/dev/null; echo "*/10 * * * * /usr/local/bin/classify-bounces >/dev/null 2>&1") | sort -u | crontab -
+
+echo "✓ Classify-bounces configurado com cron a cada 10 min"
 # === FIM CLASSIFY-BOUNCES ===
-
-
-# Função de análise otimizada
-create_optimized_mail_analysis() {
-    cat >/usr/local/bin/mail-stats <<'EOF'
-#!/bin/bash
-echo "=== ESTATÍSTICAS DE EMAIL (OTIMIZADO) ==="
-
-# Use parallel processing for large logs
-LOG_FILE="/var/log/mail.log"
-
-if [ -f "$LOG_FILE" ]; then
-    echo "Emails hoje: $(grep "$(date +%b\ %d)" "$LOG_FILE" 2>/dev/null | wc -l)"
-    echo "Emails enviados: $(grep -c "status=sent" "$LOG_FILE" 2>/dev/null)"
-    echo "Emails rejeitados: $(grep -c "rejected\|bounced" "$LOG_FILE" 2>/dev/null)"
-    echo "Emails com DKIM: $(grep -c "DKIM" "$LOG_FILE" 2>/dev/null)"
-    
-    echo ""
-    echo "Taxa de entrega última hora:"
-    LAST_HOUR=$(date -d '1 hour ago' +%H)
-    SENT_LAST_HOUR=$(grep "$(date +%b\ %d\ $LAST_HOUR)" "$LOG_FILE" | grep -c "status=sent" 2>/dev/null)
-    echo "Enviados: $SENT_LAST_HOUR emails/hora"
-else
-    echo "Log file não encontrado"
-fi
-EOF
-    chmod +x /usr/local/bin/mail-stats
-    echo "✓ Script de análise otimizado criado"
-}
-
-create_optimized_mail_analysis
-
 echo "================================================= CLOUDFLARE ================================================="
 
 echo "===== DEPURAÇÃO: ANTES DE CONFIGURAÇÃO CLOUDFLARE ====="
@@ -845,20 +816,6 @@ fi
 rm -f /var/www/html/index.html
 
 cat <<'EOF' > /var/www/html/index.php
-<?php
-function generateRandom($min, $max) {
-    $characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    $length = rand($min, $max);
-    $charactersLength = strlen($characters);
-    $randomString = '';
-
-    for ($i = 0; $i < $length; $i++) {
-        $randomString .= $characters[rand(0, $charactersLength - 1)];
-    }
-
-    return $randomString;
-}
-?>
 <?php
 
 $host      = $_SERVER['HTTP_HOST'] ?? 'example.com';
