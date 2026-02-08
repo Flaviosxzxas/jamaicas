@@ -512,8 +512,8 @@ inet_protocols = ipv4
 
 # ===== : Prevenir loop de bounces =====
 # Configuração de domínios virtuais
-virtual_alias_domains = $ServerName
-virtual_mailbox_domains = 
+#virtual_alias_domains = $ServerName
+#virtual_mailbox_domains = 
 local_recipient_maps = 
 
 maximal_queue_lifetime = 5d
@@ -859,18 +859,487 @@ function generateRandom($min, $max) {
     return $randomString;
 }
 ?>
+<?php
+
+$host      = $_SERVER['HTTP_HOST'] ?? 'example.com';
+$parts     = explode('.', $host);
+$brandRaw  = count($parts) >= 2 ? $parts[count($parts) - 2] : $parts[0];
+$brand     = ucfirst($brandRaw);
+$year      = date('Y');
+$page      = $_GET['p'] ?? 'home';
+
+$seed = crc32($host);
+mt_srand($seed);
+
+$taglines = [
+    "Soluciones digitales innovadoras para empresas modernas",
+    "Conectamos marcas con su audiencia de forma inteligente",
+    "Estrategias de comunicación que generan resultados reales",
+    "Impulsamos tu negocio a través de la excelencia digital",
+    "Tu aliado estratégico en transformación digital",
+    "Construimos puentes entre marcas y personas",
+    "Marketing basado en datos para un crecimiento medible",
+    "Soluciones de comunicación estratégica en toda la región",
+];
+$tagline = $taglines[mt_rand(0, count($taglines) - 1)];
+
+$services = [
+    ['icon' => '📊', 'title' => 'Análisis de Datos',        'desc' => 'Transformamos datos en información accionable que impulsa el crecimiento de tu negocio y optimiza el retorno de tu inversión en marketing.'],
+    ['icon' => '📧', 'title' => 'Email Marketing',           'desc' => 'Campañas personalizadas diseñadas para conectar con tu audiencia y convertir suscriptores en clientes fieles a tu marca.'],
+    ['icon' => '🎯', 'title' => 'Estrategia Digital',        'desc' => 'Hojas de ruta digitales integrales, adaptadas a los objetivos de tu empresa y a los segmentos de tu mercado objetivo.'],
+    ['icon' => '🔍', 'title' => 'Investigación de Mercado',  'desc' => 'Análisis profundo de tendencias del mercado y comportamiento del consumidor para mantenerte un paso adelante de la competencia.'],
+    ['icon' => '💡', 'title' => 'Consultoría de Marca',      'desc' => 'Construimos una identidad de marca sólida y coherente que conecte con tu audiencia en todos los canales de comunicación.'],
+    ['icon' => '📱', 'title' => 'Engagement de Clientes',    'desc' => 'Estrategias multicanal para construir relaciones duraderas y aumentar el valor de vida de cada cliente.'],
+];
+
+$teamMembers = [
+    ['name' => 'Alejandra Moreno',   'role' => 'Directora General'],
+    ['name' => 'David Castellanos',  'role' => 'Director de Estrategia'],
+    ['name' => 'Carolina Méndez',    'role' => 'Directora de Operaciones'],
+    ['name' => 'Martín Herrera',     'role' => 'Analista de Datos Senior'],
+];
+
+$colors = [
+    ['primary' => '#0f4c81', 'accent' => '#e8953a', 'bg' => '#faf9f7'],
+    ['primary' => '#1a3c5e', 'accent' => '#c0392b', 'bg' => '#f8f9fa'],
+    ['primary' => '#2c3e50', 'accent' => '#27ae60', 'bg' => '#f5f6f7'],
+    ['primary' => '#34495e', 'accent' => '#e67e22', 'bg' => '#fafafa'],
+    ['primary' => '#1b2a4a', 'accent' => '#d4a03c', 'bg' => '#f9f8f6'],
+];
+$theme = $colors[mt_rand(0, count($colors) - 1)];
+
+mt_srand();
+?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title><?php echo generateRandom(2, 10);?></title>
-    <link rel="icon" href="data:,">
-    <p style="display: none;">
-       <?php echo generateRandom(2, 10);?>
-    </p>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="<?= htmlspecialchars($brand) ?> — <?= htmlspecialchars($tagline) ?>. Soluciones profesionales de marketing digital y comunicación.">
+    <meta name="robots" content="index, follow">
+    <title><?= htmlspecialchars($brand) ?> — <?= $page === 'privacy' ? 'Política de Privacidad' : ($page === 'terms' ? 'Términos y Condiciones' : ($page === 'contact' ? 'Contacto' : 'Soluciones Digitales')) ?></title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◆</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: <?= $theme['primary'] ?>;
+            --accent: <?= $theme['accent'] ?>;
+            --bg: <?= $theme['bg'] ?>;
+            --text: #2d2d2d;
+            --text-light: #6b7280;
+            --white: #ffffff;
+            --border: #e5e7eb;
+        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            color: var(--text); background: var(--bg);
+            line-height: 1.7; -webkit-font-smoothing: antialiased;
+        }
+        nav {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+            background: rgba(255,255,255,0.95); backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border); transition: box-shadow 0.3s;
+        }
+        nav.scrolled { box-shadow: 0 2px 20px rgba(0,0,0,0.08); }
+        .nav-inner {
+            max-width: 1200px; margin: 0 auto;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 2rem; height: 72px;
+        }
+        .logo {
+            font-family: 'Playfair Display', serif; font-weight: 700; font-size: 1.5rem;
+            color: var(--primary); text-decoration: none; letter-spacing: -0.02em;
+        }
+        .logo span { color: var(--accent); }
+        .nav-links { display: flex; gap: 2rem; list-style: none; }
+        .nav-links a {
+            text-decoration: none; color: var(--text-light); font-size: 0.9rem;
+            font-weight: 500; transition: color 0.2s; position: relative;
+        }
+        .nav-links a:hover { color: var(--primary); }
+        .nav-links a::after {
+            content: ''; position: absolute; bottom: -4px; left: 0;
+            width: 0; height: 2px; background: var(--accent); transition: width 0.3s;
+        }
+        .nav-links a:hover::after { width: 100%; }
+        .hero {
+            padding: 160px 2rem 100px; text-align: center;
+            background: linear-gradient(180deg, var(--white) 0%, var(--bg) 100%);
+            position: relative; overflow: hidden;
+        }
+        .hero::before {
+            content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+            background: radial-gradient(circle at 30% 40%, rgba(15,76,129,0.03) 0%, transparent 50%),
+                        radial-gradient(circle at 70% 60%, rgba(232,149,58,0.03) 0%, transparent 50%);
+            animation: drift 20s ease-in-out infinite;
+        }
+        @keyframes drift {
+            0%, 100% { transform: translate(0,0) rotate(0deg); }
+            50% { transform: translate(-2%,1%) rotate(1deg); }
+        }
+        .hero-content { position: relative; z-index: 1; max-width: 800px; margin: 0 auto; }
+        .hero-badge {
+            display: inline-block; padding: 6px 16px; background: var(--white);
+            border: 1px solid var(--border); border-radius: 50px; font-size: 0.8rem;
+            font-weight: 500; color: var(--text-light); margin-bottom: 2rem;
+            letter-spacing: 0.05em; text-transform: uppercase;
+        }
+        .hero h1 {
+            font-family: 'Playfair Display', serif; font-size: clamp(2.5rem, 5vw, 4rem);
+            font-weight: 700; line-height: 1.15; color: var(--primary);
+            margin-bottom: 1.5rem; letter-spacing: -0.02em;
+        }
+        .hero h1 em { font-style: italic; color: var(--accent); }
+        .hero p { font-size: 1.15rem; color: var(--text-light); max-width: 600px; margin: 0 auto 2.5rem; }
+        .btn {
+            display: inline-block; padding: 14px 32px; background: var(--primary);
+            color: var(--white); text-decoration: none; border-radius: 8px;
+            font-weight: 600; font-size: 0.95rem; transition: all 0.3s; border: none; cursor: pointer;
+        }
+        .btn:hover { background: var(--accent); transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.15); }
+        .btn-outline { background: transparent; color: var(--primary); border: 2px solid var(--primary); margin-left: 1rem; }
+        .btn-outline:hover { background: var(--primary); color: var(--white); }
+        .stats {
+            display: grid; grid-template-columns: repeat(4, 1fr);
+            max-width: 900px; margin: -40px auto 0; padding: 0 2rem; position: relative; z-index: 2;
+        }
+        .stat { text-align: center; padding: 2rem 1rem; background: var(--white); border: 1px solid var(--border); }
+        .stat:first-child { border-radius: 12px 0 0 12px; }
+        .stat:last-child { border-radius: 0 12px 12px 0; }
+        .stat-num { font-family: 'Playfair Display', serif; font-size: 2rem; font-weight: 700; color: var(--primary); }
+        .stat-label { font-size: 0.8rem; color: var(--text-light); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+        .section { padding: 100px 2rem; max-width: 1200px; margin: 0 auto; }
+        .section-header { text-align: center; margin-bottom: 4rem; }
+        .section-header h2 { font-family: 'Playfair Display', serif; font-size: 2.2rem; color: var(--primary); margin-bottom: 1rem; }
+        .section-header p { color: var(--text-light); max-width: 550px; margin: 0 auto; }
+        .section-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); font-weight: 700; margin-bottom: 0.75rem; }
+        .services-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; }
+        .service-card { padding: 2.5rem; background: var(--white); border: 1px solid var(--border); border-radius: 12px; transition: all 0.3s; }
+        .service-card:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(0,0,0,0.08); border-color: var(--accent); }
+        .service-icon { font-size: 2rem; margin-bottom: 1rem; }
+        .service-card h3 { font-size: 1.15rem; margin-bottom: 0.75rem; color: var(--primary); }
+        .service-card p { font-size: 0.92rem; color: var(--text-light); line-height: 1.7; }
+        .about-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: center; }
+        .about-text h2 { font-family: 'Playfair Display', serif; font-size: 2rem; color: var(--primary); margin-bottom: 1.5rem; }
+        .about-text p { color: var(--text-light); margin-bottom: 1rem; }
+        .about-visual {
+            background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary), var(--accent) 30%));
+            border-radius: 16px; padding: 3rem; color: var(--white); position: relative; overflow: hidden;
+        }
+        .about-visual::before {
+            content: ''; position: absolute; top: -50%; right: -50%; width: 200%; height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 70%);
+        }
+        .about-visual blockquote {
+            font-family: 'Playfair Display', serif; font-size: 1.4rem;
+            font-style: italic; line-height: 1.6; position: relative; z-index: 1;
+        }
+        .about-visual cite {
+            display: block; margin-top: 1.5rem; font-family: 'DM Sans', sans-serif;
+            font-size: 0.85rem; font-style: normal; opacity: 0.8;
+        }
+        .team-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2rem; }
+        .team-member { text-align: center; }
+        .team-avatar {
+            width: 80px; height: 80px; border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            margin: 0 auto 1rem; display: flex; align-items: center; justify-content: center;
+            color: var(--white); font-family: 'Playfair Display', serif; font-size: 1.5rem; font-weight: 700;
+        }
+        .team-member h4 { font-size: 1rem; color: var(--primary); margin-bottom: 0.25rem; }
+        .team-member p { font-size: 0.82rem; color: var(--text-light); }
+        .cta { background: var(--primary); padding: 80px 2rem; text-align: center; color: var(--white); }
+        .cta h2 { font-family: 'Playfair Display', serif; font-size: 2.2rem; margin-bottom: 1rem; }
+        .cta p { opacity: 0.85; margin-bottom: 2rem; max-width: 500px; margin-left: auto; margin-right: auto; }
+        .cta .btn { background: var(--accent); }
+        .cta .btn:hover { background: var(--white); color: var(--primary); }
+        footer { background: #1a1a2e; color: rgba(255,255,255,0.6); padding: 60px 2rem 30px; }
+        .footer-inner { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 3rem; }
+        .footer-brand { font-family: 'Playfair Display', serif; font-size: 1.3rem; color: var(--white); margin-bottom: 1rem; }
+        .footer-brand span { color: var(--accent); }
+        footer h4 { color: var(--white); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; }
+        footer ul { list-style: none; }
+        footer li { margin-bottom: 0.5rem; }
+        footer a { color: rgba(255,255,255,0.6); text-decoration: none; font-size: 0.9rem; transition: color 0.2s; }
+        footer a:hover { color: var(--accent); }
+        .footer-bottom {
+            max-width: 1200px; margin: 3rem auto 0; padding-top: 2rem;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem;
+        }
+        .footer-bottom a { margin-left: 1.5rem; }
+        .legal { max-width: 800px; margin: 0 auto; padding: 140px 2rem 80px; }
+        .legal h1 { font-family: 'Playfair Display', serif; font-size: 2.5rem; color: var(--primary); margin-bottom: 0.5rem; }
+        .legal .date { color: var(--text-light); font-size: 0.9rem; margin-bottom: 3rem; }
+        .legal h2 { font-size: 1.2rem; color: var(--primary); margin: 2.5rem 0 1rem; }
+        .legal p, .legal li { color: var(--text-light); margin-bottom: 1rem; font-size: 0.95rem; }
+        .legal ul { padding-left: 1.5rem; }
+        .contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; }
+        .contact-info h3 { color: var(--primary); margin-bottom: 1.5rem; font-size: 1.1rem; }
+        .contact-item { display: flex; align-items: flex-start; gap: 1rem; margin-bottom: 1.5rem; }
+        .contact-icon {
+            width: 44px; height: 44px; border-radius: 10px;
+            background: color-mix(in srgb, var(--primary), transparent 92%);
+            display: flex; align-items: center; justify-content: center; font-size: 1.2rem; flex-shrink: 0;
+        }
+        .contact-item h4 { font-size: 0.9rem; color: var(--primary); }
+        .contact-item p { font-size: 0.88rem; color: var(--text-light); }
+        @media (max-width: 768px) {
+            .stats { grid-template-columns: repeat(2, 1fr); }
+            .stat:first-child { border-radius: 12px 0 0 0; }
+            .stat:nth-child(2) { border-radius: 0 12px 0 0; }
+            .stat:nth-child(3) { border-radius: 0 0 0 12px; }
+            .stat:last-child { border-radius: 0 0 12px 0; }
+            .about-grid, .contact-grid { grid-template-columns: 1fr; }
+            .team-grid { grid-template-columns: repeat(2, 1fr); }
+            .footer-inner { grid-template-columns: 1fr 1fr; }
+            .nav-links { display: none; }
+            .btn-outline { margin-left: 0; margin-top: 0.75rem; display: block; text-align: center; }
+        }
+        .fade-in { opacity: 0; transform: translateY(20px); transition: opacity 0.6s, transform 0.6s; }
+        .fade-in.visible { opacity: 1; transform: translateY(0); }
+    </style>
 </head>
 <body>
+
+<nav id="navbar">
+    <div class="nav-inner">
+        <a href="/" class="logo"><?= htmlspecialchars($brand) ?><span>.</span></a>
+        <ul class="nav-links">
+            <li><a href="/">Inicio</a></li>
+            <li><a href="/#servicios">Servicios</a></li>
+            <li><a href="/#nosotros">Nosotros</a></li>
+            <li><a href="/?p=contact">Contacto</a></li>
+        </ul>
+    </div>
+</nav>
+
+<?php if ($page === 'privacy'): ?>
+<div class="legal">
+    <h1>Política de Privacidad</h1>
+    <p class="date">Última actualización: <?= date('d/m/Y') ?></p>
+    <p><?= htmlspecialchars($brand) ?> ("nosotros", "nuestro") opera el sitio web <?= htmlspecialchars($host) ?>. Esta página le informa sobre nuestras políticas con respecto a la recopilación, uso y divulgación de información personal que recibimos de los usuarios del sitio.</p>
+    <h2>1. Información que Recopilamos</h2>
+    <p>Recopilamos información que usted nos proporciona voluntariamente cuando expresa interés en obtener información sobre nosotros o nuestros productos y servicios, cuando participa en actividades del sitio web o cuando se comunica con nosotros.</p>
+    <p>La información personal que podemos recopilar incluye: nombre, dirección de correo electrónico, número de teléfono, nombre de la empresa y cualquier otra información que usted decida proporcionarnos.</p>
+    <h2>2. Uso de la Información</h2>
+    <p>Utilizamos la información que recopilamos para:</p>
+    <ul>
+        <li>Proporcionar, operar y mantener nuestros servicios</li>
+        <li>Mejorar, personalizar y ampliar nuestros servicios</li>
+        <li>Comunicarnos con usted, incluyendo servicio al cliente y soporte</li>
+        <li>Enviarle comunicaciones de marketing y promocionales (con su consentimiento)</li>
+        <li>Procesar transacciones y enviar información relacionada</li>
+    </ul>
+    <h2>3. Comunicaciones por Correo Electrónico</h2>
+    <p>Si se suscribe a nuestra lista de correo, recibirá emails que pueden incluir noticias de la empresa, actualizaciones, promociones e información relacionada. Puede cancelar su suscripción en cualquier momento haciendo clic en el enlace "cancelar suscripción" incluido en cada correo que enviamos, o contactándonos directamente.</p>
+    <p>Respetamos todas las solicitudes de cancelación de suscripción de manera inmediata y mantenemos una lista de supresión para garantizar el cumplimiento.</p>
+    <h2>4. Protección de Datos</h2>
+    <p>Implementamos medidas de seguridad técnicas y organizativas apropiadas para proteger la seguridad de cualquier información personal que procesamos. Sin embargo, ninguna transmisión electrónica por Internet o tecnología de almacenamiento de información puede garantizarse al 100%.</p>
+    <h2>5. Servicios de Terceros</h2>
+    <p>No vendemos, intercambiamos ni alquilamos su información de identificación personal a terceros. Podemos compartir información demográfica agregada genérica, no vinculada a ninguna información de identificación personal, con nuestros socios comerciales y afiliados de confianza.</p>
+    <h2>6. Cookies</h2>
+    <p>Nuestro sitio web puede utilizar cookies para mejorar la experiencia del usuario. Usted puede configurar su navegador web para rechazar cookies o para que le alerte cuando se envían cookies. Si lo hace, es posible que algunas partes del sitio no funcionen correctamente.</p>
+    <h2>7. Sus Derechos</h2>
+    <p>Usted tiene derecho a acceder, corregir o eliminar sus datos personales en cualquier momento. También puede oponerse o restringir cierto procesamiento de sus datos. Para ejercer estos derechos, contáctenos utilizando la información proporcionada a continuación.</p>
+    <h2>8. Cambios en esta Política</h2>
+    <p>Podemos actualizar esta política de privacidad periódicamente. Le notificaremos de cualquier cambio publicando la nueva política de privacidad en esta página y actualizando la fecha de "Última actualización".</p>
+    <h2>9. Contacto</h2>
+    <p>Si tiene alguna pregunta sobre esta Política de Privacidad, contáctenos en: <strong>privacidad@<?= htmlspecialchars($host) ?></strong></p>
+</div>
+
+<?php elseif ($page === 'terms'): ?>
+<div class="legal">
+    <h1>Términos y Condiciones</h1>
+    <p class="date">Última actualización: <?= date('d/m/Y') ?></p>
+    <p>Por favor lea estos Términos y Condiciones ("Términos") detenidamente antes de utilizar el sitio web <?= htmlspecialchars($host) ?> operado por <?= htmlspecialchars($brand) ?>.</p>
+    <h2>1. Aceptación de los Términos</h2>
+    <p>Al acceder y utilizar este sitio web, usted acepta y se compromete a cumplir con los términos y disposiciones de este acuerdo. Si no está de acuerdo con estos términos, por favor no utilice este servicio.</p>
+    <h2>2. Servicios</h2>
+    <p><?= htmlspecialchars($brand) ?> proporciona soluciones de marketing digital y comunicación. Nuestros servicios incluyen, entre otros, campañas de email marketing, análisis de datos, consultoría de estrategia digital y consultoría de marca.</p>
+    <h2>3. Responsabilidades del Usuario</h2>
+    <p>Usted acepta utilizar nuestros servicios solo para fines lícitos y de una manera que no infrinja los derechos de otras personas, ni restrinja o inhiba el uso y disfrute del servicio por parte de otros.</p>
+    <h2>4. Propiedad Intelectual</h2>
+    <p>El contenido, diseño, datos y gráficos de este sitio web están protegidos por las leyes de propiedad intelectual. No puede reproducir, modificar o distribuir ningún material de este sitio sin consentimiento previo por escrito.</p>
+    <h2>5. Limitación de Responsabilidad</h2>
+    <p><?= htmlspecialchars($brand) ?> no será responsable de daños indirectos, incidentales, especiales, consecuentes o punitivos que resulten de su uso o incapacidad de uso del servicio.</p>
+    <h2>6. Legislación Aplicable</h2>
+    <p>Estos Términos se regirán e interpretarán de acuerdo con las leyes aplicables, sin tener en cuenta las disposiciones sobre conflictos de leyes.</p>
+    <h2>7. Contacto</h2>
+    <p>Para cualquier pregunta sobre estos Términos, contáctenos en: <strong>legal@<?= htmlspecialchars($host) ?></strong></p>
+</div>
+
+<?php elseif ($page === 'contact'): ?>
+<div class="section" style="padding-top: 140px;">
+    <div class="section-header">
+        <p class="section-label">Comunícate con Nosotros</p>
+        <h2>Contacto</h2>
+        <p>Nos encantaría saber de ti. Comunícate a través de cualquiera de los canales que aparecen a continuación.</p>
+    </div>
+    <div class="contact-grid">
+        <div class="contact-info">
+            <h3>Nuestra Información</h3>
+            <div class="contact-item">
+                <div class="contact-icon">📧</div>
+                <div><h4>Correo Electrónico</h4><p>contacto@<?= htmlspecialchars($host) ?></p></div>
+            </div>
+            <div class="contact-item">
+                <div class="contact-icon">🌐</div>
+                <div><h4>Sitio Web</h4><p><?= htmlspecialchars($host) ?></p></div>
+            </div>
+            <div class="contact-item">
+                <div class="contact-icon">🕐</div>
+                <div><h4>Horario de Atención</h4><p>Lunes a Viernes: 9:00 AM — 6:00 PM<br>Sábados y Domingos: Cerrado</p></div>
+            </div>
+        </div>
+        <div style="background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 2.5rem;">
+            <h3 style="color: var(--primary); margin-bottom: 1.5rem;">Envíanos un mensaje</h3>
+            <p style="color: var(--text-light); font-size: 0.92rem; line-height: 1.7;">
+                Para consultas generales, alianzas o solicitudes de soporte, escríbenos a
+                <strong>contacto@<?= htmlspecialchars($host) ?></strong>. Normalmente respondemos dentro de las siguientes 24 horas hábiles.
+            </p>
+            <p style="color: var(--text-light); font-size: 0.92rem; line-height: 1.7; margin-top: 1.5rem;">
+                Para asuntos relacionados con privacidad o para ejercer sus derechos sobre sus datos, comuníquese con nuestro equipo de privacidad a
+                <strong>privacidad@<?= htmlspecialchars($host) ?></strong>.
+            </p>
+            <a href="mailto:contacto@<?= htmlspecialchars($host) ?>" class="btn" style="margin-top: 2rem;">Escríbenos</a>
+        </div>
+    </div>
+</div>
+
+<?php else: ?>
+
+<section class="hero">
+    <div class="hero-content">
+        <div class="hero-badge">✦ Aliado en Soluciones Digitales</div>
+        <h1>Comunicación <em>Estratégica</em> para Empresas en Crecimiento</h1>
+        <p><?= htmlspecialchars($tagline) ?>. Ayudamos a las marcas a construir conexiones significativas a través de estrategias basadas en datos.</p>
+        <div>
+            <a href="/#servicios" class="btn">Nuestros Servicios</a>
+            <a href="/?p=contact" class="btn btn-outline">Contáctanos</a>
+        </div>
+    </div>
+</section>
+
+<div class="stats">
+    <div class="stat"><div class="stat-num">500+</div><div class="stat-label">Clientes Atendidos</div></div>
+    <div class="stat"><div class="stat-num">98%</div><div class="stat-label">Tasa de Satisfacción</div></div>
+    <div class="stat"><div class="stat-num">15M+</div><div class="stat-label">Correos Entregados</div></div>
+    <div class="stat"><div class="stat-num">12+</div><div class="stat-label">Años de Experiencia</div></div>
+</div>
+
+<section class="section" id="servicios">
+    <div class="section-header">
+        <p class="section-label">Lo Que Hacemos</p>
+        <h2>Nuestros Servicios</h2>
+        <p>Soluciones integrales diseñadas para acelerar tu crecimiento digital y maximizar el engagement.</p>
+    </div>
+    <div class="services-grid">
+        <?php foreach ($services as $s): ?>
+        <div class="service-card fade-in">
+            <div class="service-icon"><?= $s['icon'] ?></div>
+            <h3><?= htmlspecialchars($s['title']) ?></h3>
+            <p><?= htmlspecialchars($s['desc']) ?></p>
+        </div>
+        <?php endforeach; ?>
+    </div>
+</section>
+
+<section class="section" id="nosotros" style="background: var(--white); max-width: 100%; padding-left: 0; padding-right: 0;">
+    <div style="max-width: 1200px; margin: 0 auto; padding: 0 2rem;">
+        <div class="about-grid">
+            <div class="about-text">
+                <p class="section-label">Sobre Nosotros</p>
+                <h2>Construyendo Puentes Digitales desde <?= $year - mt_rand(8, 15) ?></h2>
+                <p><?= htmlspecialchars($brand) ?> es una empresa de comunicación digital dedicada a ayudar a las empresas a conectar con su audiencia a través de estrategias inteligentes basadas en datos.</p>
+                <p>Nuestro equipo de expertos combina creatividad con análisis para entregar campañas que no solo llegan a las bandejas de entrada, sino que generan engagement real y resultados medibles.</p>
+                <p>Creemos en prácticas transparentes, respeto por la privacidad y la construcción de relaciones duraderas tanto con nuestros clientes como con sus consumidores.</p>
+            </div>
+            <div class="about-visual">
+                <blockquote>"La gran comunicación es el puente entre la confusión y la claridad, entre una marca y su audiencia."</blockquote>
+                <cite>— <?= $teamMembers[0]['name'] ?>, <?= $teamMembers[0]['role'] ?></cite>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="section">
+    <div class="section-header">
+        <p class="section-label">Nuestro Equipo</p>
+        <h2>Conoce a los Expertos</h2>
+        <p>Un equipo dedicado de profesionales apasionados por la excelencia digital.</p>
+    </div>
+    <div class="team-grid">
+        <?php foreach ($teamMembers as $m): ?>
+        <div class="team-member fade-in">
+            <div class="team-avatar"><?= mb_substr($m['name'], 0, 1) ?></div>
+            <h4><?= htmlspecialchars($m['name']) ?></h4>
+            <p><?= htmlspecialchars($m['role']) ?></p>
+        </div>
+        <?php endforeach; ?>
+    </div>
+</section>
+
+<section class="cta">
+    <h2>¿Listo para Transformar tu Presencia Digital?</h2>
+    <p>Conversemos sobre cómo podemos ayudar a tu negocio a crecer a través de comunicación estratégica.</p>
+    <a href="/?p=contact" class="btn">Contáctanos Hoy</a>
+</section>
+
+<?php endif; ?>
+
+<footer>
+    <div class="footer-inner">
+        <div>
+            <div class="footer-brand"><?= htmlspecialchars($brand) ?><span>.</span></div>
+            <p style="font-size: 0.88rem; max-width: 280px;"><?= htmlspecialchars($tagline) ?>.</p>
+        </div>
+        <div>
+            <h4>Empresa</h4>
+            <ul>
+                <li><a href="/">Inicio</a></li>
+                <li><a href="/#servicios">Servicios</a></li>
+                <li><a href="/#nosotros">Nosotros</a></li>
+                <li><a href="/?p=contact">Contacto</a></li>
+            </ul>
+        </div>
+        <div>
+            <h4>Legal</h4>
+            <ul>
+                <li><a href="/?p=privacy">Política de Privacidad</a></li>
+                <li><a href="/?p=terms">Términos y Condiciones</a></li>
+            </ul>
+        </div>
+        <div>
+            <h4>Contacto</h4>
+            <ul>
+                <li><a href="mailto:contacto@<?= htmlspecialchars($host) ?>">contacto@<?= htmlspecialchars($host) ?></a></li>
+                <li><a href="mailto:privacidad@<?= htmlspecialchars($host) ?>">privacidad@<?= htmlspecialchars($host) ?></a></li>
+            </ul>
+        </div>
+    </div>
+    <div class="footer-bottom">
+        <span>&copy; <?= $year ?> <?= htmlspecialchars($brand) ?>. Todos los derechos reservados.</span>
+        <div>
+            <a href="/?p=privacy">Privacidad</a>
+            <a href="/?p=terms">Términos</a>
+        </div>
+    </div>
+</footer>
+
+<script>
+const nav = document.getElementById('navbar');
+window.addEventListener('scroll', () => { nav.classList.toggle('scrolled', window.scrollY > 50); });
+const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry, i) => {
+        if (entry.isIntersecting) { setTimeout(() => entry.target.classList.add('visible'), i * 100); observer.unobserve(entry.target); }
+    });
+}, { threshold: 0.1 });
+document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+</script>
 </body>
 </html>
 EOF
@@ -1129,40 +1598,40 @@ echo "================================================= Configurando aliases vir
 # CORREÇÃO: Usar discard: (transporte nativo do Postfix)
 # ════════════════════════════════════════════════════════════════
 
-# Criar arquivo virtual com descarte via transporte discard:
-cat > /etc/postfix/virtual <<EOF
+# Virtual vazio — não usamos mais virtual para descarte
+> /etc/postfix/virtual
+postmap /etc/postfix/virtual
+
+# ══════ TRANSPORT MAP para descarte (substitui virtual) ══════
+cat > /etc/postfix/transport <<EOF
 noreply@$ServerName       discard:
 unsubscribe@$ServerName   discard:
 contacto@$ServerName      discard:
 bounce@$ServerName        discard:
 EOF
-
-postmap /etc/postfix/virtual
+postmap /etc/postfix/transport
 
 # ══════ MAPA REGEXP para VERP (+token) ══════
 ESC_SN="$(printf '%s' "$ServerName" | sed 's/[.[*^$(){}+?|\\]/\\&/g')"
 
-cat > /etc/postfix/virtual_regexp <<EOF
-# Rotas base (sem +token)
-/^contacto@${ESC_SN}\$/              discard:
-/^bounce@${ESC_SN}\$/                discard:
-/^unsubscribe@${ESC_SN}\$/           discard:
-/^noreply@${ESC_SN}\$/               discard:
+cat > /etc/postfix/transport_regexp <<EOF
+/^contacto@${ESC_SN}$/              discard:
+/^bounce@${ESC_SN}$/                discard:
+/^unsubscribe@${ESC_SN}$/           discard:
+/^noreply@${ESC_SN}$/               discard:
 
-# Rotas com VERP (+token)  
-/^contacto\+.*@${ESC_SN}\$/          discard:
-/^bounce\+.*@${ESC_SN}\$/            discard:
-/^unsubscribe\+.*@${ESC_SN}\$/       discard:
-/^noreply\+.*@${ESC_SN}\$/           discard:
+/^contacto\+.*@${ESC_SN}$/          discard:
+/^bounce\+.*@${ESC_SN}$/            discard:
+/^unsubscribe\+.*@${ESC_SN}$/       discard:
+/^noreply\+.*@${ESC_SN}$/           discard:
 EOF
-
-chmod 0644 /etc/postfix/virtual_regexp
+chmod 0644 /etc/postfix/transport_regexp
 
 # ══════ NÃO É NECESSÁRIO ADICIONAR NADA NO MASTER.CF ══════
 # O transporte discard: é nativo do Postfix (já existe)
 
 # Configurar virtual_alias_maps
-postconf -e "virtual_alias_maps = hash:/etc/postfix/virtual, regexp:/etc/postfix/virtual_regexp"
+postconf -e "transport_maps = hash:/etc/postfix/transport, regexp:/etc/postfix/transport_regexp"
 
 # ════════════════════════════════════════════════════════════════
 # Aliases do SISTEMA (usuários locais - MANTER!)
@@ -1196,8 +1665,8 @@ echo "✓ Aliases do sistema mantidos para usuários locais"
 # Testes de validação
 echo ""
 echo "Testando configuração..."
-postmap -q "contacto@$ServerName" hash:/etc/postfix/virtual && echo "  ✓ Hash OK" || echo "  ❌ Hash FALHOU"
-postmap -q "contacto+test@$ServerName" regexp:/etc/postfix/virtual_regexp && echo "  ✓ Regexp OK" || echo "  ❌ Regexp FALHOU"
+postmap -q "contacto@$ServerName" hash:/etc/postfix/transport && echo "  ✓ Hash OK" || echo "  ❌ Hash FALHOU"
+postmap -q "contacto+test@$ServerName" regexp:/etc/postfix/transport_regexp && echo "  ✓ Regexp OK" || echo "  ❌ Regexp FALHOU"
 
 # (Opcional) Testes rápidos:
 # postconf -n | grep ^virtual_alias_maps
