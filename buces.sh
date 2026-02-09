@@ -657,7 +657,7 @@ printf 'www-data ALL=(root) NOPASSWD: /usr/local/bin/classify-bounces\n' >/etc/s
 chmod 0440 /etc/sudoers.d/classify-bounces
 
 # Cron job para rodar a cada 10 minutos
-(crontab -l 2>/dev/null; echo "*/10 * * * * /usr/local/bin/classify-bounces >/dev/null 2>&1") | sort -u | crontab -
+(crontab -l 2>/dev/null || true; echo "*/10 * * * * /usr/local/bin/classify-bounces >/dev/null 2>&1") | sort -u | crontab -
 
 echo "✓ Classify-bounces configurado com cron a cada 10 min"
 # === FIM CLASSIFY-BOUNCES ===
