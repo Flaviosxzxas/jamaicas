@@ -448,7 +448,7 @@ cat <<EOF > /etc/postfix/main.cf
 myhostname = $MailServerName
 smtp_helo_name = $MailServerName
 smtpd_helo_required = yes
-smtpd_banner = \$myhostname ESMTP \$mail_name (Ubuntu)
+smtpd_banner = $myhostname ESMTP
 biff = no
 readme_directory = no
 compatibility_level = 3.6
@@ -516,30 +516,55 @@ inet_protocols = ipv4
 #virtual_mailbox_domains = 
 local_recipient_maps = 
 
-maximal_queue_lifetime = 5d
-bounce_queue_lifetime = 5d
+maximal_queue_lifetime = 2d
+bounce_queue_lifetime = 2d
 
 # Otimizar timeouts
-smtp_connect_timeout = 120s
-smtp_helo_timeout = 120s
-smtp_mail_timeout = 120s
-smtp_rcpt_timeout = 120s
-smtp_data_init_timeout = 120s
-smtp_data_xfer_timeout = 600s
-smtp_data_done_timeout = 600s
+smtp_connect_timeout = 30s
+smtp_helo_timeout = 30s
+smtp_mail_timeout = 30s
+smtp_rcpt_timeout = 30s
+smtp_data_init_timeout = 60s
+smtp_data_xfer_timeout = 300s
+smtp_data_done_timeout = 300s
 
 # SMTP (prioridade)
-smtp_destination_concurrency_limit = 10
-smtp_destination_rate_delay = 3s
-smtp_destination_recipient_limit = 20
+smtp_destination_concurrency_limit = 15
+smtp_destination_rate_delay = 1s
+smtp_destination_recipient_limit = 30
 
 # Default (fallback)
-default_destination_concurrency_limit = 10
-default_destination_rate_delay = 3s
-default_destination_recipient_limit = 20
+default_destination_concurrency_limit = 15
+default_destination_rate_delay = 1s
+default_destination_recipient_limit = 30
 EOF
 
 # Aplicar configurações
+
+# ═══════════ HEADER CHECKS (limpar headers internos) ═══════════
+header_checks = regexp:/etc/postfix/header_checks
+EOF
+
+
+# ═══════════════════════════════════════════════════════════
+# CORREÇÃO 2: HEADER CHECKS (NOVO - não existia no seu .sh)
+# Adicione DEPOIS do bloco main.cf
+# ═══════════════════════════════════════════════════════════
+
+cat > /etc/postfix/header_checks <<'HCEOF'
+# Remover headers que revelam envio local/PHP
+/^Received:.*127\.0\.0\.1/           IGNORE
+/^Received:.*localhost/              IGNORE
+/^X-Mailer:/                         IGNORE
+/^X-PHP-Originating-Script:/         IGNORE
+/^X-Originating-IP:.*127/            IGNORE
+/^X-Spam-Status:/                    IGNORE
+/^X-Spam-Score:/                     IGNORE
+HCEOF
+
+chmod 644 /etc/postfix/header_checks
+echo "✓ Header checks configurados"
+
 echo "================================================= POSTFIX MASTER CF ================================================="
 
 systemctl restart postfix
@@ -801,7 +826,7 @@ EscapedDKIMCode=$(printf '%s' "$DKIMCode" | sed 's/\"/\\\"/g')
 
 create_or_update_record "$ServerName" "A" "$ServerIP" ""
 create_or_update_record "$MailServerName" "A" "$ServerIP" ""
-create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP ~all\"" ""
+create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP -all\"" ""
 create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=quarantine; sp=quarantine; pct=100; rua=mailto:dmarc-reports@$ServerName; adkim=r; aspf=r; fo=1\"" ""
 create_or_update_record "mail._domainkey.$ServerName" "TXT" "\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\"" ""
 create_or_update_record "$ServerName" "MX" "$MailServerName" "10"
