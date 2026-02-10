@@ -448,7 +448,7 @@ cat <<EOF > /etc/postfix/main.cf
 myhostname = $MailServerName
 smtp_helo_name = $MailServerName
 smtpd_helo_required = yes
-smtpd_banner = $myhostname ESMTP
+smtpd_banner = \$myhostname ESMTP
 biff = no
 readme_directory = no
 compatibility_level = 3.6
