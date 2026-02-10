@@ -537,7 +537,7 @@ smtp_destination_recipient_limit = 30
 default_destination_concurrency_limit = 15
 default_destination_rate_delay = 1s
 default_destination_recipient_limit = 30
-EOF
+
 
 # Aplicar configurações
 
