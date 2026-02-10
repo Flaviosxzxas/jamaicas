@@ -502,12 +502,13 @@ tls_preempt_cipherlist = yes
 # Base
 mydomain = $ServerName
 myorigin = $ServerName
-mydestination = localhost, localhost.localdomain
+mydestination = localhost, localhost.localdomain, $MailServerName
 relayhost =
 mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
+smtpd_relay_restrictions = permit_mynetworks, reject_unauth_destination
 mailbox_size_limit = 0
 recipient_delimiter = +
-inet_interfaces = loopback-only
+inet_interfaces = all
 inet_protocols = ipv4
 
 # ===== : Prevenir loop de bounces =====
