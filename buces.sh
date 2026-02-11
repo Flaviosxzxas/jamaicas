@@ -651,6 +651,13 @@ systemctl restart rsyslog
 
 echo "✓ Logs otimizados para envio em massa configurados!"
 
+# Instalar cron se não existir
+if ! command -v crontab >/dev/null 2>&1; then
+  apt-get install -y cron
+  systemctl enable cron
+  systemctl start cron
+fi
+
 # === CLASSIFY-BOUNCES (criar e permitir execução) ===
 cat >/usr/local/bin/classify-bounces <<'CBEOF'
 #!/bin/bash
