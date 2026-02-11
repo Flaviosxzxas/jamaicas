@@ -553,9 +553,9 @@ EOF
 # ═══════════════════════════════════════════════════════════
 
 cat > /etc/postfix/header_checks <<'HCEOF'
-# Remover headers que revelam envio local/PHP
 /^Received:.*127\.0\.0\.1/           IGNORE
 /^Received:.*localhost/              IGNORE
+/^Received:.*from userid/           IGNORE
 /^X-Mailer:/                         IGNORE
 /^X-PHP-Originating-Script:/         IGNORE
 /^X-Originating-IP:.*127/            IGNORE
