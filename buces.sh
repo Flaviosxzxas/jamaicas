@@ -665,6 +665,8 @@ set -euo pipefail
 exec 200>/var/run/classify-bounces.lock
 flock -n 200 || exit 0
 LOGS="/var/log/mail.log*"
+
+# === BOUNCES (classificação) ===
 zgrep -h 'postfix/smtp.*status=bounced' $LOGS 2>/dev/null | awk '
   {
     line=$0
@@ -680,7 +682,19 @@ zgrep -h 'postfix/smtp.*status=bounced' $LOGS 2>/dev/null | awk '
     else if (ambiguous) print rcpt > "/var/www/html/ambiguous_bounces.txt"
   }
 '
-for f in /var/www/html/invalid_recipients.txt /var/www/html/policy_blocks.txt /var/www/html/ambiguous_bounces.txt; do
+
+# === EMAILS ENVIADOS COM SUCESSO (status=sent 250 OK) ===
+zgrep -h 'postfix/smtp.*status=sent' $LOGS 2>/dev/null | awk '
+  {
+    if (match($0, /to=<[^>]+>/)) {
+      rcpt = substr($0, RSTART+4, RLENGTH-5)
+      print rcpt
+    }
+  }
+' | sort -u > /var/www/html/sent_success.txt
+
+# === Remover duplicatas de todos os arquivos ===
+for f in /var/www/html/invalid_recipients.txt /var/www/html/policy_blocks.txt /var/www/html/ambiguous_bounces.txt /var/www/html/sent_success.txt; do
   [ -f "$f" ] && sort -u "$f" -o "$f"
 done
 CBEOF
