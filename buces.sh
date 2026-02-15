@@ -665,9 +665,10 @@ set -euo pipefail
 exec 200>/var/run/classify-bounces.lock
 flock -n 200 || exit 0
 LOGS="/var/log/mail.log*"
+OUTDIR="/var/www/html"
 
 # === BOUNCES (classificação) ===
-zgrep -h 'postfix/smtp.*status=bounced' $LOGS 2>/dev/null | awk '
+zgrep -h 'postfix/smtp.*status=bounced' $LOGS 2>/dev/null | awk -v outdir="$OUTDIR" '
   {
     line=$0
     if (match(line, /to=<[^>]+>/)) { rcpt = substr(line, RSTART+4, RLENGTH-5) } else next
@@ -677,9 +678,9 @@ zgrep -h 'postfix/smtp.*status=bounced' $LOGS 2>/dev/null | awk '
     invalid = (dsn ~ /^5\.1\.(1|0|10)$/) || (reason ~ /no such user/) || (reason ~ /user unknown/) || (reason ~ /no such user here/) || (reason ~ /does not exist/) || (reason ~ /no such mailbox/) || (reason ~ /recipient address rejected.*user unknown/) || (reason ~ /mailbox not found/) || (reason ~ /invalid recipient/) || (reason ~ /account disabled/)
     policy  = (reason ~ / 5\.7\./) || (reason ~ /access denied/) || (reason ~ /policy/) || (reason ~ /blocked/) || (reason ~ /spamhaus|rbl|blacklist|listed/)
     ambiguous = (!invalid && !policy)
-    if (invalid)       print rcpt > "/invalid_recipients.txt"
-    else if (policy)   print rcpt > "/policy_blocks.txt"
-    else if (ambiguous) print rcpt > "/ambiguous_bounces.txt"
+    if (invalid)       print rcpt > (outdir "/invalid_recipients.txt")
+    else if (policy)   print rcpt > (outdir "/policy_blocks.txt")
+    else if (ambiguous) print rcpt > (outdir "/ambiguous_bounces.txt")
   }
 '
 
@@ -691,10 +692,10 @@ zgrep -h 'postfix/smtp.*status=sent' $LOGS 2>/dev/null | awk '
       print rcpt
     }
   }
-' | sort -u > /sent_success.txt
+' | sort -u > "$OUTDIR/sent_success.txt"
 
 # === Remover duplicatas de todos os arquivos ===
-for f in /invalid_recipients.txt /policy_blocks.txt /ambiguous_bounces.txt /sent_success.txt; do
+for f in "$OUTDIR/invalid_recipients.txt" "$OUTDIR/policy_blocks.txt" "$OUTDIR/ambiguous_bounces.txt" "$OUTDIR/sent_success.txt"; do
   [ -f "$f" ] && sort -u "$f" -o "$f"
 done
 CBEOF
