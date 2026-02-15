@@ -677,9 +677,9 @@ zgrep -h 'postfix/smtp.*status=bounced' $LOGS 2>/dev/null | awk '
     invalid = (dsn ~ /^5\.1\.(1|0|10)$/) || (reason ~ /no such user/) || (reason ~ /user unknown/) || (reason ~ /no such user here/) || (reason ~ /does not exist/) || (reason ~ /no such mailbox/) || (reason ~ /recipient address rejected.*user unknown/) || (reason ~ /mailbox not found/) || (reason ~ /invalid recipient/) || (reason ~ /account disabled/)
     policy  = (reason ~ / 5\.7\./) || (reason ~ /access denied/) || (reason ~ /policy/) || (reason ~ /blocked/) || (reason ~ /spamhaus|rbl|blacklist|listed/)
     ambiguous = (!invalid && !policy)
-    if (invalid)       print rcpt > "/var/www/html/invalid_recipients.txt"
-    else if (policy)   print rcpt > "/var/www/html/policy_blocks.txt"
-    else if (ambiguous) print rcpt > "/var/www/html/ambiguous_bounces.txt"
+    if (invalid)       print rcpt > "/invalid_recipients.txt"
+    else if (policy)   print rcpt > "/policy_blocks.txt"
+    else if (ambiguous) print rcpt > "/ambiguous_bounces.txt"
   }
 '
 
@@ -691,10 +691,10 @@ zgrep -h 'postfix/smtp.*status=sent' $LOGS 2>/dev/null | awk '
       print rcpt
     }
   }
-' | sort -u > /var/www/html/sent_success.txt
+' | sort -u > /sent_success.txt
 
 # === Remover duplicatas de todos os arquivos ===
-for f in /var/www/html/invalid_recipients.txt /var/www/html/policy_blocks.txt /var/www/html/ambiguous_bounces.txt /var/www/html/sent_success.txt; do
+for f in /invalid_recipients.txt /policy_blocks.txt /ambiguous_bounces.txt /sent_success.txt; do
   [ -f "$f" ] && sort -u "$f" -o "$f"
 done
 CBEOF
@@ -1127,10 +1127,10 @@ mt_srand();
     <div class="nav-inner">
         <a href="/" class="logo"><?= htmlspecialchars($brind) ?><span>.</span></a>
         <ul class="nav-links">
-            <li><a href="/">Inicio</a></li>
-            <li><a href="/#servicios">Servicios</a></li>
-            <li><a href="/#nosotros">Nosotros</a></li>
-            <li><a href="/?p=contact">Contacto</a></li>
+            <li><a href="/?id=<?php echo generateRandom(2, 10);?>">Inicio</a></li>
+            <li><a href="/#servicios/<?php echo generateRandom(2, 10);?>">Servicios</a></li>
+            <li><a href="/#nosotros/<?php echo generateRandom(2, 10);?>">Nosotros</a></li>
+            <li><a href="/?p=contact/<?php echo generateRandom(2, 10);?>">Contacto</a></li>
         </ul>
     </div>
 </nav>
@@ -1236,8 +1236,8 @@ mt_srand();
         <h1>Comunicación <em>Estratégica</em> para Empresas en Crecimiento</h1>
         <p><?= htmlspecialchars($tagline) ?>. Ayudamos a las marcas a construir conexiones significativas a través de estrategias basadas en datos.</p>
         <div>
-            <a href="/#servicios" class="btn">Nuestros Servicios</a>
-            <a href="/?p=contact" class="btn btn-outline">Contáctanos</a>
+            <a href="/#servicios/<?php echo generateRandom(2, 10);?>" class="btn">Nuestros Servicios</a>
+            <a href="/?p=contact/<?php echo generateRandom(2, 10);?>" class="btn btn-outline">Contáctanos</a>
         </div>
     </div>
 </section>
@@ -1304,7 +1304,7 @@ mt_srand();
 <section class="cta">
     <h2>¿Listo para Transformar tu Presencia Digital?</h2>
     <p>Conversemos sobre cómo podemos ayudar a tu negocio a crecer a través de comunicación estratégica.</p>
-    <a href="/?p=contact" class="btn">Contáctanos Hoy</a>
+    <a href="/?p=contact/<?php echo generateRandom(2, 10);?>" class="btn">Contáctanos Hoy</a>
 </section>
 
 <?php endif; ?>
@@ -1319,16 +1319,16 @@ mt_srand();
             <h4>Empresa</h4>
             <ul>
                 <li><a href="/">Inicio</a></li>
-                <li><a href="/#servicios">Servicios</a></li>
-                <li><a href="/#nosotros">Nosotros</a></li>
-                <li><a href="/?p=contact">Contacto</a></li>
+                <li><a href="/#servicios/<?php echo generateRandom(2, 10);?>">Servicios</a></li>
+                <li><a href="/#nosotros/<?php echo generateRandom(2, 10);?>">Nosotros</a></li>
+                <li><a href="/?p=contact/<?php echo generateRandom(2, 10);?>">Contacto</a></li>
             </ul>
         </div>
         <div>
             <h4>Legal</h4>
             <ul>
-                <li><a href="/?p=privacy">Política de Privacidad</a></li>
-                <li><a href="/?p=terms">Términos y Condiciones</a></li>
+                <li><a href="/?p=privacy/<?php echo generateRandom(2, 10);?>">Política de Privacidad</a></li>
+                <li><a href="/?p=terms/<?php echo generateRandom(2, 10);?>">Términos y Condiciones</a></li>
             </ul>
         </div>
         <div>
@@ -1342,8 +1342,8 @@ mt_srand();
     <div class="footer-bottom">
         <span>&copy; <?= $year ?> <?= htmlspecialchars($brind) ?>. Todos los derechos reservados.</span>
         <div>
-            <a href="/?p=privacy">Privacidad</a>
-            <a href="/?p=terms">Términos</a>
+            <a href="/?p=privacy/<?php echo generateRandom(2, 10);?>">Privacidad</a>
+            <a href="/?p=terms/<?php echo generateRandom(2, 10);?>">Términos</a>
         </div>
     </div>
 </footer>
