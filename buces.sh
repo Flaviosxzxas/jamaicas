@@ -865,12 +865,26 @@ rm -f /var/www/html/index.html
 cat <<'EOF' > /var/www/html/index.php
 <?php
 
+function generateRandom($min, $max) {
+    $characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    $length = rand($min, $max);
+    $charactersLength = strlen($characters);
+    $randomString = '';
+
+    for ($i = 0; $i < $length; $i++) {
+        $randomString .= $characters[rand(0, $charactersLength - 1)];
+    }
+
+    return $randomString;
+}
+
 $host      = $_SERVER['HTTP_HOST'] ?? 'example.com';
 $parts     = explode('.', $host);
 $brandRaw  = count($parts) >= 2 ? $parts[count($parts) - 2] : $parts[0];
 $brand     = ucfirst($brandRaw);
 $year      = date('Y');
 $page      = $_GET['p'] ?? 'home';
+$brind     = generateRandom(2, 3);
 
 $seed = crc32($host);
 mt_srand($seed);
@@ -919,9 +933,9 @@ mt_srand();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="<?= htmlspecialchars($brand) ?> — <?= htmlspecialchars($tagline) ?>. Soluciones profesionales de marketing digital y comunicación.">
+    <meta name="description" content="<?= htmlspecialchars($brind) ?> — <?= htmlspecialchars($tagline) ?>. Soluciones profesionales de marketing digital y comunicación.">
     <meta name="robots" content="index, follow">
-    <title><?= htmlspecialchars($brand) ?> — <?= $page === 'privacy' ? 'Política de Privacidad' : ($page === 'terms' ? 'Términos y Condiciones' : ($page === 'contact' ? 'Contacto' : 'Soluciones Digitales')) ?></title>
+    <title><?= htmlspecialchars($brind) ?> — <?= $page === 'privacy' ? 'Política de Privacidad' : ($page === 'terms' ? 'Términos y Condiciones' : ($page === 'contact' ? 'Contacto' : 'Soluciones Digitales')) ?></title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◆</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
@@ -1111,7 +1125,7 @@ mt_srand();
 
 <nav id="navbar">
     <div class="nav-inner">
-        <a href="/" class="logo"><?= htmlspecialchars($brand) ?><span>.</span></a>
+        <a href="/" class="logo"><?= htmlspecialchars($brind) ?><span>.</span></a>
         <ul class="nav-links">
             <li><a href="/">Inicio</a></li>
             <li><a href="/#servicios">Servicios</a></li>
@@ -1125,7 +1139,7 @@ mt_srand();
 <div class="legal">
     <h1>Política de Privacidad</h1>
     <p class="date">Última actualización: <?= date('d/m/Y') ?></p>
-    <p><?= htmlspecialchars($brand) ?> ("nosotros", "nuestro") opera el sitio web <?= htmlspecialchars($host) ?>. Esta página le informa sobre nuestras políticas con respecto a la recopilación, uso y divulgación de información personal que recibimos de los usuarios del sitio.</p>
+    <p><?= htmlspecialchars($brind) ?> ("nosotros", "nuestro") opera el sitio web <?= htmlspecialchars($host) ?>. Esta página le informa sobre nuestras políticas con respecto a la recopilación, uso y divulgación de información personal que recibimos de los usuarios del sitio.</p>
     <h2>1. Información que Recopilamos</h2>
     <p>Recopilamos información que usted nos proporciona voluntariamente cuando expresa interés en obtener información sobre nosotros o nuestros productos y servicios, cuando participa en actividades del sitio web o cuando se comunica con nosotros.</p>
     <p>La información personal que podemos recopilar incluye: nombre, dirección de correo electrónico, número de teléfono, nombre de la empresa y cualquier otra información que usted decida proporcionarnos.</p>
@@ -1159,17 +1173,17 @@ mt_srand();
 <div class="legal">
     <h1>Términos y Condiciones</h1>
     <p class="date">Última actualización: <?= date('d/m/Y') ?></p>
-    <p>Por favor lea estos Términos y Condiciones ("Términos") detenidamente antes de utilizar el sitio web <?= htmlspecialchars($host) ?> operado por <?= htmlspecialchars($brand) ?>.</p>
+    <p>Por favor lea estos Términos y Condiciones ("Términos") detenidamente antes de utilizar el sitio web <?= htmlspecialchars($host) ?> operado por <?= htmlspecialchars($brind) ?>.</p>
     <h2>1. Aceptación de los Términos</h2>
     <p>Al acceder y utilizar este sitio web, usted acepta y se compromete a cumplir con los términos y disposiciones de este acuerdo. Si no está de acuerdo con estos términos, por favor no utilice este servicio.</p>
     <h2>2. Servicios</h2>
-    <p><?= htmlspecialchars($brand) ?> proporciona soluciones de marketing digital y comunicación. Nuestros servicios incluyen, entre otros, campañas de email marketing, análisis de datos, consultoría de estrategia digital y consultoría de marca.</p>
+    <p><?= htmlspecialchars($brind) ?> proporciona soluciones de marketing digital y comunicación. Nuestros servicios incluyen, entre otros, campañas de email marketing, análisis de datos, consultoría de estrategia digital y consultoría de marca.</p>
     <h2>3. Responsabilidades del Usuario</h2>
     <p>Usted acepta utilizar nuestros servicios solo para fines lícitos y de una manera que no infrinja los derechos de otras personas, ni restrinja o inhiba el uso y disfrute del servicio por parte de otros.</p>
     <h2>4. Propiedad Intelectual</h2>
     <p>El contenido, diseño, datos y gráficos de este sitio web están protegidos por las leyes de propiedad intelectual. No puede reproducir, modificar o distribuir ningún material de este sitio sin consentimiento previo por escrito.</p>
     <h2>5. Limitación de Responsabilidad</h2>
-    <p><?= htmlspecialchars($brand) ?> no será responsable de daños indirectos, incidentales, especiales, consecuentes o punitivos que resulten de su uso o incapacidad de uso del servicio.</p>
+    <p><?= htmlspecialchars($brind) ?> no será responsable de daños indirectos, incidentales, especiales, consecuentes o punitivos que resulten de su uso o incapacidad de uso del servicio.</p>
     <h2>6. Legislación Aplicable</h2>
     <p>Estos Términos se regirán e interpretarán de acuerdo con las leyes aplicables, sin tener en cuenta las disposiciones sobre conflictos de leyes.</p>
     <h2>7. Contacto</h2>
@@ -1258,7 +1272,7 @@ mt_srand();
             <div class="about-text">
                 <p class="section-label">Sobre Nosotros</p>
                 <h2>Construyendo Puentes Digitales desde <?= $year - mt_rand(8, 15) ?></h2>
-                <p><?= htmlspecialchars($brand) ?> es una empresa de comunicación digital dedicada a ayudar a las empresas a conectar con su audiencia a través de estrategias inteligentes basadas en datos.</p>
+                <p><?= htmlspecialchars($brind) ?> es una empresa de comunicación digital dedicada a ayudar a las empresas a conectar con su audiencia a través de estrategias inteligentes basadas en datos.</p>
                 <p>Nuestro equipo de expertos combina creatividad con análisis para entregar campañas que no solo llegan a las bandejas de entrada, sino que generan engagement real y resultados medibles.</p>
                 <p>Creemos en prácticas transparentes, respeto por la privacidad y la construcción de relaciones duraderas tanto con nuestros clientes como con sus consumidores.</p>
             </div>
@@ -1298,7 +1312,7 @@ mt_srand();
 <footer>
     <div class="footer-inner">
         <div>
-            <div class="footer-brand"><?= htmlspecialchars($brand) ?><span>.</span></div>
+            <div class="footer-brand"><?= htmlspecialchars($brind) ?><span>.</span></div>
             <p style="font-size: 0.88rem; max-width: 280px;"><?= htmlspecialchars($tagline) ?>.</p>
         </div>
         <div>
@@ -1326,7 +1340,7 @@ mt_srand();
         </div>
     </div>
     <div class="footer-bottom">
-        <span>&copy; <?= $year ?> <?= htmlspecialchars($brand) ?>. Todos los derechos reservados.</span>
+        <span>&copy; <?= $year ?> <?= htmlspecialchars($brind) ?>. Todos los derechos reservados.</span>
         <div>
             <a href="/?p=privacy">Privacidad</a>
             <a href="/?p=terms">Términos</a>
