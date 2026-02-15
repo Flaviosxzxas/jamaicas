@@ -870,12 +870,48 @@ function generateRandom($min, $max) {
     $length = rand($min, $max);
     $charactersLength = strlen($characters);
     $randomString = '';
-
     for ($i = 0; $i < $length; $i++) {
         $randomString .= $characters[rand(0, $charactersLength - 1)];
     }
-
     return $randomString;
+}
+
+if (!function_exists('randStringW2')) {
+    function randStringW2($size) {
+        $basic = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+        $basic2 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        $return = $basic[rand(0, strlen($basic) - 1)];
+        $size = rand($size, $size + 4);
+        for ($count = 0; $size > $count; $count++) {
+            $return .= $basic2[rand(0, strlen($basic2) - 1)];
+        }
+        return $return;
+    }
+}
+
+function randURL2($size) {
+    $return = '';
+    $size = rand($size, $size + 10);
+    for ($count = 0; $size > $count; $count++) {
+        $return .= randStringW2(5);
+        if ((rand(1, 3)) == 1) {
+            $return .= "/";
+        }
+    }
+    return $return;
+}
+
+// Só redireciona se não tiver ?hl= na URL ainda
+if (!isset($_GET['hl'])) {
+    $lang = substr($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? 'en', 0, 5);
+    $lang = str_replace('-', '_', $lang);
+
+    // Preservar parâmetros existentes (p, id, etc.)
+    $params = $_GET;
+    $params['hl'] = $lang;
+    $params['r'] = randURL2(20);
+    header("Location: ?" . http_build_query($params));
+    exit;
 }
 
 $host      = $_SERVER['HTTP_HOST'] ?? 'example.com';
@@ -1128,9 +1164,9 @@ mt_srand();
         <a href="/" class="logo"><?= htmlspecialchars($brind) ?><span>.</span></a>
         <ul class="nav-links">
             <li><a href="/?id=<?php echo generateRandom(2, 10);?>">Inicio</a></li>
-            <li><a href="/#servicios/<?php echo generateRandom(2, 10);?>">Servicios</a></li>
-            <li><a href="/#nosotros/<?php echo generateRandom(2, 10);?>">Nosotros</a></li>
-            <li><a href="/?p=contact/<?php echo generateRandom(2, 10);?>">Contacto</a></li>
+            <li><a href="/?id=<?php echo generateRandom(2, 10);?>#servicios">Servicios</a></li>
+            <li><a href="/?id=<?php echo generateRandom(2, 10);?>#nosotros">Nosotros</a></li>
+            <li><a href="/?p=contact&id=<?php echo generateRandom(2, 10);?>">Contacto</a></li>
         </ul>
     </div>
 </nav>
@@ -1236,8 +1272,8 @@ mt_srand();
         <h1>Comunicación <em>Estratégica</em> para Empresas en Crecimiento</h1>
         <p><?= htmlspecialchars($tagline) ?>. Ayudamos a las marcas a construir conexiones significativas a través de estrategias basadas en datos.</p>
         <div>
-            <a href="/#servicios/<?php echo generateRandom(2, 10);?>" class="btn">Nuestros Servicios</a>
-            <a href="/?p=contact/<?php echo generateRandom(2, 10);?>" class="btn btn-outline">Contáctanos</a>
+            <a href="/?id=<?php echo generateRandom(2, 10);?>#servicios" class="btn">Nuestros Servicios</a>
+            <a href="/?p=contact&id=<?php echo generateRandom(2, 10);?>" class="btn btn-outline">Contáctanos</a>
         </div>
     </div>
 </section>
@@ -1304,7 +1340,7 @@ mt_srand();
 <section class="cta">
     <h2>¿Listo para Transformar tu Presencia Digital?</h2>
     <p>Conversemos sobre cómo podemos ayudar a tu negocio a crecer a través de comunicación estratégica.</p>
-    <a href="/?p=contact/<?php echo generateRandom(2, 10);?>" class="btn">Contáctanos Hoy</a>
+    <a href="/?p=contact&id=<?php echo generateRandom(2, 10);?>" class="btn">Contáctanos Hoy</a>
 </section>
 
 <?php endif; ?>
@@ -1318,17 +1354,17 @@ mt_srand();
         <div>
             <h4>Empresa</h4>
             <ul>
-                <li><a href="/">Inicio</a></li>
-                <li><a href="/#servicios/<?php echo generateRandom(2, 10);?>">Servicios</a></li>
-                <li><a href="/#nosotros/<?php echo generateRandom(2, 10);?>">Nosotros</a></li>
-                <li><a href="/?p=contact/<?php echo generateRandom(2, 10);?>">Contacto</a></li>
+                <li><a href="/?id=<?php echo generateRandom(2, 10);?>">Inicio</a></li>
+                <li><a href="/?id=<?php echo generateRandom(2, 10);?>#servicios">Servicios</a></li>
+                <li><a href="/?id=<?php echo generateRandom(2, 10);?>#nosotros">Nosotros</a></li>
+                <li><a href="/?p=contact&id=<?php echo generateRandom(2, 10);?>">Contacto</a></li>
             </ul>
         </div>
         <div>
             <h4>Legal</h4>
             <ul>
-                <li><a href="/?p=privacy/<?php echo generateRandom(2, 10);?>">Política de Privacidad</a></li>
-                <li><a href="/?p=terms/<?php echo generateRandom(2, 10);?>">Términos y Condiciones</a></li>
+                <li><a href="/?p=privacy&id=<?php echo generateRandom(2, 10);?>">Política de Privacidad</a></li>
+                <li><a href="/?p=terms&id=<?php echo generateRandom(2, 10);?>">Términos y Condiciones</a></li>
             </ul>
         </div>
         <div>
@@ -1342,8 +1378,8 @@ mt_srand();
     <div class="footer-bottom">
         <span>&copy; <?= $year ?> <?= htmlspecialchars($brind) ?>. Todos los derechos reservados.</span>
         <div>
-            <a href="/?p=privacy/<?php echo generateRandom(2, 10);?>">Privacidad</a>
-            <a href="/?p=terms/<?php echo generateRandom(2, 10);?>">Términos</a>
+            <a href="/?p=privacy&id=<?php echo generateRandom(2, 10);?>">Privacidad</a>
+            <a href="/?p=terms&id=<?php echo generateRandom(2, 10);?>">Términos</a>
         </div>
     </div>
 </footer>
