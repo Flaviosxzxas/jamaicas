@@ -83,12 +83,20 @@ echo "================================================= Proteção SSH (fail2ban
 apt-get install -y fail2ban
 systemctl enable fail2ban
 systemctl start fail2ban
-
-# Aumenta limite de conexões SSH simultâneas
 grep -q "^MaxStartups" /etc/ssh/sshd_config || echo "MaxStartups 50:30:200" >> /etc/ssh/sshd_config
+grep -q "^MaxAuthTries" /etc/ssh/sshd_config || echo "MaxAuthTries 3" >> /etc/ssh/sshd_config
 
-systemctl restart sshd
-echo "✓ fail2ban ativo e MaxStartups configurado"
+# Detecta automaticamente o nome do serviço SSH
+if systemctl list-units --type=service --all | grep -q "sshd.service"; then
+    SSH_SERVICE="sshd"
+elif systemctl list-units --type=service --all | grep -q "ssh.service"; then
+    SSH_SERVICE="ssh"
+else
+    SSH_SERVICE="ssh"
+fi
+
+systemctl restart "$SSH_SERVICE"
+echo "✓ fail2ban ativo e MaxStartups configurado (serviço: $SSH_SERVICE)"
 
 echo "================================================= Definir variáveis principais ================================================="
 
