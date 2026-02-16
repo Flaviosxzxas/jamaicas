@@ -669,46 +669,206 @@ if ! command -v crontab >/dev/null 2>&1; then
   systemctl start cron
 fi
 
-# === CLASSIFY-BOUNCES (criar e permitir execução) ===
+# === CLASSIFY-BOUNCES INTELIGENTE (criar e permitir execução) ===
 cat >/usr/local/bin/classify-bounces <<'CBEOF'
 #!/bin/bash
 set -euo pipefail
 exec 200>/var/run/classify-bounces.lock
 flock -n 200 || exit 0
+
 LOGS="/var/log/mail.log*"
 OUTDIR="/var/www/html"
 
-# === BOUNCES (classificação) ===
+# === BOUNCES - Classificacao Inteligente ===
 zgrep -h 'postfix/smtp.*status=bounced' $LOGS 2>/dev/null | awk -v outdir="$OUTDIR" '
-  {
-    line=$0
-    if (match(line, /to=<[^>]+>/)) { rcpt = substr(line, RSTART+4, RLENGTH-5) } else next
-    dsn=""
-    if (match(line, /dsn=5\.[0-9]+\.[0-9]+/)) { dsn = substr(line, RSTART+4, RLENGTH-4) }
-    reason=tolower(line)
-    invalid = (dsn ~ /^5\.1\.(1|0|10)$/) || (reason ~ /no such user/) || (reason ~ /user unknown/) || (reason ~ /no such user here/) || (reason ~ /does not exist/) || (reason ~ /no such mailbox/) || (reason ~ /recipient address rejected.*user unknown/) || (reason ~ /mailbox not found/) || (reason ~ /invalid recipient/) || (reason ~ /account disabled/)
-    policy  = (reason ~ / 5\.7\./) || (reason ~ /access denied/) || (reason ~ /policy/) || (reason ~ /blocked/) || (reason ~ /spamhaus|rbl|blacklist|listed/)
-    ambiguous = (!invalid && !policy)
-    if (invalid)       print rcpt > (outdir "/invalid_recipients.txt")
-    else if (policy)   print rcpt > (outdir "/policy_blocks.txt")
-    else if (ambiguous) print rcpt > (outdir "/ambiguous_bounces.txt")
-  }
+{
+    line = $0
+    if (match(line, /to=<[^>]+>/)) {
+        rcpt = substr(line, RSTART+4, RLENGTH-5)
+    } else next
+
+    dsn = ""
+    if (match(line, /dsn=5\.[0-9]+\.[0-9]+/)) {
+        dsn = substr(line, RSTART+4, RLENGTH-4)
+    }
+
+    reason = tolower(line)
+
+    # =============================================
+    # 1) INVALID CONFIRMED (certeza que nao existe)
+    # =============================================
+    invalid_confirmed = 0
+
+    if (dsn == "5.1.1") {
+        if (reason ~ /user doesn.t exist/) invalid_confirmed = 1
+        if (reason ~ /no such user/) invalid_confirmed = 1
+        if (reason ~ /user unknown/) invalid_confirmed = 1
+        if (reason ~ /does not exist/) invalid_confirmed = 1
+        if (reason ~ /no such mailbox/) invalid_confirmed = 1
+        if (reason ~ /mailbox not found/) invalid_confirmed = 1
+        if (reason ~ /recipient not found/) invalid_confirmed = 1
+        if (reason ~ /account disabled/) invalid_confirmed = 1
+        if (reason ~ /account has been disabled/) invalid_confirmed = 1
+        if (reason ~ /invalid mailbox/) invalid_confirmed = 1
+        if (reason ~ /unknown user/) invalid_confirmed = 1
+        if (reason ~ /no mailbox here/) invalid_confirmed = 1
+        if (reason ~ /email account.*not.*found/) invalid_confirmed = 1
+        if (reason ~ /undeliverable address.*user/) invalid_confirmed = 1
+    }
+
+    if (dsn == "5.1.0" || dsn == "5.1.10") {
+        if (reason ~ /no such user/) invalid_confirmed = 1
+        if (reason ~ /user unknown/) invalid_confirmed = 1
+        if (reason ~ /does not exist/) invalid_confirmed = 1
+        if (reason ~ /address rejected/) invalid_confirmed = 1
+    }
+
+    # =============================================
+    # 2) INVALID RETEST (pode ser falso positivo)
+    # =============================================
+    invalid_retest = 0
+
+    if (dsn == "5.5.0") {
+        if (reason ~ /mailbox unavailable/) invalid_retest = 1
+        if (reason ~ /requested action not taken/) invalid_retest = 1
+    }
+
+    if (dsn == "5.1.1" && invalid_confirmed == 0) {
+        invalid_retest = 1
+    }
+
+    if (dsn ~ /^5\.2\./) {
+        if (reason ~ /mailbox.*disabled/) invalid_retest = 1
+        if (reason ~ /mailbox.*full/) invalid_retest = 1
+        if (reason ~ /over quota/) invalid_retest = 1
+        if (reason ~ /quota exceeded/) invalid_retest = 1
+        if (reason ~ /mailbox unavailable/) invalid_retest = 1
+    }
+
+    if (dsn == "5.0.0" || dsn == "5.5.0") {
+        if (reason ~ /user unknown/) invalid_retest = 1
+        if (reason ~ /no such user/) invalid_retest = 1
+        if (reason ~ /mailbox not found/) invalid_retest = 1
+    }
+
+    if (invalid_confirmed == 0 && invalid_retest == 0) {
+        if (reason ~ /mailbox unavailable/ && dsn !~ /^5\.7\./) invalid_retest = 1
+        if (reason ~ /recipient rejected/ && dsn !~ /^5\.7\./) invalid_retest = 1
+    }
+
+    # =============================================
+    # 3) POLICY BLOCKS (rejeicao por politica/reputacao)
+    # =============================================
+    policy = 0
+
+    if (dsn ~ /^5\.7\./) policy = 1
+
+    if (reason ~ /spamhaus/) policy = 1
+    if (reason ~ /barracuda/) policy = 1
+    if (reason ~ /rbl/) policy = 1
+    if (reason ~ /blacklist/) policy = 1
+    if (reason ~ /blocklist/) policy = 1
+    if (reason ~ /listed at/) policy = 1
+    if (reason ~ /blocked/) policy = 1
+    if (reason ~ /access denied/) policy = 1
+    if (reason ~ /not allowed/) policy = 1
+    if (reason ~ /rejected.*policy/) policy = 1
+    if (reason ~ /spam/) policy = 1
+    if (reason ~ /abuse/) policy = 1
+    if (reason ~ /dnsbl/) policy = 1
+    if (reason ~ /rejected.*reputation/) policy = 1
+    if (reason ~ /too many connections/) policy = 1
+    if (reason ~ /rate limit/) policy = 1
+    if (reason ~ /try again later/) policy = 1
+    if (reason ~ /temporarily deferred/) policy = 1
+    if (reason ~ /sender verify failed/) policy = 1
+    if (reason ~ /spf/) policy = 1
+    if (reason ~ /dkim/) policy = 1
+    if (reason ~ /dmarc/) policy = 1
+
+    # =============================================
+    # 4) DOMAIN INVALID (dominio nao existe)
+    # =============================================
+    domain_invalid = 0
+    if (reason ~ /name or service not known/) domain_invalid = 1
+    if (reason ~ /no route to host/) domain_invalid = 1
+    if (reason ~ /domain not found/) domain_invalid = 1
+    if (reason ~ /bad destination mailbox/) domain_invalid = 1
+    if (dsn == "5.1.2") domain_invalid = 1
+    if (dsn == "5.4.4") domain_invalid = 1
+    if (dsn == "5.4.6") domain_invalid = 1
+
+    # =============================================
+    # GRAVAR NOS ARQUIVOS (com prioridade)
+    # =============================================
+    if (domain_invalid)
+        print rcpt > (outdir "/domain_invalid.txt")
+    else if (invalid_confirmed)
+        print rcpt > (outdir "/invalid_confirmed.txt")
+    else if (policy)
+        print rcpt > (outdir "/policy_blocks.txt")
+    else if (invalid_retest)
+        print rcpt > (outdir "/invalid_retest.txt")
+    else
+        print rcpt > (outdir "/ambiguous_bounces.txt")
+}
 '
 
 # === EMAILS ENVIADOS COM SUCESSO (status=sent 250 OK) ===
 zgrep -h 'postfix/smtp.*status=sent' $LOGS 2>/dev/null | awk '
-  {
+{
     if (match($0, /to=<[^>]+>/)) {
-      rcpt = substr($0, RSTART+4, RLENGTH-5)
-      print rcpt
+        rcpt = substr($0, RSTART+4, RLENGTH-5)
+        print rcpt
     }
-  }
+}
 ' | sort -u > "$OUTDIR/sent_success.txt"
 
+# === DEFERRED (tentativas que ainda nao resolveram) ===
+zgrep -h 'postfix/smtp.*status=deferred' $LOGS 2>/dev/null | awk '
+{
+    if (match($0, /to=<[^>]+>/)) {
+        rcpt = substr($0, RSTART+4, RLENGTH-5)
+        print rcpt
+    }
+}
+' | sort -u > "$OUTDIR/deferred.txt"
+
 # === Remover duplicatas de todos os arquivos ===
-for f in "$OUTDIR/invalid_recipients.txt" "$OUTDIR/policy_blocks.txt" "$OUTDIR/ambiguous_bounces.txt" "$OUTDIR/sent_success.txt"; do
-  [ -f "$f" ] && sort -u "$f" -o "$f"
+for f in \
+    "$OUTDIR/invalid_confirmed.txt" \
+    "$OUTDIR/invalid_retest.txt" \
+    "$OUTDIR/policy_blocks.txt" \
+    "$OUTDIR/domain_invalid.txt" \
+    "$OUTDIR/ambiguous_bounces.txt" \
+    "$OUTDIR/sent_success.txt" \
+    "$OUTDIR/deferred.txt"; do
+    [ -f "$f" ] && sort -u "$f" -o "$f"
 done
+
+# === Prioridade: sent_success remove dos duvidosos ===
+if [ -f "$OUTDIR/sent_success.txt" ]; then
+    for f in "$OUTDIR/invalid_retest.txt" "$OUTDIR/policy_blocks.txt" "$OUTDIR/ambiguous_bounces.txt"; do
+        if [ -f "$f" ]; then
+            comm -23 "$f" "$OUTDIR/sent_success.txt" > "${f}.tmp"
+            mv "${f}.tmp" "$f"
+        fi
+    done
+fi
+
+# === Gerar relatorio de contagem ===
+echo "=== Relatorio Classify-Bounces ===" > "$OUTDIR/bounce_report.txt"
+echo "Data: $(date '+%Y-%m-%d %H:%M:%S')" >> "$OUTDIR/bounce_report.txt"
+echo "-----------------------------------" >> "$OUTDIR/bounce_report.txt"
+for f in invalid_confirmed invalid_retest policy_blocks domain_invalid ambiguous_bounces sent_success deferred; do
+    if [ -f "$OUTDIR/${f}.txt" ]; then
+        count=$(wc -l < "$OUTDIR/${f}.txt")
+    else
+        count=0
+    fi
+    printf "%-25s %s\n" "$f:" "$count" >> "$OUTDIR/bounce_report.txt"
+done
+echo "-----------------------------------" >> "$OUTDIR/bounce_report.txt"
 CBEOF
 
 chmod +x /usr/local/bin/classify-bounces
@@ -718,7 +878,15 @@ chmod 0440 /etc/sudoers.d/classify-bounces
 # Cron job para rodar a cada 10 minutos
 (crontab -l 2>/dev/null || true; echo "*/10 * * * * /usr/local/bin/classify-bounces >/dev/null 2>&1") | sort -u | crontab -
 
-echo "✓ Classify-bounces configurado com cron a cada 10 min"
+echo "✓ Classify-bounces INTELIGENTE configurado com cron a cada 10 min"
+echo "  → invalid_confirmed.txt  = descartar (usuario confirmado inexistente)"
+echo "  → invalid_retest.txt     = retestar de outro IP (pode ser falso positivo)"
+echo "  → policy_blocks.txt      = bloqueio por reputacao/blacklist"
+echo "  → domain_invalid.txt     = dominio nao existe"
+echo "  → ambiguous_bounces.txt  = investigar manualmente"
+echo "  → sent_success.txt       = entregue com sucesso"
+echo "  → deferred.txt           = ainda tentando"
+echo "  → bounce_report.txt      = relatorio com contagens"
 # === FIM CLASSIFY-BOUNCES ===
 echo "================================================= CLOUDFLARE ================================================="
 
