@@ -79,6 +79,19 @@ apt-get -y upgrade \
     exit 1
   }
 
+echo "================================================= Proteção SSH (fail2ban + MaxStartups) ================================================="
+apt-get install -y fail2ban
+systemctl enable fail2ban
+systemctl start fail2ban
+
+# Aumenta limite de conexões SSH simultâneas
+grep -q "^MaxStartups" /etc/ssh/sshd_config || echo "MaxStartups 50:30:200" >> /etc/ssh/sshd_config
+
+systemctl restart sshd
+echo "✓ fail2ban ativo e MaxStartups configurado"
+
+echo "================================================= Definir variáveis principais ================================================="
+
 echo "================================================= Definir variáveis principais ================================================="
 
 ServerName=$1
