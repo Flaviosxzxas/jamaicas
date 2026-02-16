@@ -92,8 +92,6 @@ echo "✓ fail2ban ativo e MaxStartups configurado"
 
 echo "================================================= Definir variáveis principais ================================================="
 
-echo "================================================= Definir variáveis principais ================================================="
-
 ServerName=$1
 CloudflareAPI=$2
 CloudflareEmail=$3
