@@ -681,7 +681,7 @@ EscapedDKIMCode=$(printf '%s' "$DKIMCode" | sed 's/\"/\\\"/g')
 
 create_or_update_record "$DKIMSelector" "A" "$ServerIP" ""
 create_or_update_record "$ServerName" "TXT" "\"v=spf1 a mx ip4:$ServerIP include:$ServerName ~all\"" ""
-create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=none; rua=mailto:dmarc-reports@$ServerName; ruf=mailto:dmarc-reports@$ServerName; sp=none; adkim=s; aspf=s\"" ""
+create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=reject; sp=reject; pct=100; rua=mailto:dmarc-reports@$ServerName; ruf=mailto:dmarc-reports@$ServerName; adkim=s; aspf=s; fo=1\"" ""
 create_or_update_record "mail._domainkey.$ServerName" "TXT" "\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\"" ""
 create_or_update_record "$ServerName" "MX" "$ServerName" "10"
 echo "================================================= APPLICATION ================================================="
