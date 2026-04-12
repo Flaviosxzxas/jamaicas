@@ -98,6 +98,38 @@ fi
 systemctl restart "$SSH_SERVICE"
 echo "✓ fail2ban ativo e MaxStartups configurado (serviço: $SSH_SERVICE)"
 
+echo "================================================= Configurando fail2ban (apenas SSH) ================================================="
+
+# Desativa jail do Postfix/SMTP — protege só SSH
+cat > /etc/fail2ban/jail.local <<'EOF'
+[DEFAULT]
+bantime  = 3600
+findtime = 600
+maxretry = 5
+
+# Ignora localhost e IPs internos
+ignoreip = 127.0.0.1/8 ::1
+
+[sshd]
+enabled  = true
+port     = ssh
+logpath  = %(sshd_log)s
+backend  = %(sshd_backend)s
+maxretry = 3
+
+[postfix]
+enabled = false
+
+[postfix-sasl]
+enabled = false
+
+[dovecot]
+enabled = false
+EOF
+
+systemctl restart fail2ban
+echo "✓ fail2ban configurado — apenas SSH protegido, SMTP liberado"
+
 echo "================================================= Definir variáveis principais ================================================="
 
 ServerName=$1
