@@ -255,130 +255,154 @@ sed -i "s/self\.email is ''/self.email == ''/g" /usr/lib/python3/dist-packages/C
 sed -i "s/self\.token is ''/self.token == ''/g"   /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
 echo " aplicada com sucesso em cloudflare.py."
 wait
-echo "================================================= DKIM ================================================="
+echo "================================================= RSPAMD (substitui OpenDKIM) ================================================="
 
-apt-get install -y opendkim opendkim-tools
+# Instala Rspamd + Redis (Redis é usado para reputação e rate limiting)
+apt-get install -y rspamd redis-server
 
-# Criação dos diretórios
-mkdir -p /etc/opendkim
-mkdir -p /etc/opendkim/keys
+# Garante que Redis está ativo (Rspamd precisa dele)
+systemctl enable redis-server
+systemctl start redis-server
 
-# Permissões e propriedade inicial
-chown -R opendkim:opendkim /etc/opendkim/
-chmod 750 /etc/opendkim/
-chmod 750 /etc/opendkim/keys/
+# ─── Diretório das chaves DKIM por domínio ───
+mkdir -p /var/lib/rspamd/dkim/$ServerName
 
-# /etc/default/opendkim
-cat <<EOF > /etc/default/opendkim
-RUNDIR=/run/opendkim
-SOCKET="inet:9982@127.0.0.1"
-USER=opendkim
-GROUP=opendkim
-PIDFILE=\$RUNDIR/\$NAME.pid
-EOF
+# ─── Gerar chave DKIM 2048-bit (mesma força que você tinha no OpenDKIM) ───
+# Selector "default" é o padrão moderno (BillionMail, Mailcow, Postal usam todos "default")
+rspamadm dkim_keygen \
+  -s default \
+  -b 2048 \
+  -d $ServerName \
+  -k /var/lib/rspamd/dkim/$ServerName/default.private \
+  > /var/lib/rspamd/dkim/$ServerName/default.pub
 
-# /etc/opendkim.conf
-cat <<EOF > /etc/opendkim.conf
-AutoRestart             Yes
-AutoRestartRate         10/1h
-UMask                   002
-Syslog                  yes
-SyslogSuccess           Yes
-LogWhy                  Yes
+# Permissões corretas (Rspamd roda como user _rspamd no Ubuntu/Debian)
+chown -R _rspamd:_rspamd /var/lib/rspamd/dkim
+chmod 600 /var/lib/rspamd/dkim/$ServerName/default.private
+chmod 644 /var/lib/rspamd/dkim/$ServerName/default.pub
 
-Canonicalization        relaxed/relaxed
-Mode                    s
-SignatureAlgorithm      rsa-sha256
-OversignHeaders         From
-RequireSafeKeys         Yes
-UserID                  opendkim:opendkim
-PidFile                 /var/run/opendkim/opendkim.pid
-
-ExternalIgnoreList      refile:/etc/opendkim/TrustedHosts
-InternalHosts           refile:/etc/opendkim/TrustedHosts
-KeyTable                refile:/etc/opendkim/KeyTable
-SigningTable            refile:/etc/opendkim/SigningTable
-Socket                  inet:9982@127.0.0.1
-EOF
-
-# /etc/opendkim/TrustedHosts
-cat <<EOF > /etc/opendkim/TrustedHosts
-127.0.0.1
-localhost
-$ServerName
-$MailServerName
-*.$Domain
-EOF
-
-# Gerar chave DKIM
-cd /etc/opendkim/keys/
-opendkim-genkey -b 2048 -s mail -d "$ServerName"
-
-# Verificar se os arquivos foram criados
-if [ ! -f mail.private ] || [ ! -f mail.txt ]; then
-    echo "ERRO: Falha ao gerar chaves DKIM!"
+# Verificar se as chaves foram geradas
+if [ ! -f /var/lib/rspamd/dkim/$ServerName/default.private ] || \
+   [ ! -f /var/lib/rspamd/dkim/$ServerName/default.pub ]; then
+    echo "ERRO: Falha ao gerar chaves DKIM via Rspamd!"
     exit 1
 fi
 
-# Configurar KeyTable e SigningTable
-echo "mail._domainkey.${ServerName} ${ServerName}:mail:/etc/opendkim/keys/mail.private" > /etc/opendkim/KeyTable
-echo "*@${ServerName} mail._domainkey.${ServerName}" > /etc/opendkim/SigningTable
+echo "✓ Chaves DKIM geradas em /var/lib/rspamd/dkim/$ServerName/"
 
-# Ajustar permissões finais
-chown opendkim:opendkim /etc/opendkim/keys/mail.private
-chmod 600 /etc/opendkim/keys/mail.private
-chown opendkim:opendkim /etc/opendkim/keys/mail.txt
-chmod 644 /etc/opendkim/keys/mail.txt
-chmod 644 /etc/opendkim/KeyTable
-chmod 644 /etc/opendkim/SigningTable
-chown opendkim:opendkim /etc/opendkim/KeyTable
-chown opendkim:opendkim /etc/opendkim/SigningTable
-chmod 644 /etc/opendkim/TrustedHosts
+# ─── CONFIG 1: DKIM Signing ───
+# Define quando assinar e qual chave usar
+cat > /etc/rspamd/local.d/dkim_signing.conf <<EOF
+# Habilita assinatura DKIM
+enabled = true;
 
-echo "✓ DKIM configurado com sucesso!"
+# Assina apenas saída (não entrada)
+sign_authenticated = true;   # assina mensagens de usuários autenticados (Supermailer)
+sign_local = true;           # assina mensagens de localhost/mynetworks
+sign_inbound = false;        # NÃO assina mensagens vindas de fora (não faz sentido)
 
-# === ADICIONAR AQUI ===
-echo "Configurando socket TCP para OpenDKIM..."
-mkdir -p /etc/systemd/system/opendkim.service.d/
-cat > /etc/systemd/system/opendkim.service.d/override.conf <<'EOF'
-[Service]
-ExecStart=
-ExecStart=/usr/sbin/opendkim -x /etc/opendkim.conf -p inet:9982@127.0.0.1
+# Domínio + selector + caminho da chave privada
+domain {
+  $ServerName {
+    selectors [
+      {
+        path = "/var/lib/rspamd/dkim/$ServerName/default.private";
+        selector = "default";
+      }
+    ]
+  }
+}
+
+# Configurações de segurança
+allow_hdrfrom_mismatch = false;   # rejeita se From do header != envelope (anti-spoof)
+allow_hdrfrom_multiple = false;   # só permite UM header From (RFC 5322)
+use_esld = true;                  # normaliza para domínio raiz (sub.dom.com → dom.com)
+check_pubkey = true;              # valida que a chave pública existe no DNS antes de assinar
 EOF
 
-sed -i 's|^Socket.*|Socket inet:9982@127.0.0.1|' /etc/opendkim.conf
+# ─── CONFIG 2: ARC Signing (sobrevive forwards) ───
+# Quando alguém recebe seu email e reencaminha (ex: alias do trabalho → gmail pessoal),
+# o ARC preserva a cadeia de autenticação. Sem ARC, forwards quebram DKIM/DMARC.
+cat > /etc/rspamd/local.d/arc.conf <<EOF
+sign_authenticated = true;
+sign_local = true;
+sign_inbound = false;
 
-# ADICIONAR ESTAS LINHAS:
-systemctl daemon-reload
-systemctl enable opendkim
-systemctl restart opendkim
+domain {
+  $ServerName {
+    selectors [
+      {
+        path = "/var/lib/rspamd/dkim/$ServerName/default.private";
+        selector = "default";
+      }
+    ]
+  }
+}
+EOF
+
+# ─── CONFIG 3: Conexão com Redis (para reputação e rate limit) ───
+cat > /etc/rspamd/local.d/redis.conf <<EOF
+servers = "127.0.0.1:6379";
+timeout = 1.0;
+EOF
+
+# ─── CONFIG 4: Worker Proxy (é o que o Postfix conecta como milter) ───
+# Por padrão Rspamd escuta em 127.0.0.1:11332 para milter
+cat > /etc/rspamd/local.d/worker-proxy.inc <<EOF
+bind_socket = "127.0.0.1:11332";
+milter = yes;
+timeout = 120s;
+upstream "local" {
+  default = yes;
+  self_scan = yes;
+}
+EOF
+
+# ─── CONFIG 5: Worker Controller (UI web na porta 11334, opcional mas útil) ───
+# Permite ver estatísticas em http://SEU_IP:11334
+# Senha vazia = só acessível de localhost (seguro)
+cat > /etc/rspamd/local.d/worker-controller.inc <<EOF
+bind_socket = "127.0.0.1:11334";
+EOF
+
+# ─── CONFIG 6: Desabilita módulos desnecessários para envio outbound ───
+# Você é só REMETENTE, não recebe email para terceiros, então módulos
+# de detecção de spam de entrada são overhead inútil.
+cat > /etc/rspamd/local.d/options.inc <<EOF
+filters = "dkim_signing,arc";
+EOF
+
+# ─── Habilitar e iniciar Rspamd ───
+systemctl enable rspamd
+systemctl restart rspamd
 sleep 2
 
-if ss -tlnp | grep -q 9982; then
-    echo "✓ OpenDKIM escutando em 127.0.0.1:9982"
+# Verificar se Rspamd está escutando na porta milter (11332)
+if ss -tlnp | grep -q 11332; then
+    echo "✓ Rspamd escutando em 127.0.0.1:11332 (milter)"
 else
-    echo "❌ ERRO: OpenDKIM não está na porta 9982"
-    journalctl -u opendkim -n 20 --no-pager
+    echo "❌ ERRO: Rspamd não está na porta 11332"
+    journalctl -u rspamd -n 20 --no-pager
+    exit 1
 fi
-# === FIM ===
 
-
-# Script para processar a chave DKIM
-DKIMFileCode=$(cat /etc/opendkim/keys/mail.txt)
-cat <<EOF > /root/dkimcode.sh
+# ─── Script para extrair a chave pública DKIM (substitui /root/dkimcode.sh) ───
+# Mesma lógica do seu script anterior, mas lendo da nova localização
+cat <<'EOF' > /root/dkimcode.sh
 #!/usr/bin/node
-
-const DKIM = \`$DKIMFileCode\`;
+const fs = require('fs');
+const path = process.argv[2] || `/var/lib/rspamd/dkim/${process.env.ServerName}/default.pub`;
+const DKIM = fs.readFileSync(path, 'utf8');
 console.log(
-  DKIM.replace(/(\\r\\n|\\n|\\r|\\t|"|\\)| )/gm, "")
+  DKIM.replace(/(\r\n|\n|\r|\t|"|\)| )/gm, "")
   .split(";")
   .find((c) => c.match("p="))
   .replace("p=","")
 );
 EOF
-
 chmod 755 /root/dkimcode.sh
 
+echo "✓ Rspamd configurado — DKIM + ARC + Redis prontos para envio em massa"
 echo "================================================= Atualização de pacotes ================================================="
 
 
@@ -561,8 +585,8 @@ alias_database = hash:/etc/aliases
 # DKIM (OpenDKIM)
 milter_protocol = 6
 milter_default_action = accept
-smtpd_milters = inet:127.0.0.1:9982
-non_smtpd_milters = inet:127.0.0.1:9982
+smtpd_milters = inet:127.0.0.1:11332
+non_smtpd_milters = inet:127.0.0.1:11332
 
 # ===== SASL Authentication (SMTP autenticado - Supermailer porta 587) =====
 smtpd_sasl_auth_enable = yes
@@ -1005,7 +1029,8 @@ if ! command -v jq &> /dev/null; then
   apt-get install -y jq
 fi
 
-DKIMCode=$(/root/dkimcode.sh)
+# Passar o caminho do .pub do Rspamd para o script
+DKIMCode=$(/root/dkimcode.sh /var/lib/rspamd/dkim/$ServerName/default.pub)
 
 echo "===== DEPURAÇÃO: ANTES DE OBTER ZONA CLOUDFLARE ====="
 echo "DKIMCode: $DKIMCode"
@@ -1132,7 +1157,7 @@ create_or_update_record "$ServerName" "A" "$ServerIP" ""
 create_or_update_record "$MailServerName" "A" "$ServerIP" ""
 create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP -all\"" ""
 create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=quarantine; sp=quarantine; pct=100; rua=mailto:dmarc-reports@$ServerName; adkim=r; aspf=r; fo=1\"" ""
-create_or_update_record "mail._domainkey.$ServerName" "TXT" "\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\"" ""
+create_or_update_record "default._domainkey.$ServerName" "TXT" "\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\"" ""
 create_or_update_record "$ServerName" "MX" "$MailServerName" "10"
 echo "================================================= APPLICATION ================================================="
 
