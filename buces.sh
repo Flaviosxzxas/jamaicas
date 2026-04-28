@@ -260,7 +260,10 @@ echo "✓ Chaves DKIM geradas em /var/lib/rspamd/dkim/$ServerName/"
 
 # ─── CONFIG 1: DKIM Signing ───
 # Define quando assinar e qual chave usar
-cat > /etc/rspamd/local.d/dkim_signing.conf <<EOF
+# IMPORTANTE: usar override.d/ em vez de local.d/ para sobrescrever
+# defaults broken do pacote Ubuntu (que vem com sign_networks="127.2.4.7" fake)
+mkdir -p /etc/rspamd/override.d/
+cat > /etc/rspamd/override.d/dkim_signing.conf <<EOF
 # Habilita assinatura DKIM
 enabled = true;
 
@@ -268,6 +271,28 @@ enabled = true;
 sign_authenticated = true;   # assina mensagens de usuários autenticados (Supermailer)
 sign_local = true;           # assina mensagens de localhost/mynetworks
 sign_inbound = false;        # NÃO assina mensagens vindas de fora (não faz sentido)
+
+# Compatibilidade com PHP mail() e SMTP autenticado
+allow_username_mismatch = true;   # permite user do sistema != user do email
+allow_hdrfrom_mismatch = true;    # permite From: header != envelope (mail() CLI)
+allow_hdrfrom_multiple = false;   # só permite UM header From (RFC 5322)
+allow_envfrom_empty = true;       # permite envelope vazio (bounces, mail() local)
+
+# CRÍTICO: NÃO normalizar para domínio raiz
+# Sem isso, "asistencia.dominio.com" vira "dominio.com" e quebra a assinatura
+# (Rspamd procura chave em "dominio.com.dkim.key" que não existe)
+use_esld = false;
+
+# Não verifica pubkey no DNS antes de assinar
+# (Cloudflare pode demorar 1-30min para propagar; sem isso o Rspamd recusa assinar)
+check_pubkey = false;
+
+# Permite fallback se config exata não bater
+try_fallback = true;
+
+# Sobrescreve sign_networks broken padrão do Ubuntu (vem com 127.2.4.7 fake)
+# Sem isso, Rspamd só assina emails vindos de 127.2.4.7 (IP que não existe)
+sign_networks = ["127.0.0.0/8", "::1", "10.0.0.0/8"];
 
 # Domínio + selector + caminho da chave privada
 domain {
@@ -280,21 +305,23 @@ domain {
     ]
   }
 }
-
-# Configurações de segurança
-allow_hdrfrom_mismatch = false;   # rejeita se From do header != envelope (anti-spoof)
-allow_hdrfrom_multiple = false;   # só permite UM header From (RFC 5322)
-use_esld = true;                  # normaliza para domínio raiz (sub.dom.com → dom.com)
-check_pubkey = true;              # valida que a chave pública existe no DNS antes de assinar
 EOF
 
 # ─── CONFIG 2: ARC Signing (sobrevive forwards) ───
 # Quando alguém recebe seu email e reencaminha (ex: alias do trabalho → gmail pessoal),
 # o ARC preserva a cadeia de autenticação. Sem ARC, forwards quebram DKIM/DMARC.
-cat > /etc/rspamd/local.d/arc.conf <<EOF
+cat > /etc/rspamd/override.d/arc.conf <<EOF
+enabled = true;
 sign_authenticated = true;
 sign_local = true;
 sign_inbound = false;
+allow_username_mismatch = true;
+allow_hdrfrom_mismatch = true;
+allow_envfrom_empty = true;
+use_esld = false;
+check_pubkey = false;
+try_fallback = true;
+sign_networks = ["127.0.0.0/8", "::1", "10.0.0.0/8"];
 
 domain {
   $ServerName {
@@ -333,12 +360,15 @@ cat > /etc/rspamd/local.d/worker-controller.inc <<EOF
 bind_socket = "127.0.0.1:11334";
 EOF
 
-# ─── CONFIG 6: Desabilita módulos desnecessários para envio outbound ───
-# Você é só REMETENTE, não recebe email para terceiros, então módulos
-# de detecção de spam de entrada são overhead inútil.
-cat > /etc/rspamd/local.d/options.inc <<EOF
-filters = "dkim_signing,arc";
-EOF
+# ─── REMOVIDO: CONFIG 6 (options.inc com filters restritivo) ───
+# A configuração antiga "filters = dkim_signing,arc" QUEBRAVA o pipeline DKIM
+# porque desabilitava módulos auxiliares que o dkim_signing precisa para funcionar.
+# Rspamd com defaults é otimizado para envio outbound — não precisa restringir.
+
+# ─── Limpar configurações antigas que podem ter sobrado ───
+rm -f /etc/rspamd/local.d/options.inc
+rm -f /etc/rspamd/local.d/dkim_signing.conf
+rm -f /etc/rspamd/local.d/arc.conf
 
 # ─── Habilitar e iniciar Rspamd ───
 systemctl enable rspamd
@@ -352,6 +382,13 @@ else
     echo "❌ ERRO: Rspamd não está na porta 11332"
     journalctl -u rspamd -n 20 --no-pager
     exit 1
+fi
+
+# Verificar se sign_networks ficou correto (não com 127.2.4.7 fake do Ubuntu)
+if rspamadm configdump dkim_signing 2>/dev/null | grep -q "127.0.0.0/8"; then
+    echo "✓ sign_networks configurado corretamente (127.0.0.0/8)"
+else
+    echo "⚠️  AVISO: sign_networks pode estar com defaults broken — verificar manualmente"
 fi
 
 # ─── Script para extrair a chave pública DKIM (substitui /root/dkimcode.sh) ───
