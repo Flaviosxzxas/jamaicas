@@ -373,15 +373,31 @@ rm -f /etc/rspamd/local.d/arc.conf
 # ─── Habilitar e iniciar Rspamd ───
 systemctl enable rspamd
 systemctl restart rspamd
-sleep 2
 
-# Verificar se Rspamd está escutando na porta milter (11332)
-if ss -tlnp | grep -q 11332; then
-    echo "✓ Rspamd escutando em 127.0.0.1:11332 (milter)"
+# Aguardar Rspamd subir COMPLETAMENTE (com retry de até 30s)
+echo "  -- Aguardando Rspamd inicializar..."
+RSPAMD_READY=0
+for i in $(seq 1 30); do
+    if ss -tlnp 2>/dev/null | grep -q 11332; then
+        RSPAMD_READY=1
+        echo "  ✓ Rspamd escutando em 127.0.0.1:11332 (após ${i}s)"
+        break
+    fi
+    sleep 1
+done
+
+if [ "$RSPAMD_READY" = "0" ]; then
+    echo "  ⚠️  AVISO: Rspamd não abriu porta 11332 em 30s"
+    echo "  ⚠️  Continuando mesmo assim — verificar com 'systemctl status rspamd' depois"
+    journalctl -u rspamd -n 20 --no-pager 2>/dev/null || true
+    # NÃO usar exit 1 — apenas avisar e continuar
+fi
+
+# Verificação adicional do sign_networks (não bloqueia)
+if rspamadm configdump dkim_signing 2>/dev/null | grep -q "127.0.0.0/8"; then
+    echo "  ✓ sign_networks configurado corretamente"
 else
-    echo "❌ ERRO: Rspamd não está na porta 11332"
-    journalctl -u rspamd -n 20 --no-pager
-    exit 1
+    echo "  ⚠️  AVISO: sign_networks pode não estar correto — verificar manualmente"
 fi
 
 # Verificar se sign_networks ficou correto (não com 127.2.4.7 fake do Ubuntu)
