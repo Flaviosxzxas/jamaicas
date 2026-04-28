@@ -2059,4 +2059,16 @@ else
 fi
 
 echo "Finalizando o script."
+echo ""
+echo "═══════════════════════════════════════════════════════════"
+echo " ✓ SCRIPT FINALIZADO COM SUCESSO!"
+echo "═══════════════════════════════════════════════════════════"
+echo " Servidor: $ServerName"
+echo " IP: $ServerIP"
+echo " Cloudflare: registros DNS configurados"
+echo " Rspamd: ativo e assinando DKIM"
+echo "═══════════════════════════════════════════════════════════"
+echo ""
+echo "Janela vai fechar em 30 segundos..."
+sleep 20
 exit 0
