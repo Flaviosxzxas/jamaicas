@@ -2004,6 +2004,8 @@ noreply@$ServerName       discard:
 unsubscribe@$ServerName   discard:
 contacto@$ServerName      discard:
 bounce@$ServerName        discard:
+tls-reports@$ServerName   discard:
+dmarc-reports@$ServerName discard:
 EOF
 postmap /etc/postfix/transport
 
