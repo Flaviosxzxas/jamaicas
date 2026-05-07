@@ -150,7 +150,40 @@ if [ -z "$Domain" ] || [ -z "$DKIMSelector" ]; then
 fi
 
 # Obter IP público
-ServerIP=$(curl -4 -fsS https://api.ipify.org)
+ServerIP=$(curl -4 -fsS https://# Obter IP público com fallbacks em cascata
+get_public_ip() {
+  local ip
+
+  # 1) ip-api.com Pro (API paga)
+  ip=$(curl -4 -fsS --max-time 5 \
+    "https://pro.ip-api.com/json/?key=FOZxX990NtFRAco&fields=query" 2>/dev/null \
+    | grep -oP '"query"\s*:\s*"\K[^"]+') && \
+    echo "$ip" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' && { echo "$ip"; return; }
+
+  # 2) ipify
+  ip=$(curl -4 -fsS --max-time 5 https://api.ipify.org 2>/dev/null) && \
+    echo "$ip" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' && { echo "$ip"; return; }
+
+  # 3) ifconfig.me
+  ip=$(curl -4 -fsS --max-time 5 https://ifconfig.me 2>/dev/null) && \
+    echo "$ip" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' && { echo "$ip"; return; }
+
+  # 4) icanhazip
+  ip=$(curl -4 -fsS --max-time 5 https://icanhazip.com 2>/dev/null | tr -d '[:space:]') && \
+    echo "$ip" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' && { echo "$ip"; return; }
+
+  # 5) ipecho
+  ip=$(curl -4 -fsS --max-time 5 https://ipecho.net/plain 2>/dev/null) && \
+    echo "$ip" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' && { echo "$ip"; return; }
+
+  return 1
+}
+
+ServerIP=$(get_public_ip)
+if [ -z "$ServerIP" ]; then
+  echo "Erro: Não foi possível obter o IP público por nenhum método."
+  exit 1
+fi)
 if [ -z "$ServerIP" ]; then
   echo "Erro: Não foi possível obter o IP público."
   exit 1
