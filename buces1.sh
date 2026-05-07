@@ -149,8 +149,7 @@ if [ -z "$Domain" ] || [ -z "$DKIMSelector" ]; then
   exit 1
 fi
 
-# Obter IP público
-ServerIP=$(curl -4 -fsS https://# Obter IP público com fallbacks em cascata
+# Obter IP público com fallbacks em cascata
 get_public_ip() {
   local ip
 
@@ -182,10 +181,6 @@ get_public_ip() {
 ServerIP=$(get_public_ip)
 if [ -z "$ServerIP" ]; then
   echo "Erro: Não foi possível obter o IP público por nenhum método."
-  exit 1
-fi)
-if [ -z "$ServerIP" ]; then
-  echo "Erro: Não foi possível obter o IP público."
   exit 1
 fi
 
