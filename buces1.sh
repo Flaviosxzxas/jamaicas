@@ -242,7 +242,7 @@ hostnamectl set-hostname "$ServerName"
 certbot certonly --non-interactive --agree-tos --register-unsafely-without-email \
   --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.cfg \
   --dns-cloudflare-propagation-seconds 60 --rsa-key-size 4096 \
-  -d $ServerName -d $MailServerName -d mta-sts.$ServerName  
+  -d $ServerName -d $MailServerName -d mta-sts.$ServerName -d unsubscribe.$ServerName
 
 echo "================================================= Corrigir SyntaxWarning em cloudflare.py ================================================="
 
@@ -1156,6 +1156,9 @@ MTASTS_POLICY_ID="$(date +%Y%m%d%H%M)"
 # 1) A record do subdomínio que servirá a policy via HTTPS
 create_or_update_record "mta-sts.$ServerName" "A" "$ServerIP" ""
 
+# Subdomínios de suporte (unsubscribe one-click)
+create_or_update_record "unsubscribe.$ServerName" "A" "$ServerIP" ""
+
 # 2) TXT _mta-sts: avisa aos MTAs que existe uma policy
 create_or_update_record "_mta-sts.$ServerName" "TXT" "\"v=STSv1; id=$MTASTS_POLICY_ID\"" ""
 
@@ -2010,11 +2013,43 @@ cat > /etc/apache2/sites-available/mta-sts-$ServerName.conf <<EOF
 </IfModule>
 EOF
 
+# 3) VirtualHost dedicado para unsubscribe-$ServerName
+cat > /etc/apache2/sites-available/unsubscribe-$ServerName.conf <<EOF
+<VirtualHost *:80>
+    ServerName unsubscribe.$ServerName
+    DocumentRoot /var/www/html
+    RewriteEngine On
+    RewriteRule ^ https://%{SERVER_NAME}%{REQUEST_URI} [END,NE,R=permanent]
+</VirtualHost>
+
+<IfModule mod_ssl.c>
+<VirtualHost *:443>
+    ServerName unsubscribe.$ServerName
+    DocumentRoot /var/www/html
+
+    SSLEngine on
+    SSLCertificateFile /etc/letsencrypt/live/$ServerName/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/$ServerName/privkey.pem
+
+    SSLProtocol             all -SSLv2 -SSLv3 -TLSv1 -TLSv1.1
+    SSLCipherSuite          ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305
+    SSLHonorCipherOrder     on
+
+    <Directory /var/www/html>
+        AllowOverride All
+        Require all granted
+    </Directory>
+</VirtualHost>
+</IfModule>
+EOF
+
+# Habilitar os dois sites e recarregar uma única vez
 a2ensite "mta-sts-$ServerName"
+a2ensite "unsubscribe-$ServerName"
 systemctl reload apache2
 
 echo "✓ MTA-STS policy publicada em https://mta-sts.$ServerName/.well-known/mta-sts.txt"
-
+echo "✓ VirtualHost unsubscribe.$ServerName configurado"
 
 echo "================================================= Configurando aliases virtuais (noreply, contacto, bounce, unsubscribe) ================================================="
 
