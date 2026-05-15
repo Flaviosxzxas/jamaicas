@@ -231,7 +231,7 @@ dns_cloudflare_api_key = $CloudflareAPI" > /root/.secrets/cloudflare.cfg
 
 cat <<EOF > /etc/hosts
 127.0.0.1   localhost
-$ServerIP   $ServerName
+127.0.1.1   $MailServerName
 $ServerIP   $MailServerName
 EOF
 
