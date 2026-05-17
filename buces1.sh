@@ -591,7 +591,7 @@ non_smtpd_milters = inet:127.0.0.1:11332
 
 # TLS - entrada local (PHP -> Postfix em 127.0.0.1)
 smtpd_tls_security_level = may
-smtpd_tls_loglevel = 2
+smtpd_tls_loglevel = 1
 smtpd_tls_received_header = yes
 smtpd_tls_session_cache_timeout = 3600s
 smtpd_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
