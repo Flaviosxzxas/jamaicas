@@ -235,9 +235,8 @@ cat <<EOF > /etc/hosts
 $ServerIP   $MailServerName
 EOF
 
-echo -e "$ServerName" > /etc/hostname
-
-hostnamectl set-hostname "$ServerName"
+echo -e "$MailServerName" > /etc/hostname
+hostnamectl set-hostname "$MailServerName"
 
 certbot certonly --non-interactive --agree-tos --register-unsafely-without-email \
   --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.cfg \
