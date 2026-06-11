@@ -1997,39 +1997,56 @@ chmod 644 /var/log/unsub/unsubscribed.txt
 chown www-data:www-data /var/www/html/unsubscribe.php
 chmod 644 /var/www/html/unsubscribe.php
 # -----------------------------------------------------------
-# CRIAR PÁGINA DE ABUSE REPORT (X-Abuse Header)
+# CRIAR PÁGINA DE ABUSE REPORT (X-Abuse Header) - versão segura
 # -----------------------------------------------------------
 cat <<'ABUSE_EOF' > /var/www/html/abuse.php
 <?php
+declare(strict_types=1);
+
 // abuse.php - Sistema de Report de Abuso
 const ABUSE_LOG = '/var/log/abuse_reports.txt';
 
-// Obter Message-ID da URL
-$messageId = $_GET['mid'] ?? '';
-$messageId = filter_var($messageId, FILTER_SANITIZE_STRING);
+function clean_text($value, int $maxLen = 500): string {
+    $value = trim((string)$value);
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $reason = $_POST['reason'] ?? '';
-    $fullName = $_POST['full_name'] ?? '';
-    $email = filter_var($_POST['email'] ?? '', FILTER_VALIDATE_EMAIL);
-    
-    if ($messageId && $email && $reason) {
-        // Salvar report em log
-        $logEntry = date('Y-m-d H:i:s') . " | MessageID: $messageId | Email: $email | Name: $fullName | Reason: " . substr($reason, 0, 200) . "\n";
-        file_put_contents(ABUSE_LOG, $logEntry, FILE_APPEND | LOCK_EX);
-        
-        // Mostrar confirmação
-        http_response_code(200);
-        echo '<!doctype html><html><head><meta charset="utf-8"><title>Report Submitted</title></head>';
-        echo '<body style="font-family:Arial;text-align:center;margin-top:50px">';
-        echo '<h1>✓ Abuse Report Submitted</h1>';
-        echo '<p>Thank you for your report. We take abuse seriously and will investigate immediately.</p>';
-        echo '<p>Your report ID: <strong>' . substr(md5($logEntry), 0, 8) . '</strong></p>';
-        echo '</body></html>';
-        exit;
+    // Remove bytes de controle e troca quebras por espaço para evitar log injection.
+    $value = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $value) ?? '';
+    $value = str_replace(["\r", "\n"], ' ', $value);
+
+    if (strlen($value) > $maxLen) {
+        $value = substr($value, 0, $maxLen);
     }
+
+    return $value;
 }
-?>
+
+function clean_mid($value): string {
+    /*
+     * Message-ID pode conter <>, @, ponto, hífen e outros caracteres.
+     * Para log, não precisamos validar o formato completo aqui.
+     * Precisamos apenas impedir controle/quebra de linha e limitar tamanho.
+     */
+    return clean_text($value, 255);
+}
+
+function safe_email($value): string {
+    $value = trim((string)$value);
+    return filter_var($value, FILTER_VALIDATE_EMAIL) ? strtolower($value) : '';
+}
+
+function html($value): string {
+    return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
+
+function render_page(string $messageId, string $error = ''): void {
+    http_response_code($error === '' ? 200 : 400);
+    header('Content-Type: text/html; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('X-Robots-Tag: noindex, nofollow', true);
+
+    $messageIdHtml = html($messageId);
+    $errorHtml     = html($error);
+    ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2046,34 +2063,135 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         button { background: #d9534f; color: white; border: none; padding: 12px 30px; margin-top: 20px; border-radius: 4px; font-size: 16px; cursor: pointer; width: 100%; }
         button:hover { background: #c9302c; }
         .info { background: #f0f0f0; padding: 15px; border-left: 4px solid #666; margin-bottom: 20px; font-size: 14px; line-height: 1.6; color: #333; }
+        .error { background: #ffe8e8; padding: 12px; border-left: 4px solid #d9534f; margin-bottom: 20px; color: #8a1f1f; }
+        .hp { display:none !important; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Report Abuse Email</h1>
-        
+
+        <?php if ($errorHtml !== ''): ?>
+            <div class="error"><?=$errorHtml?></div>
+        <?php endif; ?>
+
         <div class="info">
-            If you believe that you have received an abuse email from one of our customers, please submit your abuse report using the form below. We will need the Message-ID code which is included in every email that is being sent by our customers. You can find it in the email header. We can remove your email address from all our user databases if you want. Also, if you want a response from our Abuse Department, please provide your name and email address in the following form. Your confidential information is important for us. We never sell or distribute your information with third parties.
+            If you believe that you have received an abuse email from one of our customers,
+            please submit your abuse report using the form below. We will need the Message-ID
+            code included in the email header. If you want a response from our Abuse Department,
+            please provide your name and email address.
         </div>
-        
-        <form method="POST">
+
+        <form method="POST" action="<?=html($_SERVER['REQUEST_URI'] ?? '/abuse.php')?>">
             <label>Message ID</label>
-            <input type="text" name="mid" value="<?= htmlspecialchars($messageId, ENT_QUOTES, 'UTF-8') ?>" readonly required>
-            
+            <input type="text" name="mid" value="<?=$messageIdHtml?>" readonly required>
+
             <label>Reason For Report, Comments</label>
             <textarea name="reason" required placeholder="Please describe why you're reporting this email..."></textarea>
-            
+
             <label>Full Name</label>
             <input type="text" name="full_name" required placeholder="Your full name">
-            
+
             <label>Email Address</label>
             <input type="email" name="email" required placeholder="your@email.com">
-            
+
+            <!-- Honeypot simples contra bots -->
+            <div class="hp">
+                <label>Website</label>
+                <input type="text" name="website" value="">
+            </div>
+
             <button type="submit">Report Abuse</button>
         </form>
     </div>
 </body>
 </html>
+    <?php
+    exit;
+}
+
+function render_success(string $reportId): void {
+    http_response_code(200);
+    header('Content-Type: text/html; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('X-Robots-Tag: noindex, nofollow', true);
+
+    $reportIdHtml = html($reportId);
+    ?>
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Report Submitted</title>
+</head>
+<body style="font-family:Arial;text-align:center;margin-top:50px">
+    <h1>✓ Abuse Report Submitted</h1>
+    <p>Thank you for your report. We take abuse seriously and will investigate immediately.</p>
+    <p>Your report ID: <strong><?=$reportIdHtml?></strong></p>
+</body>
+</html>
+    <?php
+    exit;
+}
+
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+
+/*
+ * Lê mid de GET ou POST.
+ * Isso corrige o problema do formulário enviar mid via POST.
+ */
+$messageId = clean_mid($_GET['mid'] ?? $_POST['mid'] ?? '');
+
+if ($method === 'POST') {
+    // Honeypot: se bot preencher, finge sucesso mas não grava.
+    if (clean_text($_POST['website'] ?? '', 100) !== '') {
+        render_success(substr(hash('sha256', date('c') . random_bytes(8)), 0, 8));
+    }
+
+    $reason   = clean_text($_POST['reason'] ?? '', 1000);
+    $fullName = clean_text($_POST['full_name'] ?? '', 200);
+    $email    = safe_email($_POST['email'] ?? '');
+
+    if ($messageId === '') {
+        render_page($messageId, 'Missing Message-ID.');
+    }
+
+    if ($email === '') {
+        render_page($messageId, 'Invalid email address.');
+    }
+
+    if ($reason === '') {
+        render_page($messageId, 'Reason is required.');
+    }
+
+    $entry = [
+        'ts'         => date('c'),
+        'message_id' => $messageId,
+        'email'      => $email,
+        'name'       => $fullName,
+        'reason'     => $reason,
+        'ip'         => $_SERVER['REMOTE_ADDR'] ?? '-',
+        'ua'         => clean_text($_SERVER['HTTP_USER_AGENT'] ?? '-', 500),
+    ];
+
+    $line = json_encode($entry, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+
+    if (!@file_put_contents(ABUSE_LOG, $line, FILE_APPEND | LOCK_EX)) {
+        render_page($messageId, 'Could not save report. Please try again later.');
+    }
+
+    $reportId = substr(hash('sha256', $line), 0, 8);
+    render_success($reportId);
+}
+
+/*
+ * GET:
+ * Apenas mostra formulário.
+ * Não grava report.
+ * Não descadastra.
+ * Scanner/gateway abrindo por GET não causa efeito colateral.
+ */
+render_page($messageId);
 ABUSE_EOF
 
 # Criar diretório de logs e configurar permissões
@@ -2087,7 +2205,6 @@ chown www-data:www-data /var/www/html/abuse.php
 chmod 644 /var/www/html/abuse.php
 
 echo "✓ Sistema de Abuse Report configurado em https://$ServerName/abuse.php"
-
 
 # (Opcional) Reiniciar Apache
 systemctl restart apache2 || true
