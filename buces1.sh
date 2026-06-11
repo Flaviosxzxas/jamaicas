@@ -946,6 +946,37 @@ zgrep -h 'postfix/smtp.*status=deferred' $LOGS 2>/dev/null | awk '
 }
 ' | sort -u > "$OUTDIR/deferred.txt"
 
+# === UNSUBSCRIBED / DESCADASTROS ONE-CLICK + MANUAL ===
+# Origem real e privada:
+#   /var/log/unsub/unsubscribed.txt
+#
+# Export público seguro:
+#   /var/www/html/unsubscribed.txt
+#
+# Importante:
+# Não publicamos IP/User-Agent aqui. Exportamos somente emails únicos,
+# para usar como suppression/remoção de lista.
+UNSUB_LOG="/var/log/unsub/unsubscribed.txt"
+
+if [ -f "$UNSUB_LOG" ]; then
+    awk -F'|' '
+    {
+        email = $3
+        gsub(/^[ \t]+|[ \t]+$/, "", email)
+        email = tolower(email)
+
+        if (email ~ /^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$/) {
+            print email
+        }
+    }
+    ' "$UNSUB_LOG" | sort -u > "$OUTDIR/unsubscribed.txt"
+else
+    : > "$OUTDIR/unsubscribed.txt"
+fi
+
+chmod 644 "$OUTDIR/unsubscribed.txt" 2>/dev/null || true
+
+
 # === Remover duplicatas de todos os arquivos ===
 for f in \
     "$OUTDIR/invalid_confirmed.txt" \
@@ -954,7 +985,8 @@ for f in \
     "$OUTDIR/domain_invalid.txt" \
     "$OUTDIR/ambiguous_bounces.txt" \
     "$OUTDIR/sent_success.txt" \
-    "$OUTDIR/deferred.txt"; do
+    "$OUTDIR/deferred.txt" \
+    "$OUTDIR/unsubscribed.txt"; do
     [ -f "$f" ] && sort -u "$f" -o "$f"
 done
 
@@ -972,7 +1004,7 @@ fi
 echo "=== Relatorio Classify-Bounces ===" > "$OUTDIR/bounce_report.txt"
 echo "Data: $(date '+%Y-%m-%d %H:%M:%S')" >> "$OUTDIR/bounce_report.txt"
 echo "-----------------------------------" >> "$OUTDIR/bounce_report.txt"
-for f in invalid_confirmed invalid_retest policy_blocks domain_invalid ambiguous_bounces sent_success deferred; do
+for f in invalid_confirmed invalid_retest policy_blocks domain_invalid ambiguous_bounces sent_success deferred unsubscribed; do
     if [ -f "$OUTDIR/${f}.txt" ]; then
         count=$(wc -l < "$OUTDIR/${f}.txt")
     else
@@ -998,6 +1030,7 @@ echo "  → domain_invalid.txt     = dominio nao existe"
 echo "  → ambiguous_bounces.txt  = investigar manualmente"
 echo "  → sent_success.txt       = entregue com sucesso"
 echo "  → deferred.txt           = ainda tentando"
+echo "  → unsubscribed.txt       = descadastros / suppression list"
 echo "  → bounce_report.txt      = relatorio com contagens"
 # === FIM CLASSIFY-BOUNCES ===
 echo "================================================= CLOUDFLARE ================================================="
