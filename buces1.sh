@@ -1712,10 +1712,12 @@ document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
 EOF
 
 # -----------------------------------------------------------
-# AQUI CRIAMOS O unsubscribe.php (versão PRO) + permissões
+# AQUI CRIAMOS O unsubscribe.php (versão PRO v2) + permissões
 # -----------------------------------------------------------
 cat <<'EOF' > /var/www/html/unsubscribe.php
 <?php
+declare(strict_types=1);
+
 // === Config (use o MESMO segredo do email.php) ===
 const UNSUB_SECRET     = 'Gx9pT3aQ1mRxW7bY5kW2nH8cV4sL0';
 const UNSUB_VALID_SECS = 60 * 60 * 24 * 30; // 30 dias
@@ -1723,85 +1725,266 @@ const LIST_DIR         = '/var/log/unsub';
 const LIST_FILE        = '/var/log/unsub/unsubscribed.txt';
 
 // === Utils ===
-function b64url($bin){ return rtrim(strtr(base64_encode($bin), '+/','-_'), '='); }
-function safe_email($e){ return filter_var($e, FILTER_VALIDATE_EMAIL) ? strtolower($e) : ''; }
-function ok($msg='unsubscribed'){ http_response_code(200); header('Content-Type: text/plain; charset=utf-8'); echo $msg; exit; }
-function bad($msg='invalid request'){ http_response_code(400); header('Content-Type: text/plain; charset=utf-8'); echo $msg; exit; }
+function b64url(string $bin): string {
+  return rtrim(strtr(base64_encode($bin), '+/', '-_'), '=');
+}
 
-function verify_token($email, $ts, $sig){
-  if (!$email || !$ts || !$sig) return false;
-  if (abs(time() - (int)$ts) > UNSUB_VALID_SECS) return false;
-  $msg = $email.'|'.$ts;
+function safe_email($e): string {
+  $e = trim((string)$e);
+  return filter_var($e, FILTER_VALIDATE_EMAIL) ? $e : '';
+}
+
+function storage_email(string $e): string {
+  return strtolower($e);
+}
+
+function ok(string $msg = 'unsubscribed'): void {
+  http_response_code(200);
+  header('Content-Type: text/plain; charset=utf-8');
+  header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+  echo $msg;
+  exit;
+}
+
+function bad(string $msg = 'invalid request', int $code = 400): void {
+  http_response_code($code);
+  header('Content-Type: text/plain; charset=utf-8');
+  header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+  echo $msg;
+  exit;
+}
+
+function verify_token(string $email, $ts, string $sig): bool {
+  if ($email === '' || $ts === '' || $sig === '') return false;
+  if (!ctype_digit((string)$ts)) return false;
+
+  $tsInt = (int)$ts;
+
+  if (abs(time() - $tsInt) > UNSUB_VALID_SECS) {
+    return false;
+  }
+
+  $msg = $email . '|' . $tsInt;
   $chk = b64url(hash_hmac('sha256', $msg, UNSUB_SECRET, true));
+
   return hash_equals($chk, $sig);
 }
 
-function save_unsub($email, $mode='unknown'){
-  if (!$email) return false;
-  if (!is_dir(LIST_DIR)) @mkdir(LIST_DIR, 0755, true);
-  $line = date('c')." | $mode | ".$email.PHP_EOL;
-  return (bool)@file_put_contents(LIST_FILE, $line, FILE_APPEND|LOCK_EX);
-}
-
-// ============== Fluxos ==============
-
-// 1) One-Click (POST) — Gmail/Outlook
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-  // Geralmente vem a URL com e/ts/sig no query string
-  $e  = safe_email($_GET['e'] ?? '');
-  $ts = $_GET['ts'] ?? '';
-  $sg = $_GET['sig'] ?? '';
-
-  // Fallback: alguns provedores podem enviar JSON (raro)
-  if (!$e && stripos($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') !== false) {
-    $body = json_decode(file_get_contents('php://input'), true);
-    $e  = safe_email($body['e'] ?? '');
-    $ts = $body['ts'] ?? '';
-    $sg = $body['sig'] ?? '';
+function is_one_click_post(): bool {
+  /*
+   * Caso PHP já tenha parseado application/x-www-form-urlencoded.
+   *
+   * Esperado:
+   * List-Unsubscribe=One-Click
+   */
+  if (($_POST['List-Unsubscribe'] ?? '') === 'One-Click') {
+    return true;
   }
 
-  if (!verify_token($e, $ts, $sg)) bad('invalid token');
-  save_unsub($e, 'one-click') ? ok('unsubscribed') : bad('write failed');
+  /*
+   * Fallback para corpo cru.
+   */
+  $raw = file_get_contents('php://input');
+
+  if (!is_string($raw) || trim($raw) === '') {
+    return false;
+  }
+
+  $rawTrim = trim($raw);
+
+  if ($rawTrim === 'List-Unsubscribe=One-Click') {
+    return true;
+  }
+
+  $data = [];
+  parse_str($rawTrim, $data);
+
+  return (($data['List-Unsubscribe'] ?? '') === 'One-Click');
 }
 
-// 2) Clique manual (GET) com token seguro
-if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['e'], $_GET['ts'], $_GET['sig'])) {
-  $e  = safe_email($_GET['e'] ?? '');
-  $ts = $_GET['ts'] ?? '';
-  $sg = $_GET['sig'] ?? '';
-  if (!verify_token($e, $ts, $sg)) {
-    http_response_code(400);
-    ?>
-    <!doctype html><meta charset="utf-8"><title>Enlace inválido</title>
-    <body style="font-family:system-ui,Segoe UI,Arial">
-      <h1>Enlace inválido o expirado</h1>
-      <p>El enlace de cancelación no es válido o ha expirado.</p>
-    </body>
-    <?php
-    exit;
+function save_unsub(string $email, string $mode = 'unknown'): bool {
+  if ($email === '') return false;
+
+  if (!is_dir(LIST_DIR) && !@mkdir(LIST_DIR, 0755, true)) {
+    return false;
   }
-  save_unsub($e, 'click');
-  http_response_code(200);
+
+  $ip = $_SERVER['REMOTE_ADDR'] ?? '-';
+  $ua = $_SERVER['HTTP_USER_AGENT'] ?? '-';
+
+  /*
+   * Armazena o email normalizado para facilitar suppression/lista de bloqueio.
+   */
+  $line = date('c') .
+          " | {$mode} | " .
+          storage_email($email) .
+          " | ip={$ip} | ua=" .
+          str_replace(["\r", "\n"], ' ', $ua) .
+          PHP_EOL;
+
+  return (bool)@file_put_contents(LIST_FILE, $line, FILE_APPEND | LOCK_EX);
+}
+
+function render_invalid_page(): void {
+  http_response_code(400);
+  header('Content-Type: text/html; charset=utf-8');
+  header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+  header('X-Robots-Tag: noindex, nofollow', true);
   ?>
-  <!doctype html><meta charset="utf-8"><title>Suscripción cancelada</title>
-  <body style="font-family:system-ui,Segoe UI,Arial;text-align:center;margin-top:12vh">
-    <h1>Suscripción cancelada</h1>
-    <p>Hemos registrado tu solicitud: <b><?=htmlspecialchars($e, ENT_QUOTES)?></b></p>
-    <p>No volverás a recibir mensajes de esta lista.</p>
+  <!doctype html>
+  <html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <title>Enlace inválido</title>
+  </head>
+  <body style="font-family:system-ui,Segoe UI,Arial">
+    <h1>Enlace inválido o expirado</h1>
+    <p>El enlace de cancelación no es válido o ha expirado.</p>
   </body>
+  </html>
   <?php
   exit;
 }
 
-// 3) Retrocompatibilidade: GET/POST com 'email=' simples (sem token)
-//    — útil para conteúdos antigos. Não recomendado para novos envios.
-$email = safe_email($_REQUEST['email'] ?? '');
-if ($email) {
-  save_unsub($email, 'legacy') ? ok('unsubscribed') : bad('write failed');
+function render_confirm_page(string $email, string $action): void {
+  http_response_code(200);
+  header('Content-Type: text/html; charset=utf-8');
+  header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+  header('X-Robots-Tag: noindex, nofollow', true);
+
+  $emailHtml  = htmlspecialchars($email, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+  $actionHtml = htmlspecialchars($action, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+  ?>
+  <!doctype html>
+  <html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <title>Cancelar suscripción</title>
+  </head>
+  <body style="font-family:system-ui,Segoe UI,Arial;text-align:center;margin-top:12vh">
+    <h1>Cancelar suscripción</h1>
+    <p>Vas a cancelar la suscripción para:</p>
+    <p><b><?=$emailHtml?></b></p>
+
+    <form method="post" action="<?=$actionHtml?>">
+      <input type="hidden" name="confirm_unsubscribe" value="1">
+      <input type="hidden" name="email" value="<?=$emailHtml?>">
+      <button type="submit" style="font-size:16px;padding:10px 18px;cursor:pointer">
+        Cancelar suscripción
+      </button>
+    </form>
+  </body>
+  </html>
+  <?php
+  exit;
 }
 
-// Caso não caia em nenhum fluxo
-bad('method not allowed');
+// ============== Fluxos ==============
+
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+
+/*
+ * 1) One-Click real por POST — Gmail / Outlook / Yahoo
+ *
+ * Esperado no header do email:
+ *
+ * List-Unsubscribe: <https://unsubscribe.dominio.com/unsubscribe.php?e=...&ts=...&sig=...>
+ * List-Unsubscribe-Post: List-Unsubscribe=One-Click
+ *
+ * Esperado no POST do provedor:
+ *
+ * POST /unsubscribe.php?e=...&ts=...&sig=...
+ * Content-Type: application/x-www-form-urlencoded
+ *
+ * Body:
+ * List-Unsubscribe=One-Click
+ */
+if ($method === 'POST') {
+  $e  = safe_email($_GET['e'] ?? '');
+  $ts = $_GET['ts'] ?? '';
+  $sg = (string)($_GET['sig'] ?? '');
+
+  /*
+   * Confirmação manual vinda da página HTML exibida no GET.
+   */
+  $isManualConfirm = (($_POST['confirm_unsubscribe'] ?? '') === '1');
+
+  /*
+   * One-click RFC 8058:
+   * O provedor envia List-Unsubscribe=One-Click no corpo do POST.
+   */
+  $isOneClick = is_one_click_post();
+
+  /*
+   * Fluxo novo e seguro: e + ts + sig.
+   */
+  if ($e !== '' && $ts !== '' && $sg !== '') {
+    if (!$isOneClick && !$isManualConfirm) {
+      bad('invalid one-click body');
+    }
+
+    if (!verify_token($e, $ts, $sg)) {
+      bad('invalid token');
+    }
+
+    $mode = $isOneClick ? 'one-click' : 'manual-confirm';
+
+    save_unsub($e, $mode) ? ok('unsubscribed') : bad('write failed', 500);
+  }
+
+  /*
+   * Retrocompatibilidade para POST antigo com email=.
+   * Para envios novos, prefira sempre e/ts/sig.
+   */
+  $legacyEmail = safe_email($_POST['email'] ?? '');
+
+  if ($legacyEmail !== '') {
+    save_unsub($legacyEmail, 'legacy-post') ? ok('unsubscribed') : bad('write failed', 500);
+  }
+
+  bad('invalid request');
+}
+
+/*
+ * 2) Clique manual por GET com token seguro
+ *
+ * IMPORTANTE:
+ * GET não descadastra automaticamente.
+ * GET apenas mostra uma página de confirmação.
+ *
+ * Isso reduz risco de scanner/gateway abrir o link e descadastrar sozinho.
+ */
+if ($method === 'GET' && isset($_GET['e'], $_GET['ts'], $_GET['sig'])) {
+  $e  = safe_email($_GET['e'] ?? '');
+  $ts = $_GET['ts'] ?? '';
+  $sg = (string)($_GET['sig'] ?? '');
+
+  if (!verify_token($e, $ts, $sg)) {
+    render_invalid_page();
+  }
+
+  $action = $_SERVER['REQUEST_URI'] ?? '/unsubscribe.php';
+
+  render_confirm_page($e, $action);
+}
+
+/*
+ * 3) Retrocompatibilidade: GET antigo com email= simples.
+ *
+ * Não descadastra por GET automaticamente.
+ * Mostra confirmação e grava apenas se o usuário clicar no botão.
+ */
+if ($method === 'GET') {
+  $legacyEmail = safe_email($_GET['email'] ?? '');
+
+  if ($legacyEmail !== '') {
+    $action = '/unsubscribe.php';
+
+    render_confirm_page($legacyEmail, $action);
+  }
+}
+
+bad('method not allowed', 405);
 EOF
 
 # Logs (fora do webroot) e permissões
@@ -1813,7 +1996,6 @@ chmod 644 /var/log/unsub/unsubscribed.txt
 # Permissões do PHP
 chown www-data:www-data /var/www/html/unsubscribe.php
 chmod 644 /var/www/html/unsubscribe.php
-
 # -----------------------------------------------------------
 # CRIAR PÁGINA DE ABUSE REPORT (X-Abuse Header)
 # -----------------------------------------------------------
