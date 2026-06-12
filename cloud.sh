@@ -1,3 +1,28 @@
+!/bin/bash
+
+set -Eeuo pipefail
+trap 'echo "[ERRO] linha $LINENO: $BASH_COMMAND (status $?)" >&2' ERR
+
+
+echo "================================================= Definir variáveis principais ================================================="
+
+ServerName=$1
+CloudflareAPI=$2
+CloudflareEmail=$3
+
+# Verificar argumentos
+if [ -z "$ServerName" ] || [ -z "$CloudflareAPI" ] || [ -z "$CloudflareEmail" ]; then
+  echo "Erro: Argumentos insuficientes fornecidos."
+  echo "Uso: $0 <ServerName> <CloudflareAPI> <CloudflareEmail>"
+  exit 1
+fi
+
+# Validar ServerName
+if [[ ! "$ServerName" =~ ^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
+  echo "Erro: ServerName inválido. Use algo como sub.example.com"
+  exit 1
+fi
+
 echo "================================================= CLOUDFLARE ================================================="
 
 echo "===== DEPURAÇÃO: ANTES DE CONFIGURAÇÃO CLOUDFLARE ====="
