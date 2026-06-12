@@ -1,14 +1,22 @@
-!/bin/bash
+#!/bin/bash
 
 set -Eeuo pipefail
 trap 'echo "[ERRO] linha $LINENO: $BASH_COMMAND (status $?)" >&2' ERR
 
-
-echo "================================================= Definir variáveis principais ================================================="
-
 ServerName=$1
 CloudflareAPI=$2
 CloudflareEmail=$3
+
+# Extrair domínio raiz (ex: mail.exemplo.com → exemplo.com)
+Domain=$(echo "$ServerName" | awk -F. '{print $(NF-1)"."$NF}')
+
+# Obter IP público da VPS automaticamente
+ServerIP=$(curl -s https://api.ipify.org)
+
+# Nome do servidor de email
+MailServerName="smtp.$Domain"
+echo "================================================= Definir variáveis principais ================================================="
+
 
 # Verificar argumentos
 if [ -z "$ServerName" ] || [ -z "$CloudflareAPI" ] || [ -z "$CloudflareEmail" ]; then
