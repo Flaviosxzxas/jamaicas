@@ -38,7 +38,6 @@ echo "ServerName: $ServerName"
 echo "CloudflareAPI: $CloudflareAPI"
 echo "CloudflareEmail: $CloudflareEmail"
 echo "Domain: $Domain"
-echo "DKIMSelector: $DKIMSelector"
 echo "ServerIP: $ServerIP"
 
 # Instalar jq (caso não exista)
