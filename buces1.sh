@@ -1212,6 +1212,35 @@ create_or_update_record "_mta-sts.$ServerName" "TXT" "\"v=STSv1; id=$MTASTS_POLI
 create_or_update_record "_smtp._tls.$ServerName" "TXT" "\"v=TLSRPTv1; rua=mailto:tls-reports@$ServerName\"" ""
 
 echo "✓ Registros MTA-STS e TLS-RPT criados no Cloudflare"
+
+# ════════════════════════════════════════════════════════════
+# CAA: autoriza apenas Let's Encrypt a emitir certificados
+# ════════════════════════════════════════════════════════════
+
+# Função para deletar todos os registros CAA existentes de um nome
+delete_all_caa_records() {
+  local record_name=$1
+  
+  local ids
+  ids=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records?name=$record_name&type=CAA" \
+    -H "X-Auth-Email: $CloudflareEmail" \
+    -H "X-Auth-Key: $CloudflareAPI" \
+    -H "Content-Type: application/json" | jq -r '.result[].id')
+
+  for id in $ids; do
+    curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/$CloudflareZoneID/dns_records/$id" \
+      -H "X-Auth-Email: $CloudflareEmail" \
+      -H "X-Auth-Key: $CloudflareAPI" \
+      -H "Content-Type: application/json" > /dev/null
+    echo "  -- CAA deletado: $id"
+  done
+}
+
+delete_all_caa_records "$ServerName"
+create_or_update_record "$ServerName" "CAA" "0 issue \"lencr.org\"" ""
+create_or_update_record "$ServerName" "CAA" "0 issuewild \"lencr.org\"" ""
+
+echo "✓ Registros CAA criados no Cloudflare"
 echo "================================================= APPLICATION ================================================="
 
 # Verificar se /var/www/html existe
