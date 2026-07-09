@@ -1177,6 +1177,9 @@ create_or_update_record "$MailServerName" "A" "$ServerIP" ""
 # SPF limpo: esta VPS/IP é o único remetente autorizado
 create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP -all\"" ""
 
+# SPF para o hostname usado no HELO/EHLO (resolve SPF_HELO_NONE)
+create_or_update_record "$MailServerName" "TXT" "\"v=spf1 ip4:$ServerIP -all\"" ""
+
 # DMARC - domínio novo + envio em massa: fase de monitoramento
 create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=none; sp=none; pct=100; rua=mailto:dmarc-reports@$ServerName; adkim=r; aspf=r; fo=1\"" ""
 
