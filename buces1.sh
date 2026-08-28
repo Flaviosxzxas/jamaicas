@@ -656,15 +656,17 @@ smtp_data_xfer_timeout = 300s
 smtp_data_done_timeout = 300s
 
 # SMTP (prioridade)
-smtp_destination_concurrency_limit = 15
-smtp_destination_rate_delay = 1s
-smtp_destination_recipient_limit = 30
+smtp_destination_concurrency_limit = 2
+smtp_destination_rate_delay = 2s
+smtp_destination_recipient_limit = 1
 
 # Default (fallback)
-default_destination_concurrency_limit = 15
-default_destination_rate_delay = 1s
-default_destination_recipient_limit = 30
+default_destination_concurrency_limit = 2
+default_destination_rate_delay = 2s
+default_destination_recipient_limit = 1
 
+# Começa com apenas 1 conexão ao abrir uma nova fila
+initial_destination_concurrency = 1
 
 # Aplicar configurações
 
