@@ -633,61 +633,43 @@ smtpd_milters = inet:127.0.0.1:11332
 non_smtpd_milters = inet:127.0.0.1:11332
 
 # ==============================================================================
-# TLS - ENTRADA (Segurança forte)
+# TLS - ENTRADA
 # ==============================================================================
 smtpd_tls_security_level = may
 smtpd_tls_loglevel = 1
 smtpd_tls_received_header = yes
 smtpd_tls_session_cache_timeout = 3600s
 
-# Aceita somente protocolos modernos na entrada
 smtpd_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
 smtpd_tls_mandatory_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
-
-# Cifras fortes para conexões recebidas
 smtpd_tls_ciphers = high
 smtpd_tls_mandatory_ciphers = high
 smtpd_tls_exclude_ciphers = aNULL, MD5, 3DES, RC4, EXPORT
+smtpd_tls_mandatory_exclude_ciphers = aNULL, MD5, DES, 3DES, RC4, EXPORT
 
 smtpd_tls_cert_file = /etc/letsencrypt/live/$ServerName/fullchain.pem
 smtpd_tls_key_file  = /etc/letsencrypt/live/$ServerName/privkey.pem
 
 tls_preempt_cipherlist = yes
 
-
 # ==============================================================================
-# TLS - SAÍDA (Compatibilidade máxima: modernos + legados)
+# TLS - SAÍDA (compatibilidade ampla — servidores de empresa costumam ser antigos)
 # ==============================================================================
 smtp_tls_security_level = may
 smtp_tls_loglevel = 1
-
 smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
 
-# Permite negociação ampla para compatibilidade
-# Bloqueia apenas SSL antigo
+# Só bloqueia SSL antigo, mantém TLS 1.0/1.1 liberado p/ servidores legados de empresa
 smtp_tls_protocols = !SSLv2, !SSLv3
 smtp_tls_mandatory_protocols = !SSLv2, !SSLv3
 
-# Mantém compatibilidade com servidores antigos
 smtp_tls_ciphers = medium
 smtp_tls_mandatory_ciphers = medium
-
-# Remove cifras inseguras
 smtp_tls_exclude_ciphers = aNULL, MD5, RC4, EXPORT
+smtp_tls_mandatory_exclude_ciphers = aNULL, MD5, DES, 3DES, RC4, EXPORT
 
 smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
-
 smtp_tls_note_starttls_offer = yes
-
-# ═══════════════════════════════════════════════════════
-# OTIMIZAÇÃO PARA NOTA A - Ciphers Fortes + Forward Secrecy
-# ═══════════════════════════════════════════════════════
-smtpd_tls_mandatory_ciphers = high
-smtpd_tls_mandatory_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
-smtpd_tls_mandatory_exclude_ciphers = aNULL, MD5, DES, 3DES, RC4, EXPORT
-smtp_tls_mandatory_exclude_ciphers = aNULL, MD5, DES, 3DES, RC4, EXPORT
-tls_preempt_cipherlist = yes
-# ═══════════════════════════════════════════════════════
 
 # Base
 mydomain = $ServerName
@@ -701,20 +683,15 @@ recipient_delimiter = +
 inet_interfaces = all
 inet_protocols = ipv4
 
-# Resolver destinos SMTP via DNS (evita interferência de /etc/hosts)
 disable_vrfy_command = yes
 smtp_host_lookup = dns
 
-# ===== : Prevenir loop de bounces =====
-# Configuração de domínios virtuais
-#virtual_alias_domains = $ServerName
-#virtual_mailbox_domains = 
 local_recipient_maps = 
 
 maximal_queue_lifetime = 2d
 bounce_queue_lifetime = 2d
 
-# Otimizar timeouts
+# Timeouts
 smtp_connect_timeout = 30s
 smtp_helo_timeout = 30s
 smtp_mail_timeout = 30s
@@ -723,34 +700,20 @@ smtp_data_init_timeout = 60s
 smtp_data_xfer_timeout = 300s
 smtp_data_done_timeout = 300s
 
-# SMTP (prioridade)
-# smtp_destination_concurrency_limit = 2
-# smtp_destination_rate_delay = 2s
-# smtp_destination_recipient_limit = 1
+# ==============================================================================
+# CONCORRÊNCIA/VELOCIDADE (moderada — servidores corporativos, não ISP gigante)
+# ==============================================================================
+smtp_destination_concurrency_limit = 8
+smtp_destination_rate_delay = 1s
+smtp_destination_recipient_limit = 15
 
-# Default (fallback)
-# default_destination_concurrency_limit = 2
-# default_destination_rate_delay = 2s
-# default_destination_recipient_limit = 1
+default_destination_concurrency_limit = 8
+default_destination_rate_delay = 1s
+default_destination_recipient_limit = 15
 
-# Começa com apenas 1 conexão ao abrir uma nova fila
-# initial_destination_concurrency = 1
+initial_destination_concurrency = 2
 
-# SMTP (prioridade) NEW
-smtp_destination_concurrency_limit = 3
-smtp_destination_rate_delay = 2s
-smtp_destination_recipient_limit = 5
-
-# Default (fallback) NEW
-default_destination_concurrency_limit = 3
-default_destination_rate_delay = 2s
-default_destination_recipient_limit = 5
-
-initial_destination_concurrency = 1
-
-# Aplicar configurações
-
-# ═══════════ HEADER CHECKS (limpar headers internos) ═══════════
+# ═══════════ HEADER CHECKS ═══════════
 header_checks = regexp:/etc/postfix/header_checks
 EOF
 
