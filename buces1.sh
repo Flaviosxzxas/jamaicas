@@ -248,15 +248,13 @@ sed -i "s/self\.email is ''/self.email == ''/g" /usr/lib/python3/dist-packages/C
 sed -i "s/self\.token is ''/self.token == ''/g"   /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
 echo " aplicada com sucesso em cloudflare.py."
 wait
-echo "================================================= RSPAMD (DKIM + ARC otimizado para entrega) ================================================="
+echo "================================================= RSPAMD (DKIM + ARC — consolidado) ================================================="
 
 # Instala Rspamd + Redis
 apt-get install -y rspamd redis-server
 
-# Ativa Redis
 systemctl enable redis-server
 systemctl start redis-server
-
 
 # =================================================
 # DKIM KEY
@@ -271,55 +269,48 @@ rspamadm dkim_keygen \
   -k /var/lib/rspamd/dkim/$ServerName/default.private \
   > /var/lib/rspamd/dkim/$ServerName/default.pub
 
-
 chown -R _rspamd:_rspamd /var/lib/rspamd/dkim
 chmod 600 /var/lib/rspamd/dkim/$ServerName/default.private
 chmod 644 /var/lib/rspamd/dkim/$ServerName/default.pub
 
-
-if [ ! -f /var/lib/rspamd/dkim/$ServerName/default.private ]; then
-    echo "ERRO: Falha ao gerar DKIM"
+if [ ! -f /var/lib/rspamd/dkim/$ServerName/default.private ] || \
+   [ ! -f /var/lib/rspamd/dkim/$ServerName/default.pub ]; then
+    echo "ERRO: Falha ao gerar chaves DKIM via Rspamd!"
     exit 1
 fi
 
-
-echo "✓ DKIM criado"
-
+echo "✓ Chaves DKIM geradas em /var/lib/rspamd/dkim/$ServerName/"
 
 # =================================================
 # DKIM SIGNING
 # =================================================
 
-mkdir -p /etc/rspamd/override.d
-
+mkdir -p /etc/rspamd/override.d/
 
 cat > /etc/rspamd/override.d/dkim_signing.conf <<EOF
-
 enabled = true;
 
-# Assina apenas mensagens enviadas
+# Assina apenas saída (não entrada)
 sign_authenticated = true;
 sign_local = true;
 sign_inbound = false;
 
-
-# Compatibilidade Postfix + PHP mail()
+# Compatibilidade com PHP mail() e SMTP autenticado
 allow_username_mismatch = true;
 allow_hdrfrom_mismatch = true;
 allow_hdrfrom_multiple = false;
 allow_envfrom_empty = true;
 
-
-# Não altera domínio para raiz
+# CRÍTICO: não normalizar para domínio raiz (senão subdomínio quebra a assinatura)
 use_esld = false;
 
-
-# Não consulta DNS antes de assinar
-# evita falha durante propagação DKIM
+# Não verifica pubkey no DNS antes de assinar (evita falha durante propagação)
 check_pubkey = false;
 
+# Permite fallback se a config exata não bater
+try_fallback = true;
 
-# Redes autorizadas para assinatura
+# Redes autorizadas para assinatura — cobre todas as faixas privadas (RFC 1918)
 sign_networks = [
     "127.0.0.0/8",
     "::1",
@@ -328,44 +319,35 @@ sign_networks = [
     "192.168.0.0/16"
 ];
 
-
 domain {
-    $ServerName {
-        selectors [
-            {
-                selector = "default";
-                path = "/var/lib/rspamd/dkim/$ServerName/default.private";
-            }
-        ]
-    }
+  $ServerName {
+    selectors [
+      {
+        path = "/var/lib/rspamd/dkim/$ServerName/default.private";
+        selector = "default";
+      }
+    ]
+  }
 }
-
 EOF
 
-
-
 # =================================================
-# ARC SIGNING
+# ARC SIGNING (sobrevive forwards)
 # =================================================
-# Mantido para preservar autenticação em forwards
-# Não interfere no envio normal
 
 cat > /etc/rspamd/override.d/arc.conf <<EOF
-
 enabled = true;
-
 sign_authenticated = true;
 sign_local = true;
 sign_inbound = false;
-
 
 allow_username_mismatch = true;
 allow_hdrfrom_mismatch = true;
 allow_envfrom_empty = true;
 
-
 use_esld = false;
-
+check_pubkey = false;
+try_fallback = true;
 
 sign_networks = [
     "127.0.0.0/8",
@@ -375,66 +357,66 @@ sign_networks = [
     "192.168.0.0/16"
 ];
 
+domain {
+  $ServerName {
+    selectors [
+      {
+        path = "/var/lib/rspamd/dkim/$ServerName/default.private";
+        selector = "default";
+      }
+    ]
+  }
+}
 EOF
-
-
 
 # =================================================
 # REDIS
 # =================================================
 
 cat > /etc/rspamd/local.d/redis.conf <<EOF
-
 servers = "127.0.0.1:6379";
 timeout = 1.0;
-
 EOF
 
-
-
 # =================================================
-# WORKER PROXY POSTFIX MILTER
+# WORKER PROXY (milter — Postfix conecta aqui)
 # =================================================
 
 cat > /etc/rspamd/local.d/worker-proxy.inc <<EOF
-
 bind_socket = "127.0.0.1:11332";
-
 milter = yes;
-
 timeout = 120s;
-
-
 upstream "local" {
-    default = yes;
-    self_scan = yes;
+  default = yes;
+  self_scan = yes;
 }
-
 EOF
 
-
-
 # =================================================
-# CONTROLLER WEB
+# WORKER CONTROLLER (UI web, só localhost)
 # =================================================
 
 cat > /etc/rspamd/local.d/worker-controller.inc <<EOF
-
 bind_socket = "127.0.0.1:11334";
-
 EOF
 
-
-
 # =================================================
-# REMOVE CONFIGS ANTIGAS QUE PODEM CAUSAR CONFLITO
+# Remove configs antigas que podem conflitar
 # =================================================
 
 rm -f /etc/rspamd/local.d/options.inc
 rm -f /etc/rspamd/local.d/dkim_signing.conf
 rm -f /etc/rspamd/local.d/arc.conf
 
+# =================================================
+# VALIDA CONFIG *ANTES* DE REINICIAR
+# =================================================
 
+echo "  -- Validando sintaxe da configuração..."
+if ! rspamadm configtest; then
+    echo "ERRO: configuração inválida detectada pelo configtest. Abortando antes do restart."
+    exit 1
+fi
 
 # =================================================
 # RESTART
@@ -443,7 +425,6 @@ rm -f /etc/rspamd/local.d/arc.conf
 systemctl enable rspamd
 systemctl restart rspamd
 
-# Aguardar Rspamd subir COMPLETAMENTE (com retry de até 30s)
 echo "  -- Aguardando Rspamd inicializar..."
 RSPAMD_READY=0
 for i in $(seq 1 30); do
@@ -459,22 +440,25 @@ if [ "$RSPAMD_READY" = "0" ]; then
     echo "  ⚠️  AVISO: Rspamd não abriu porta 11332 em 30s"
     echo "  ⚠️  Continuando mesmo assim — verificar com 'systemctl status rspamd' depois"
     journalctl -u rspamd -n 20 --no-pager 2>/dev/null || true
-    # NÃO usar exit 1 — apenas avisar e continuar
 fi
 
-# Verificação adicional do sign_networks (não bloqueia)
+# =================================================
+# VERIFICAÇÃO DO BUG CONHECIDO DO PACOTE UBUNTU
+# (sign_networks default vem com 127.2.4.7 fake)
+# =================================================
+
 if rspamadm configdump dkim_signing 2>/dev/null | grep -q "127.0.0.0/8"; then
-    echo "  ✓ sign_networks configurado corretamente"
+    echo "✓ sign_networks configurado corretamente (127.0.0.0/8 presente, não é o fake 127.2.4.7 do Ubuntu)"
 else
-    echo "  ⚠️  AVISO: sign_networks pode não estar correto — verificar manualmente"
+    echo "⚠️  AVISO: sign_networks pode estar com defaults broken do pacote Ubuntu — verificar manualmente com 'rspamadm configdump dkim_signing'"
 fi
 
-# Verificar se sign_networks ficou correto (não com 127.2.4.7 fake do Ubuntu)
-if rspamadm configdump dkim_signing 2>/dev/null | grep -q "127.0.0.0/8"; then
-    echo "✓ sign_networks configurado corretamente (127.0.0.0/8)"
-else
-    echo "⚠️  AVISO: sign_networks pode estar com defaults broken — verificar manualmente"
-fi
+echo "================================================="
+echo " RSPAMD CONFIGURADO PARA ENTREGA OUTBOUND"
+echo " DKIM + ARC habilitados"
+echo " sign_networks cobre todas as faixas RFC 1918"
+echo " Config validada antes do restart"
+echo "================================================="
 
 # ─── Script para extrair a chave pública DKIM (substitui /root/dkimcode.sh) ───
 # Mesma lógica do seu script anterior, mas lendo da nova localização
