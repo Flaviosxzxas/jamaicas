@@ -403,15 +403,32 @@ EOF
 # =================================================
 # Remove configs antigas que podem conflitar
 # =================================================
-
 rm -f /etc/rspamd/local.d/options.inc
 rm -f /etc/rspamd/local.d/dkim_signing.conf
 rm -f /etc/rspamd/local.d/arc.conf
 
 # =================================================
+# BYPASS DE AÇÕES PARA ENVIO LOCAL/OUTBOUND
+# (evita que o Rspamd rejeite seu próprio envio em massa)
+# =================================================
+cat > /etc/rspamd/local.d/settings.conf <<'EOF'
+outbound_bypass {
+    priority = high;
+    ip = ["127.0.0.0/8", "::1", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"];
+    apply "default" {
+        actions {
+            reject = null;
+            "add header" = null;
+            rewrite_subject = null;
+            greylist = null;
+        }
+    }
+}
+EOF
+
+# =================================================
 # VALIDA CONFIG *ANTES* DE REINICIAR
 # =================================================
-
 echo "  -- Validando sintaxe da configuração..."
 if ! rspamadm configtest; then
     echo "ERRO: configuração inválida detectada pelo configtest. Abortando antes do restart."
@@ -421,7 +438,6 @@ fi
 # =================================================
 # RESTART
 # =================================================
-
 systemctl enable rspamd
 systemctl restart rspamd
 
@@ -446,7 +462,6 @@ fi
 # VERIFICAÇÃO DO BUG CONHECIDO DO PACOTE UBUNTU
 # (sign_networks default vem com 127.2.4.7 fake)
 # =================================================
-
 if rspamadm configdump dkim_signing 2>/dev/null | grep -q "127.0.0.0/8"; then
     echo "✓ sign_networks configurado corretamente (127.0.0.0/8 presente, não é o fake 127.2.4.7 do Ubuntu)"
 else
@@ -456,7 +471,7 @@ fi
 echo "================================================="
 echo " RSPAMD CONFIGURADO PARA ENTREGA OUTBOUND"
 echo " DKIM + ARC habilitados"
-echo " sign_networks cobre todas as faixas RFC 1918"
+echo " Bypass de ações aplicado para envio local (127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)"
 echo " Config validada antes do restart"
 echo "================================================="
 
