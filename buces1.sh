@@ -718,14 +718,14 @@ smtp_data_done_timeout = 300s
 # initial_destination_concurrency = 1
 
 # SMTP (prioridade) NEW
-smtp_destination_concurrency_limit = 5
-smtp_destination_rate_delay = 1s
-smtp_destination_recipient_limit = 10
+smtp_destination_concurrency_limit = 3
+smtp_destination_rate_delay = 2s
+smtp_destination_recipient_limit = 5
 
 # Default (fallback) NEW
-default_destination_concurrency_limit = 5
-default_destination_rate_delay = 1s
-default_destination_recipient_limit = 10
+default_destination_concurrency_limit = 3
+default_destination_rate_delay = 2s
+default_destination_recipient_limit = 5
 
 initial_destination_concurrency = 1
 
