@@ -378,9 +378,34 @@ upstream "local" {
 }
 EOF
 
-# ─── CONFIG 5: Worker Controller (UI web na porta 11334, opcional mas útil) ───
+# ─── CONFIG 5: Bypass Completo de Filtros Antispam para Envio Local ───
+# Garante que e-mails enviados do servidor passem DIRETO e recebam apenas o DKIM/ARC.
+cat > /etc/rspamd/override.d/settings.conf <<EOF
+outbound_bypass {
+    priority = 10;
+    ip = ["127.0.0.0/8", "::1", "10.0.0.0/8"];
+    apply {
+        # Desativa análise de SPAM, regras de reputação, limites de envio e atrasos
+        symbols_disabled = [
+            "RATELIMIT",
+            "GREYLIST",
+            "SPAM",
+            "FUZZY_CHECK",
+            "SURBL",
+            "RBL"
+        ];
+        # Força o Rspamd a NUNCA rejeitar ou alterar o assunto da mensagem
+        actions {
+            reject = 999;
+            add_header = 999;
+            rewrite_subject = 999;
+        }
+    }
+}
+EOF
+
+# ─── CONFIG 6: Worker Controller (UI web na porta 11334, opcional mas útil) ───
 # Permite ver estatísticas em http://SEU_IP:11334
-# Senha vazia = só acessível de localhost (seguro)
 cat > /etc/rspamd/local.d/worker-controller.inc <<EOF
 bind_socket = "127.0.0.1:11334";
 EOF
@@ -588,27 +613,51 @@ milter_default_action = accept
 smtpd_milters = inet:127.0.0.1:11332
 non_smtpd_milters = inet:127.0.0.1:11332
 
-# TLS - entrada local (PHP -> Postfix em 127.0.0.1)
+# ==============================================================================
+# TLS - ENTRADA (Segurança forte)
+# ==============================================================================
 smtpd_tls_security_level = may
 smtpd_tls_loglevel = 1
 smtpd_tls_received_header = yes
 smtpd_tls_session_cache_timeout = 3600s
+
+# Aceita somente protocolos modernos na entrada
 smtpd_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
+smtpd_tls_mandatory_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
+
+# Cifras fortes para conexões recebidas
 smtpd_tls_ciphers = high
-smtpd_tls_exclude_ciphers = aNULL, MD5, 3DES
+smtpd_tls_mandatory_ciphers = high
+smtpd_tls_exclude_ciphers = aNULL, MD5, 3DES, RC4, EXPORT
+
 smtpd_tls_cert_file = /etc/letsencrypt/live/$ServerName/fullchain.pem
 smtpd_tls_key_file  = /etc/letsencrypt/live/$ServerName/privkey.pem
 
-# TLS - saída (cliente SMTP)
+tls_preempt_cipherlist = yes
+
+
+# ==============================================================================
+# TLS - SAÍDA (Compatibilidade máxima: modernos + legados)
+# ==============================================================================
 smtp_tls_security_level = may
 smtp_tls_loglevel = 1
+
 smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
-smtp_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
-smtp_tls_mandatory_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1
-smtp_tls_ciphers = high
-smtp_tls_mandatory_ciphers = high
-smtp_tls_exclude_ciphers = aNULL, MD5, DES, 3DES, RC4
-smtp_tls_session_cache_database = btree:\${data_directory}/smtp_scache
+
+# Permite negociação ampla para compatibilidade
+# Bloqueia apenas SSL antigo
+smtp_tls_protocols = !SSLv2, !SSLv3
+smtp_tls_mandatory_protocols = !SSLv2, !SSLv3
+
+# Mantém compatibilidade com servidores antigos
+smtp_tls_ciphers = medium
+smtp_tls_mandatory_ciphers = medium
+
+# Remove cifras inseguras
+smtp_tls_exclude_ciphers = aNULL, MD5, RC4, EXPORT
+
+smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
+
 smtp_tls_note_starttls_offer = yes
 
 # ═══════════════════════════════════════════════════════
