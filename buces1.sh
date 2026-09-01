@@ -2014,15 +2014,21 @@ postmap /etc/postfix/transport
 ESC_SN="$(printf '%s' "$ServerName" | sed 's/[.[*^$(){}+?|\\]/\\&/g')"
 
 cat > /etc/postfix/transport_regexp <<EOF
+# 1. Regras específicas com sufixo VERP (+token)
+/^contacto\+.*@${ESC_SN}$/          discard:
+/^bounce\+.*@${ESC_SN}$/            discard:
+/^unsubscribe\+.*@${ESC_SN}$/       discard:
+/^noreply\+.*@${ESC_SN}$/           discard:
+
+# 2. Regras específicas de nomes padrão
 /^contacto@${ESC_SN}$/              discard:
 /^bounce@${ESC_SN}$/                discard:
 /^unsubscribe@${ESC_SN}$/           discard:
 /^noreply@${ESC_SN}$/               discard:
 
-/^contacto\+.*@${ESC_SN}$/          discard:
-/^bounce\+.*@${ESC_SN}$/            discard:
-/^unsubscribe\+.*@${ESC_SN}$/       discard:
-/^noreply\+.*@${ESC_SN}$/           discard:
+# 3. Regras genéricas (Catch-All) no final para capturar qualquer outro nome
+/^.+\+.*@${ESC_SN}$/                discard:
+/^[a-zA-Z0-9._%+-]+@${ESC_SN}$/      discard:
 EOF
 chmod 0644 /etc/postfix/transport_regexp
 
