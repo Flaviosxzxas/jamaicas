@@ -248,20 +248,22 @@ sed -i "s/self\.email is ''/self.email == ''/g" /usr/lib/python3/dist-packages/C
 sed -i "s/self\.token is ''/self.token == ''/g"   /usr/lib/python3/dist-packages/CloudFlare/cloudflare.py
 echo " aplicada com sucesso em cloudflare.py."
 wait
-echo "================================================= RSPAMD (substitui OpenDKIM) ================================================="
+echo "================================================= RSPAMD (DKIM + ARC otimizado para entrega) ================================================="
 
-# Instala Rspamd + Redis (Redis é usado para reputação e rate limiting)
+# Instala Rspamd + Redis
 apt-get install -y rspamd redis-server
 
-# Garante que Redis está ativo (Rspamd precisa dele)
+# Ativa Redis
 systemctl enable redis-server
 systemctl start redis-server
 
-# ─── Diretório das chaves DKIM por domínio ───
+
+# =================================================
+# DKIM KEY
+# =================================================
+
 mkdir -p /var/lib/rspamd/dkim/$ServerName
 
-# ─── Gerar chave DKIM 2048-bit (mesma força que você tinha no OpenDKIM) ───
-# Selector "default" é o padrão moderno (BillionMail, Mailcow, Postal usam todos "default")
 rspamadm dkim_keygen \
   -s default \
   -b 2048 \
@@ -269,158 +271,175 @@ rspamadm dkim_keygen \
   -k /var/lib/rspamd/dkim/$ServerName/default.private \
   > /var/lib/rspamd/dkim/$ServerName/default.pub
 
-# Permissões corretas (Rspamd roda como user _rspamd no Ubuntu/Debian)
+
 chown -R _rspamd:_rspamd /var/lib/rspamd/dkim
 chmod 600 /var/lib/rspamd/dkim/$ServerName/default.private
 chmod 644 /var/lib/rspamd/dkim/$ServerName/default.pub
 
-# Verificar se as chaves foram geradas
-if [ ! -f /var/lib/rspamd/dkim/$ServerName/default.private ] || \
-   [ ! -f /var/lib/rspamd/dkim/$ServerName/default.pub ]; then
-    echo "ERRO: Falha ao gerar chaves DKIM via Rspamd!"
+
+if [ ! -f /var/lib/rspamd/dkim/$ServerName/default.private ]; then
+    echo "ERRO: Falha ao gerar DKIM"
     exit 1
 fi
 
-echo "✓ Chaves DKIM geradas em /var/lib/rspamd/dkim/$ServerName/"
 
-# ─── CONFIG 1: DKIM Signing ───
-# Define quando assinar e qual chave usar
-# IMPORTANTE: usar override.d/ em vez de local.d/ para sobrescrever
-# defaults broken do pacote Ubuntu (que vem com sign_networks="127.2.4.7" fake)
-mkdir -p /etc/rspamd/override.d/
+echo "✓ DKIM criado"
+
+
+# =================================================
+# DKIM SIGNING
+# =================================================
+
+mkdir -p /etc/rspamd/override.d
+
+
 cat > /etc/rspamd/override.d/dkim_signing.conf <<EOF
-# Habilita assinatura DKIM
+
 enabled = true;
 
-# Assina apenas saída (não entrada)
-sign_authenticated = true;   # assina mensagens de usuários autenticados (Supermailer)
-sign_local = true;           # assina mensagens de localhost/mynetworks
-sign_inbound = false;        # NÃO assina mensagens vindas de fora (não faz sentido)
-
-# Compatibilidade com PHP mail() e SMTP autenticado
-allow_username_mismatch = true;   # permite user do sistema != user do email
-allow_hdrfrom_mismatch = true;    # permite From: header != envelope (mail() CLI)
-allow_hdrfrom_multiple = false;   # só permite UM header From (RFC 5322)
-allow_envfrom_empty = true;       # permite envelope vazio (bounces, mail() local)
-
-# CRÍTICO: NÃO normalizar para domínio raiz
-# Sem isso, "asistencia.dominio.com" vira "dominio.com" e quebra a assinatura
-# (Rspamd procura chave em "dominio.com.dkim.key" que não existe)
-use_esld = false;
-
-# Não verifica pubkey no DNS antes de assinar
-# (Cloudflare pode demorar 1-30min para propagar; sem isso o Rspamd recusa assinar)
-check_pubkey = false;
-
-# Permite fallback se config exata não bater
-try_fallback = true;
-
-# Sobrescreve sign_networks broken padrão do Ubuntu (vem com 127.2.4.7 fake)
-# Sem isso, Rspamd só assina emails vindos de 127.2.4.7 (IP que não existe)
-sign_networks = ["127.0.0.0/8", "::1", "10.0.0.0/8"];
-
-# Domínio + selector + caminho da chave privada
-domain {
-  $ServerName {
-    selectors [
-      {
-        path = "/var/lib/rspamd/dkim/$ServerName/default.private";
-        selector = "default";
-      }
-    ]
-  }
-}
-EOF
-
-# ─── CONFIG 2: ARC Signing (sobrevive forwards) ───
-# Quando alguém recebe seu email e reencaminha (ex: alias do trabalho → gmail pessoal),
-# o ARC preserva a cadeia de autenticação. Sem ARC, forwards quebram DKIM/DMARC.
-cat > /etc/rspamd/override.d/arc.conf <<EOF
-enabled = true;
+# Assina apenas mensagens enviadas
 sign_authenticated = true;
 sign_local = true;
 sign_inbound = false;
+
+
+# Compatibilidade Postfix + PHP mail()
+allow_username_mismatch = true;
+allow_hdrfrom_mismatch = true;
+allow_hdrfrom_multiple = false;
+allow_envfrom_empty = true;
+
+
+# Não altera domínio para raiz
+use_esld = false;
+
+
+# Não consulta DNS antes de assinar
+# evita falha durante propagação DKIM
+check_pubkey = false;
+
+
+# Redes autorizadas para assinatura
+sign_networks = [
+    "127.0.0.0/8",
+    "::1",
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16"
+];
+
+
+domain {
+    $ServerName {
+        selectors [
+            {
+                selector = "default";
+                path = "/var/lib/rspamd/dkim/$ServerName/default.private";
+            }
+        ]
+    }
+}
+
+EOF
+
+
+
+# =================================================
+# ARC SIGNING
+# =================================================
+# Mantido para preservar autenticação em forwards
+# Não interfere no envio normal
+
+cat > /etc/rspamd/override.d/arc.conf <<EOF
+
+enabled = true;
+
+sign_authenticated = true;
+sign_local = true;
+sign_inbound = false;
+
+
 allow_username_mismatch = true;
 allow_hdrfrom_mismatch = true;
 allow_envfrom_empty = true;
-use_esld = false;
-check_pubkey = false;
-try_fallback = true;
-sign_networks = ["127.0.0.0/8", "::1", "10.0.0.0/8"];
 
-domain {
-  $ServerName {
-    selectors [
-      {
-        path = "/var/lib/rspamd/dkim/$ServerName/default.private";
-        selector = "default";
-      }
-    ]
-  }
-}
+
+use_esld = false;
+
+
+sign_networks = [
+    "127.0.0.0/8",
+    "::1",
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16"
+];
+
 EOF
 
-# ─── CONFIG 3: Conexão com Redis (para reputação e rate limit) ───
+
+
+# =================================================
+# REDIS
+# =================================================
+
 cat > /etc/rspamd/local.d/redis.conf <<EOF
+
 servers = "127.0.0.1:6379";
 timeout = 1.0;
+
 EOF
 
-# ─── CONFIG 4: Worker Proxy (é o que o Postfix conecta como milter) ───
-# Por padrão Rspamd escuta em 127.0.0.1:11332 para milter
+
+
+# =================================================
+# WORKER PROXY POSTFIX MILTER
+# =================================================
+
 cat > /etc/rspamd/local.d/worker-proxy.inc <<EOF
+
 bind_socket = "127.0.0.1:11332";
+
 milter = yes;
+
 timeout = 120s;
+
+
 upstream "local" {
-  default = yes;
-  self_scan = yes;
+    default = yes;
+    self_scan = yes;
 }
+
 EOF
 
-# ─── CONFIG 5: Bypass Completo de Filtros Antispam para Envio Local ───
-# Garante que e-mails enviados do servidor passem DIRETO e recebam apenas o DKIM/ARC.
-cat > /etc/rspamd/override.d/settings.conf <<EOF
-outbound_bypass {
-    priority = 10;
-    ip = ["127.0.0.0/8", "::1", "10.0.0.0/8"];
-    apply {
-        # Desativa análise de SPAM, regras de reputação, limites de envio e atrasos
-        symbols_disabled = [
-            "RATELIMIT",
-            "GREYLIST",
-            "SPAM",
-            "FUZZY_CHECK",
-            "SURBL",
-            "RBL"
-        ];
-        # Força o Rspamd a NUNCA rejeitar ou alterar o assunto da mensagem
-        actions {
-            reject = 999;
-            add_header = 999;
-            rewrite_subject = 999;
-        }
-    }
-}
-EOF
 
-# ─── CONFIG 6: Worker Controller (UI web na porta 11334, opcional mas útil) ───
-# Permite ver estatísticas em http://SEU_IP:11334
+
+# =================================================
+# CONTROLLER WEB
+# =================================================
+
 cat > /etc/rspamd/local.d/worker-controller.inc <<EOF
+
 bind_socket = "127.0.0.1:11334";
+
 EOF
 
-# ─── REMOVIDO: CONFIG 6 (options.inc com filters restritivo) ───
-# A configuração antiga "filters = dkim_signing,arc" QUEBRAVA o pipeline DKIM
-# porque desabilitava módulos auxiliares que o dkim_signing precisa para funcionar.
-# Rspamd com defaults é otimizado para envio outbound — não precisa restringir.
 
-# ─── Limpar configurações antigas que podem ter sobrado ───
+
+# =================================================
+# REMOVE CONFIGS ANTIGAS QUE PODEM CAUSAR CONFLITO
+# =================================================
+
 rm -f /etc/rspamd/local.d/options.inc
 rm -f /etc/rspamd/local.d/dkim_signing.conf
 rm -f /etc/rspamd/local.d/arc.conf
 
-# ─── Habilitar e iniciar Rspamd ───
+
+
+# =================================================
+# RESTART
+# =================================================
+
 systemctl enable rspamd
 systemctl restart rspamd
 
