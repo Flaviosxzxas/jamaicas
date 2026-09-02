@@ -2050,13 +2050,18 @@ newaliases
 # Recarregar Postfix
 systemctl reload postfix
 
-echo "✓ Aliases e descarte Catch-All configurados com sucesso!"
-echo "✓ Nomes dinâmicos liberados para envio sem afetar a entrega externa!"
-# Testes de validação
+# Testes de validação atualizados
 echo ""
 echo "Testando configuração..."
-postmap -q "contacto@$ServerName" hash:/etc/postfix/transport && echo "  ✓ Hash OK" || echo "  ❌ Hash FALHOU"
-postmap -q "contacto+test@$ServerName" regexp:/etc/postfix/transport_regexp && echo "  ✓ Regexp OK" || echo "  ❌ Regexp FALHOU"
+postmap -q "contacto@$ServerName" hash:/etc/postfix/transport && echo "  ✓ Transport Hash OK" || echo "  ❌ Transport Hash FALHOU"
+postmap -q "qualquer_nome+123@$ServerName" pcre:/etc/postfix/virtual_pcre && echo "  ✓ PCRE Catch-All Local OK" || echo "  ❌ PCRE Catch-All Local FALHOU"
+
+# Recarregar Postfix
+systemctl reload postfix
+
+echo ""
+echo "✓ Aliases e descarte Catch-All configurados com sucesso!"
+echo "✓ Nomes dinâmicos liberados para envio sem afetar a entrega externa!"
 
 # (Opcional) Testes rápidos:
 # postconf -n | grep ^virtual_alias_maps
