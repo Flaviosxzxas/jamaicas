@@ -86,16 +86,16 @@ systemctl start fail2ban
 grep -q "^MaxStartups" /etc/ssh/sshd_config || echo "MaxStartups 50:30:200" >> /etc/ssh/sshd_config
 grep -q "^MaxAuthTries" /etc/ssh/sshd_config || echo "MaxAuthTries 3" >> /etc/ssh/sshd_config
 
-# Detecta automaticamente o nome do serviço SSH
-if systemctl list-units --type=service --all | grep -q "sshd.service"; then
+# Detecta automaticamente o nome real do serviço SSH (usa list-unit-files, não list-units)
+if systemctl list-unit-files --type=service | grep -q "^sshd.service"; then
     SSH_SERVICE="sshd"
-elif systemctl list-units --type=service --all | grep -q "ssh.service"; then
+elif systemctl list-unit-files --type=service | grep -q "^ssh.service"; then
     SSH_SERVICE="ssh"
 else
     SSH_SERVICE="ssh"
 fi
 
-systemctl restart "$SSH_SERVICE"
+systemctl restart "$SSH_SERVICE" || systemctl restart ssh || systemctl restart sshd
 echo "✓ fail2ban ativo e MaxStartups configurado (serviço: $SSH_SERVICE)"
 
 echo "================================================= Definir variáveis principais ================================================="
