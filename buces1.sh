@@ -673,7 +673,7 @@ smtp_tls_note_starttls_offer = yes
 # Base
 mydomain = $ServerName
 myorigin = $ServerName
-mydestination = $myhostname, $mydomain, localhost.$mydomain, localhost
+mydestination = \$myhostname, \$mydomain, localhost.\$mydomain, localhost
 relayhost =
 mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
 smtpd_relay_restrictions = permit_mynetworks, reject_unauth_destination
