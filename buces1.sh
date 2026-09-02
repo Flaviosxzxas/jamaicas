@@ -1977,14 +1977,10 @@ echo "✓ VirtualHost unsubscribe.$ServerName configurado"
 echo "================================================= Configurando aliases virtuais e descartes genéricos ================================================="
 
 # ════════════════════════════════════════════════════════════════
-# CORREÇÃO: Usar discard: (transporte nativo do Postfix)
+# 1. LIMPEZA DOS MAPAS DE TRANSPORTE PERIGOSOS
 # ════════════════════════════════════════════════════════════════
 
-# Virtual vazio — não usamos mais virtual para descarte
-> /etc/postfix/virtual
-postmap /etc/postfix/virtual
-
-# ══════ TRANSPORT MAP para descarte (substitui virtual) ══════
+# Mantém o transport apenas para regras específicas de hash (sem o regexp global)
 cat > /etc/postfix/transport <<EOF
 noreply@$ServerName         discard:
 unsubscribe@$ServerName     discard:
@@ -1995,29 +1991,42 @@ dmarc-reports@$ServerName   discard:
 EOF
 postmap /etc/postfix/transport
 
-# ══════ MAPA REGEXP CATCH-ALL (Capta 'fernanda' e qualquer outro remetente) ══════
-cat > /etc/postfix/transport_regexp <<'EOF'
-# 1. Regras genéricas para VERP (+token) em qualquer domínio/subdomínio
-/^.+\+.*@.+$/                 discard:
-
-# 2. Regra genérica (Catch-All) para qualquer usuário em qualquer domínio
-/^[a-zA-Z0-9._%+-]+@.+$/      discard:
-EOF
+# Esvazia o transport_regexp para impedir que intercepte envios externos
+> /etc/postfix/transport_regexp
 chmod 0644 /etc/postfix/transport_regexp
 
-# ══════ CONFIGURAÇÃO DAS DIRETIVAS DE TRANSPORTE (MAIN.CF) ══════
+# ════════════════════════════════════════════════════════════════
+# 2. CATCH-ALL LOCAL VIA VIRTUAL PCRE (Libera remetentes dinâmicos)
+# ════════════════════════════════════════════════════════════════
 
-# Aplica as tabelas de transporte (Hash primeiro, Regexp em seguida)
-postconf -e "transport_maps = hash:/etc/postfix/transport, regexp:/etc/postfix/transport_regexp"
+# Instala suporte a PCRE caso não esteja presente no sistema
+apt-get install -y postfix-pcre >/dev/null 2>&1 || true
 
-# Redireciona usuários locais inexistentes para o dev/null
-postconf -e "luser_relay = /dev/null"
+# Cria a regra PCRE focando EXCLUSIVAMENTE no seu domínio/subdomínio local
+cat > /etc/postfix/virtual_pcre <<EOF
+# Captura qualquer usuário (+token ou nomes dinâmicos) no SEU domínio e descarta internamente
+/@${ServerName}$/    devnull
+EOF
+chmod 0644 /etc/postfix/virtual_pcre
+
+# ════════════════════════════════════════════════════════════════
+# 3. CONFIGURAÇÃO DAS DIRETIVAS NO MAIN.CF
+# ════════════════════════════════════════════════════════════════
+
+# Aplica o mapa de transporte local seguro
+postconf -e "transport_maps = hash:/etc/postfix/transport"
+
+# Aplica o Catch-All para o seu domínio sem impactar envios SMTP externos
+postconf -e "virtual_alias_maps = pcre:/etc/postfix/virtual_pcre"
+
+# Redireciona usuários locais inexistentes para devnull
+postconf -e "luser_relay = devnull"
 
 # Otimização do serviço pickup (injetores locais PHP)
 postconf -e "in_flow_delay = 0"
 
 # ════════════════════════════════════════════════════════════════
-# Aliases do SISTEMA (usuários locais - MANTER!)
+# 4. ALIASES DO SISTEMA (USUÁRIOS LOCAIS)
 # ════════════════════════════════════════════════════════════════
 cat > /etc/aliases <<'EOF'
 # Aliases administrativos
@@ -2026,14 +2035,14 @@ mailer-daemon: postmaster
 abuse: postmaster
 spam: postmaster
 
-# Descartar bounces de usuários do sistema
-root: /dev/null
-nobody: /dev/null
-www-data: /dev/null
-mail: /dev/null
-daemon: /dev/null
-bin: /dev/null
-sys: /dev/null
+# Descartar mensagens locais do sistema
+root: devnull
+nobody: devnull
+www-data: devnull
+mail: devnull
+daemon: devnull
+bin: devnull
+sys: devnull
 EOF
 
 newaliases
@@ -2042,7 +2051,7 @@ newaliases
 systemctl reload postfix
 
 echo "✓ Aliases e descarte Catch-All configurados com sucesso!"
-echo "✓ Nomes dinâmicos (ex: fernanda) liberados e sem duplicidade de regras"
+echo "✓ Nomes dinâmicos liberados para envio sem afetar a entrega externa!"
 # Testes de validação
 echo ""
 echo "Testando configuração..."
