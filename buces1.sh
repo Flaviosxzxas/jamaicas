@@ -1977,10 +1977,9 @@ echo "✓ VirtualHost unsubscribe.$ServerName configurado"
 echo "================================================= Configurando aliases virtuais e descartes genéricos ================================================="
 
 # ════════════════════════════════════════════════════════════════
-# 1. LIMPEZA DOS MAPAS DE TRANSPORTE PERIGOSOS
+# 1. LIMPEZA DOS MAPAS DE TRANSPORTE
 # ════════════════════════════════════════════════════════════════
 
-# Mantém o transport apenas para regras específicas de hash (sem o regexp global)
 cat > /etc/postfix/transport <<EOF
 noreply@$ServerName         discard:
 unsubscribe@$ServerName     discard:
@@ -1991,77 +1990,69 @@ dmarc-reports@$ServerName   discard:
 EOF
 postmap /etc/postfix/transport
 
-# Esvazia o transport_regexp para impedir que intercepte envios externos
+# Esvazia o transport_regexp para impedir bloqueios globais
 > /etc/postfix/transport_regexp
 chmod 0644 /etc/postfix/transport_regexp
 
 # ════════════════════════════════════════════════════════════════
-# 2. CATCH-ALL LOCAL VIA VIRTUAL PCRE (Libera remetentes dinâmicos)
+# 2. CATCH-ALL INBOUND VIA PCRE (Descarte Nativo de Bounces)
 # ════════════════════════════════════════════════════════════════
 
 # Instala suporte a PCRE caso não esteja presente no sistema
 apt-get install -y postfix-pcre >/dev/null 2>&1 || true
 
-# Cria a regra PCRE focando EXCLUSIVAMENTE no seu domínio/subdomínio local
+# O uso da ação "DISCARD" instrui o Postfix a aceitar o e-mail e jogá-lo no lixo
+# imediatamente no nível do SMTP, economizando CPU e sem depender do local deliver
 cat > /etc/postfix/virtual_pcre <<EOF
-# Captura qualquer usuário (+token ou nomes dinâmicos) no SEU domínio e descarta internamente
-/@${ServerName}$/    devnull
+/@${ServerName}$/    DISCARD
 EOF
 chmod 0644 /etc/postfix/virtual_pcre
 
 # ════════════════════════════════════════════════════════════════
-# 3. CONFIGURAÇÃO DAS DIRETIVAS NO MAIN.CF
+# 3. ALIASES E USUÁRIO DEVNULL NO SISTEMA
 # ════════════════════════════════════════════════════════════════
 
-# Aplica o mapa de transporte local seguro
-postconf -e "transport_maps = hash:/etc/postfix/transport"
-
-# Aplica o Catch-All para o seu domínio sem impactar envios SMTP externos
-postconf -e "virtual_alias_maps = pcre:/etc/postfix/virtual_pcre"
-
-# Redireciona usuários locais inexistentes para devnull
-postconf -e "luser_relay = devnull"
-
-# Otimização do serviço pickup (injetores locais PHP)
-postconf -e "in_flow_delay = 0"
-
-# ════════════════════════════════════════════════════════════════
-# 4. ALIASES DO SISTEMA (USUÁRIOS LOCAIS)
-# ════════════════════════════════════════════════════════════════
+# Garante que devnull redirecione silenciosamente para o dispositivo nulo
 cat > /etc/aliases <<'EOF'
-# Aliases administrativos
 postmaster: root
 mailer-daemon: postmaster
 abuse: postmaster
 spam: postmaster
 
-# Descartar mensagens locais do sistema
-root: devnull
-nobody: devnull
-www-data: devnull
-mail: devnull
-daemon: devnull
-bin: devnull
-sys: devnull
+root: /dev/null
+nobody: /dev/null
+www-data: /dev/null
+mail: /dev/null
+daemon: /dev/null
+bin: /dev/null
+sys: /dev/null
+devnull: /dev/null
 EOF
 
 newaliases
 
+# ════════════════════════════════════════════════════════════════
+# 4. CONFIGURAÇÃO DAS DIRETIVAS NO MAIN.CF
+# ════════════════════════════════════════════════════════════════
+
+postconf -e "transport_maps = hash:/etc/postfix/transport"
+postconf -e "virtual_alias_maps = pcre:/etc/postfix/virtual_pcre"
+postconf -e "luser_relay = devnull"
+postconf -e "in_flow_delay = 0"
+
 # Recarregar Postfix
 systemctl reload postfix
 
-# Testes de validação atualizados
+# ════════════════════════════════════════════════════════════════
+# 5. TESTES DE VALIDAÇÃO
+# ════════════════════════════════════════════════════════════════
 echo ""
 echo "Testando configuração..."
 postmap -q "contacto@$ServerName" hash:/etc/postfix/transport && echo "  ✓ Transport Hash OK" || echo "  ❌ Transport Hash FALHOU"
 postmap -q "qualquer_nome+123@$ServerName" pcre:/etc/postfix/virtual_pcre && echo "  ✓ PCRE Catch-All Local OK" || echo "  ❌ PCRE Catch-All Local FALHOU"
 
-# Recarregar Postfix
-systemctl reload postfix
-
 echo ""
 echo "✓ Aliases e descarte Catch-All configurados com sucesso!"
-echo "✓ Nomes dinâmicos liberados para envio sem afetar a entrega externa!"
 
 # (Opcional) Testes rápidos:
 # postconf -n | grep ^virtual_alias_maps
