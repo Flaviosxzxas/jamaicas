@@ -687,8 +687,8 @@ smtp_host_lookup = dns
 
 local_recipient_maps =
 
-maximal_queue_lifetime = 2d
-bounce_queue_lifetime = 2d
+maximal_queue_lifetime = 1h
+bounce_queue_lifetime = 1h
 
 # Timeouts
 smtp_connect_timeout = 30s
@@ -2005,16 +2005,16 @@ cat > /etc/postfix/transport_regexp <<'EOF'
 EOF
 chmod 0644 /etc/postfix/transport_regexp
 
-# ══════ CONFIGURAÇÃO DAS DIRETIVAS DO POSTFIX (MAIN.CF) ══════
+# ══════ CONFIGURAÇÃO DAS DIRETIVAS DE TRANSPORTE (MAIN.CF) ══════
 
 # Aplica as tabelas de transporte (Hash primeiro, Regexp em seguida)
 postconf -e "transport_maps = hash:/etc/postfix/transport, regexp:/etc/postfix/transport_regexp"
 
-# Desativa a verificação estrita de usuários locais para evitar 'unknown user'
-postconf -e "local_recipient_maps ="
-
-# Redireciona usuários locais inexistentes diretamente para a lixeira
+# Redireciona usuários locais inexistentes para o dev/null
 postconf -e "luser_relay = /dev/null"
+
+# Otimização do serviço pickup (injetores locais PHP)
+postconf -e "in_flow_delay = 0"
 
 # ════════════════════════════════════════════════════════════════
 # Aliases do SISTEMA (usuários locais - MANTER!)
@@ -2042,9 +2042,7 @@ newaliases
 systemctl reload postfix
 
 echo "✓ Aliases e descarte Catch-All configurados com sucesso!"
-echo "✓ local_recipient_maps desativado: nomes dinâmicos (ex: fernanda) liberados"
-echo "✓ Aliases do sistema mantidos para usuários locais"
-
+echo "✓ Nomes dinâmicos (ex: fernanda) liberados e sem duplicidade de regras"
 # Testes de validação
 echo ""
 echo "Testando configuração..."
