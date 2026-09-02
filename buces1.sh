@@ -625,7 +625,7 @@ smtputf8_enable = no
 alias_maps = hash:/etc/aliases
 alias_database = hash:/etc/aliases
 
-# DKIM (OpenDKIM)
+# DKIM / ARC (Rspamd via Milter)
 milter_protocol = 6
 milter_default_action = accept
 smtpd_milters = inet:127.0.0.1:11332
@@ -652,13 +652,12 @@ smtpd_tls_key_file  = /etc/letsencrypt/live/$ServerName/privkey.pem
 tls_preempt_cipherlist = yes
 
 # ==============================================================================
-# TLS - SAÍDA (compatibilidade ampla — servidores de empresa costumam ser antigos)
+# TLS - SAÍDA (compatibilidade ampla)
 # ==============================================================================
 smtp_tls_security_level = may
 smtp_tls_loglevel = 1
 smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt
 
-# Só bloqueia SSL antigo, mantém TLS 1.0/1.1 liberado p/ servidores legados de empresa
 smtp_tls_protocols = !SSLv2, !SSLv3
 smtp_tls_mandatory_protocols = !SSLv2, !SSLv3
 
@@ -667,7 +666,8 @@ smtp_tls_mandatory_ciphers = medium
 smtp_tls_exclude_ciphers = aNULL, MD5, RC4, EXPORT
 smtp_tls_mandatory_exclude_ciphers = aNULL, MD5, DES, 3DES, RC4, EXPORT
 
-smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
+# ESCAPADO CORRETAMENTE PARA O POSTFIX EXPANDIR
+smtp_tls_session_cache_database = btree:\${data_directory}/smtp_scache
 smtp_tls_note_starttls_offer = yes
 
 # Base
@@ -685,7 +685,7 @@ inet_protocols = ipv4
 disable_vrfy_command = yes
 smtp_host_lookup = dns
 
-local_recipient_maps = 
+local_recipient_maps =
 
 maximal_queue_lifetime = 2d
 bounce_queue_lifetime = 2d
@@ -700,7 +700,7 @@ smtp_data_xfer_timeout = 300s
 smtp_data_done_timeout = 300s
 
 # ==============================================================================
-# CONCORRÊNCIA/VELOCIDADE (moderada — servidores corporativos, não ISP gigante)
+# CONCORRÊNCIA/VELOCIDADE (moderada)
 # ==============================================================================
 smtp_destination_concurrency_limit = 8
 smtp_destination_rate_delay = 1s
