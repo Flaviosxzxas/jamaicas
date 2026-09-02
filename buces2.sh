@@ -1864,10 +1864,10 @@ cat <<EOF > "/etc/apache2/sites-available/ssl-$ServerName.conf"
     # ═══════════════════════════════════════════════════════
     # CONFIGURAÇÃO PARA NOTA A - Ciphers Fortes + HSTS
     # ═══════════════════════════════════════════════════════
-    SSLProtocol             all -SSLv2 -SSLv3 -TLSv1 -TLSv1.1
-    SSLCipherSuite          ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384
+    SSLProtocol             TLSv1.2 TLSv1.3
+    SSLCipherSuite          ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384
     SSLHonorCipherOrder     on
-    Header always set Strict-Transport-Security "max-age=63072000"
+    Header always set Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
     # ═══════════════════════════════════════════════════════
     
     <Directory /var/www/html>
@@ -1877,6 +1877,7 @@ cat <<EOF > "/etc/apache2/sites-available/ssl-$ServerName.conf"
 </VirtualHost>
 </IfModule>
 EOF
+
 
 # Habilita o novo VirtualHost e recarrega
 a2ensite "ssl-$ServerName"
@@ -1918,9 +1919,14 @@ cat > /etc/apache2/sites-available/mta-sts-$ServerName.conf <<EOF
     SSLCertificateFile /etc/letsencrypt/live/$ServerName/fullchain.pem
     SSLCertificateKeyFile /etc/letsencrypt/live/$ServerName/privkey.pem
 
-    SSLProtocol             all -SSLv2 -SSLv3 -TLSv1 -TLSv1.1
-    SSLCipherSuite          ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305
+    # ═══════════════════════════════════════════════════════
+    # CONFIGURAÇÃO PARA NOTA A - Ciphers Fortes + HSTS
+    # ═══════════════════════════════════════════════════════
+    SSLProtocol             TLSv1.2 TLSv1.3
+    SSLCipherSuite          ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384
     SSLHonorCipherOrder     on
+    Header always set Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+    # ═══════════════════════════════════════════════════════
 
     <Directory /var/www/mta-sts>
         Require all granted
@@ -1954,9 +1960,14 @@ cat > /etc/apache2/sites-available/unsubscribe-$ServerName.conf <<EOF
     SSLCertificateFile /etc/letsencrypt/live/$ServerName/fullchain.pem
     SSLCertificateKeyFile /etc/letsencrypt/live/$ServerName/privkey.pem
 
-    SSLProtocol             all -SSLv2 -SSLv3 -TLSv1 -TLSv1.1
-    SSLCipherSuite          ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305
+    # ═══════════════════════════════════════════════════════
+    # CONFIGURAÇÃO PARA NOTA A - Ciphers Fortes + HSTS
+    # ═══════════════════════════════════════════════════════
+    SSLProtocol             TLSv1.2 TLSv1.3
+    SSLCipherSuite          ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384
     SSLHonorCipherOrder     on
+    Header always set Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+    # ═══════════════════════════════════════════════════════
 
     <Directory /var/www/html>
         AllowOverride All
