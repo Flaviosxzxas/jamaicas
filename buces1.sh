@@ -1974,7 +1974,7 @@ systemctl reload apache2
 echo "✓ MTA-STS policy publicada em https://mta-sts.$ServerName/.well-known/mta-sts.txt"
 echo "✓ VirtualHost unsubscribe.$ServerName configurado"
 
-echo "================================================= Configurando aliases virtuais (noreply, contacto, bounce, unsubscribe) ================================================="
+echo "================================================= Configurando aliases virtuais e descartes genéricos ================================================="
 
 # ════════════════════════════════════════════════════════════════
 # CORREÇÃO: Usar discard: (transporte nativo do Postfix)
@@ -1986,42 +1986,35 @@ postmap /etc/postfix/virtual
 
 # ══════ TRANSPORT MAP para descarte (substitui virtual) ══════
 cat > /etc/postfix/transport <<EOF
-noreply@$ServerName       discard:
-unsubscribe@$ServerName   discard:
-contacto@$ServerName      discard:
-bounce@$ServerName        discard:
-tls-reports@$ServerName   discard:
-dmarc-reports@$ServerName discard:
+noreply@$ServerName         discard:
+unsubscribe@$ServerName     discard:
+contacto@$ServerName        discard:
+bounce@$ServerName          discard:
+tls-reports@$ServerName     discard:
+dmarc-reports@$ServerName   discard:
 EOF
 postmap /etc/postfix/transport
 
-# ══════ MAPA REGEXP para VERP (+token) ══════
-ESC_SN="$(printf '%s' "$ServerName" | sed 's/[.[*^$(){}+?|\\]/\\&/g')"
+# ══════ MAPA REGEXP CATCH-ALL (Capta 'fernanda' e qualquer outro remetente) ══════
+cat > /etc/postfix/transport_regexp <<'EOF'
+# 1. Regras genéricas para VERP (+token) em qualquer domínio/subdomínio
+/^.+\+.*@.+$/                 discard:
 
-cat > /etc/postfix/transport_regexp <<EOF
-# 1. Regras específicas com sufixo VERP (+token)
-/^contacto\+.*@${ESC_SN}$/          discard:
-/^bounce\+.*@${ESC_SN}$/            discard:
-/^unsubscribe\+.*@${ESC_SN}$/       discard:
-/^noreply\+.*@${ESC_SN}$/           discard:
-
-# 2. Regras específicas de nomes padrão
-/^contacto@${ESC_SN}$/              discard:
-/^bounce@${ESC_SN}$/                discard:
-/^unsubscribe@${ESC_SN}$/           discard:
-/^noreply@${ESC_SN}$/               discard:
-
-# 3. Regras genéricas (Catch-All) no final para capturar qualquer outro nome
-/^.+\+.*@${ESC_SN}$/                discard:
-/^[a-zA-Z0-9._%+-]+@${ESC_SN}$/      discard:
+# 2. Regra genérica (Catch-All) para qualquer usuário em qualquer domínio
+/^[a-zA-Z0-9._%+-]+@.+$/      discard:
 EOF
 chmod 0644 /etc/postfix/transport_regexp
 
-# ══════ NÃO É NECESSÁRIO ADICIONAR NADA NO MASTER.CF ══════
-# O transporte discard: é nativo do Postfix (já existe)
+# ══════ CONFIGURAÇÃO DAS DIRETIVAS DO POSTFIX (MAIN.CF) ══════
 
-# Configurar virtual_alias_maps
+# Aplica as tabelas de transporte (Hash primeiro, Regexp em seguida)
 postconf -e "transport_maps = hash:/etc/postfix/transport, regexp:/etc/postfix/transport_regexp"
+
+# Desativa a verificação estrita de usuários locais para evitar 'unknown user'
+postconf -e "local_recipient_maps ="
+
+# Redireciona usuários locais inexistentes diretamente para a lixeira
+postconf -e "luser_relay = /dev/null"
 
 # ════════════════════════════════════════════════════════════════
 # Aliases do SISTEMA (usuários locais - MANTER!)
@@ -2048,8 +2041,8 @@ newaliases
 # Recarregar Postfix
 systemctl reload postfix
 
-echo "✓ Aliases virtuais configurados com transporte devnull:"
-echo "✓ VERP (+token) configurado via regexp"
+echo "✓ Aliases e descarte Catch-All configurados com sucesso!"
+echo "✓ local_recipient_maps desativado: nomes dinâmicos (ex: fernanda) liberados"
 echo "✓ Aliases do sistema mantidos para usuários locais"
 
 # Testes de validação
