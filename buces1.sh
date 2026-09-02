@@ -137,7 +137,7 @@ elif [ "$DOTS" -eq 1 ]; then
 else
     # Para TLDs simples com subdomínio: pega os últimos 2 componentes
     # Exemplo: mail.example.com → example.com
-    Domain=$(echo "$ServerName" | sed 's/^mail\.//')
+    Domain=$(echo "$ServerName" | awk -F. '{print $(NF-1)"."$NF}')
 fi
 
 DKIMSelector=$(echo "$ServerName" | awk -F[.:] '{print $1}')
