@@ -632,6 +632,9 @@ milter_default_action = accept
 smtpd_milters = inet:127.0.0.1:11332
 non_smtpd_milters = inet:127.0.0.1:11332
 
+milter_connect_timeout = 30s
+milter_command_timeout = 30s
+
 # ==============================================================================
 # TLS - ENTRADA
 # ==============================================================================
