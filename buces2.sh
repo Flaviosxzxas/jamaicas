@@ -706,15 +706,15 @@ smtp_data_done_timeout = 300s
 # ==============================================================================
 # CONCORRÊNCIA/VELOCIDADE (moderada)
 # ==============================================================================
-smtp_destination_concurrency_limit = 8
+smtp_destination_concurrency_limit = 5
 smtp_destination_rate_delay = 1s
-smtp_destination_recipient_limit = 15
+smtp_destination_recipient_limit = 10
 
-default_destination_concurrency_limit = 8
+default_destination_concurrency_limit = 5
 default_destination_rate_delay = 1s
-default_destination_recipient_limit = 15
+default_destination_recipient_limit = 10
 
-initial_destination_concurrency = 2
+initial_destination_concurrency = 1
 
 # ═══════════ HEADER CHECKS ═══════════
 header_checks = regexp:/etc/postfix/header_checks
