@@ -231,7 +231,7 @@ dns_cloudflare_api_key = $CloudflareAPI" > /root/.secrets/cloudflare.cfg
 
 cat <<EOF > /etc/hosts
 127.0.0.1   localhost
-$ServerIP   $MailServerName mail
+$ServerIP   $MailServerName
 EOF
 
 echo -e "$MailServerName" > /etc/hostname
@@ -568,12 +568,15 @@ echo "✓ Dependências PDF configuradas!"
 # Uso:
 install_py_pkg "dnspython" "python3-dnspython" 0
 
+# Força o sistema a reconhecer o FQDN correto primeiro
+hostnamectl set-hostname "$MailServerName"
+
 echo "================================================= POSTFIX ================================================="
 
-# Configurações básicas do Postfix
-debconf-set-selections <<< "postfix postfix/mailname string '$ServerName'"
+# Ajusta o debconf sem aspas simples desnecessárias
+debconf-set-selections <<< "postfix postfix/mailname string $ServerName"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
-debconf-set-selections <<< "postfix postfix/destinations string 'localhost'"
+debconf-set-selections <<< "postfix postfix/destinations string '$MailServerName, localhost.$ServerName, localhost'"
 
 # Instalar Postfix e outros
 DEBIAN_FRONTEND=noninteractive apt-get install -y postfix pflogsumm
