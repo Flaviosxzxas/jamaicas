@@ -570,8 +570,6 @@ install_py_pkg "dnspython" "python3-dnspython" 0
 
 echo "================================================= POSTFIX ================================================="
 
-echo "$ServerName" > /etc/mailname
-
 # Ajusta o debconf sem aspas simples desnecessárias
 debconf-set-selections <<< "postfix postfix/mailname string $ServerName"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
