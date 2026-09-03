@@ -568,10 +568,9 @@ echo "✓ Dependências PDF configuradas!"
 # Uso:
 install_py_pkg "dnspython" "python3-dnspython" 0
 
-# Força o sistema a reconhecer o FQDN correto primeiro
-hostnamectl set-hostname "$MailServerName"
-
 echo "================================================= POSTFIX ================================================="
+
+echo "$ServerName" > /etc/mailname
 
 # Ajusta o debconf sem aspas simples desnecessárias
 debconf-set-selections <<< "postfix postfix/mailname string $ServerName"
