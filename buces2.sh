@@ -631,8 +631,7 @@ alias_database = hash:/etc/aliases
 
 # DKIM / ARC (Rspamd via Milter)
 milter_protocol = 6
-#milter_default_action = accept
-milter_default_action = tempfail
+milter_default_action = accept
 smtpd_milters = inet:127.0.0.1:11332
 non_smtpd_milters = inet:127.0.0.1:11332
 
