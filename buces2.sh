@@ -422,6 +422,7 @@ outbound_bypass {
             rewrite_subject = null;
             greylist = null;
         }
+        symbols_disabled = ["FUZZY_DENIED", "FUZZY_PROB", "FUZZY_WHITE"];
     }
 }
 EOF
