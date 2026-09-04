@@ -1994,7 +1994,7 @@ echo "================================================= Configurando aliases vir
 # ════════════════════════════════════════════════════════════════
 # 1. LIMPEZA DOS MAPAS DE TRANSPORTE
 # ════════════════════════════════════════════════════════════════
-
+# ======= Transport map seguro (substituir a seção antiga) =======
 cat > /etc/postfix/transport <<EOF
 noreply@$ServerName         discard:
 unsubscribe@$ServerName     discard:
@@ -2002,14 +2002,36 @@ contacto@$ServerName        discard:
 bounce@$ServerName          discard:
 tls-reports@$ServerName     discard:
 dmarc-reports@$ServerName   discard:
-$ServerName discard:
-$MailServerName discard:
+$ServerName                 discard:
+$MailServerName             discard:
 EOF
+
+# gerar db
 postmap /etc/postfix/transport
 
-# Esvazia o transport_regexp para impedir bloqueios globais
-> /etc/postfix/transport_regexp
-chmod 0644 /etc/postfix/transport_regexp
+# preservar/mesclar transport_maps sem sobrescrever
+current=$(postconf -h transport_maps 2>/dev/null || true)
+target="hash:/etc/postfix/transport"
+
+if [ -z "$current" ]; then
+  # não havia mapa definido -> define só o novo
+  postconf -e "transport_maps = $target"
+else
+  # adiciona o novo mapa apenas se ainda não existir
+  if ! echo "$current" | grep -Fq "$target"; then
+    # normaliza separadores e acrescenta o novo mapa sem duplicar
+    new="$(echo "$current" | sed -E 's/[[:space:]]*,[[:space:]]*/,/g' | sed -E 's/^[[:space:]]+|[[:space:]]+$//g'), $target"
+    postconf -e "transport_maps = $new"
+  fi
+fi
+
+# aplicar mudança (recarrega postfix)
+systemctl reload postfix || true
+
+# Esvazia o transport_regexp (se realmente quiser remover todas as regras lá)
+: > /etc/postfix/transport_regexp
+chmod 0644 /etc/postfix/transport_regexp || true
+# =================================================================
 
 # ════════════════════════════════════════════════════════════════
 # 2. CATCH-ALL INBOUND VIA PCRE (Descarte Nativo de Bounces)
