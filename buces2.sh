@@ -572,7 +572,7 @@ echo "================================================= POSTFIX ================
 
 # Ajusta o debconf sem aspas simples desnecessárias
 debconf-set-selections <<< "postfix postfix/mailname string $ServerName"
-debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
+debconf-set-selections <<< "postfix postfix/main_mailer_type select Internet Site"
 debconf-set-selections <<< "postfix postfix/destinations string '$MailServerName, localhost.$ServerName, localhost'"
 
 # Instalar Postfix e outros
@@ -1236,13 +1236,13 @@ create_or_update_record "$ServerName" "TXT" "\"v=spf1 ip4:$ServerIP -all\"" ""
 create_or_update_record "$MailServerName" "TXT" "\"v=spf1 ip4:$ServerIP -all\"" ""
 
 # DMARC - domínio novo + envio em massa: fase de monitoramento
-# create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=none; sp=none; pct=100; rua=mailto:dmarc-reports@$ServerName; adkim=r; aspf=r; fo=1\"" ""
+create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=none; sp=none; pct=100; rua=mailto:dmarc-reports@$ServerName; adkim=r; aspf=r; fo=1\"" ""
 
 # DMARC - após alguns dias, se tudo estiver passando
 # create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=quarantine; sp=quarantine; pct=100; rua=mailto:dmarc-reports@$ServerName; adkim=r; aspf=r; fo=1\"" ""
 
 # DMARC - domínio estável
-create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=reject; sp=reject; pct=100; rua=mailto:dmarc-reports@$ServerName; adkim=r; aspf=r; fo=1\"" ""
+# create_or_update_record "_dmarc.$ServerName" "TXT" "\"v=DMARC1; p=reject; sp=reject; pct=100; rua=mailto:dmarc-reports@$ServerName; adkim=r; aspf=r; fo=1\"" ""
 
 # DKIM: precisa bater com o selector usado pelo Rspamd
 create_or_update_record "default._domainkey.$ServerName" "TXT" "\"v=DKIM1; h=sha256; k=rsa; p=$EscapedDKIMCode\"" ""
@@ -2002,6 +2002,8 @@ contacto@$ServerName        discard:
 bounce@$ServerName          discard:
 tls-reports@$ServerName     discard:
 dmarc-reports@$ServerName   discard:
+$ServerName discard:
+$MailServerName discard:
 EOF
 postmap /etc/postfix/transport
 
