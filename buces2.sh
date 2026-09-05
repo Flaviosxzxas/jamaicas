@@ -2043,12 +2043,18 @@ chmod 0644 /etc/postfix/transport_regexp || true
 # Instala suporte a PCRE caso não esteja presente no sistema
 apt-get install -y postfix-pcre >/dev/null 2>&1 || true
 
-# O uso da ação "DISCARD" instrui o Postfix a aceitar o e-mail e jogá-lo no lixo
-# imediatamente no nível do SMTP, economizando CPU e sem depender do local deliver
+# Endereços SEM +tag (dmarc-reports, postmaster, replies legítimos) -> entrega local pro root
 cat > /etc/postfix/virtual_pcre <<EOF
-/@${ServerName}$/    DISCARD
+/^[^@]+@${ServerName}$/    root
 EOF
 chmod 0644 /etc/postfix/virtual_pcre
+
+# Endereços COM +tag (retorno de bounce do disparo em massa) -> DISCARD funciona aqui,
+# pois check_recipient_access é o único contexto onde essa ação é válida
+cat > /etc/postfix/recipient_discard.pcre <<EOF
+/^[^@]+\+[^@]*@${ServerName}$/    DISCARD plus-tagged bounce loop discarded
+EOF
+chmod 0644 /etc/postfix/recipient_discard.pcre
 
 # ════════════════════════════════════════════════════════════════
 # 3. ALIASES E USUÁRIO DEVNULL NO SISTEMA
