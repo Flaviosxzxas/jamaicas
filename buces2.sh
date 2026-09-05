@@ -683,6 +683,7 @@ virtual_alias_domains = $ServerName
 relayhost =
 mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
 smtpd_relay_restrictions = permit_mynetworks, reject_unauth_destination
+smtpd_recipient_restrictions = check_recipient_access pcre:/etc/postfix/recipient_discard.pcre, permit_mynetworks, reject_unauth_destination
 mailbox_size_limit = 0
 recipient_delimiter = +
 inet_interfaces = all
